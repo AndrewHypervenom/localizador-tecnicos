@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Localizador PositivoS+",
+    "slug": "localizador-positivos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A14"
+    },
+    "android": {
+      "package": "com.empresa.localizador",
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#00D632"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.empresa.localizador",
+      "infoPlist": {
+        "UIBackgroundModes": ["location", "fetch"],
+        "NSLocationWhenInUseUsageDescription": "Se necesita tu ubicación para el rastreo del técnico.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Se necesita acceso continuo a la ubicación para el rastreo en segundo plano.",
+        "NSLocationAlwaysUsageDescription": "Se necesita acceso continuo a la ubicación para el rastreo en segundo plano."
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Se necesita acceso a la ubicación en todo momento para el rastreo GPS.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Se necesita la cámara para escanear el código QR de registro."
+        }
+      ]
+    ]
+  }
+}

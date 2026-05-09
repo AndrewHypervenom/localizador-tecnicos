@@ -1,0 +1,40 @@
+# Secrets
+.env
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# Expo / React Native
+mobile/.expo/
+mobile/android/
+mobile/ios/
+mobile/.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.DS_Store
+Thumbs.db
+
+# Vite
+web/dist/
+web/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code
+.claude/
+
+# Supabase
+supabase/

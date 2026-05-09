@@ -1,0 +1,325 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { MapContainer, TileLayer, useMap, Polyline } from 'react-leaflet'
+import L from 'leaflet'
+import axios from 'axios'
+import { format } from 'date-fns'
+import { Play, Pause, SkipBack } from 'lucide-react'
+import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
+import { SpeedHeatmap } from './SpeedHeatmap'
+import { ZonesLayer } from './ZonesLayer'
+
+interface RoutePoint {
+  ts: string
+  lat: number
+  lng: number
+  speed_kmh: number
+  speed_band: 'low' | 'medium' | 'high'
+}
+
+const BAND_COLORS: Record<string, string> = {
+  low: '#10B981', medium: '#F59E0B', high: '#EF4444',
+}
+
+// Fix default icons de Leaflet con Vite
+delete (L.Icon.Default.prototype as any)._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+})
+
+const STATUS_COLORS: Record<string, string> = {
+  moving:   '#10B981',
+  idle:     '#F59E0B',
+  stopped:  '#64748B',
+  offline:  '#1E1E30',
+  accident: '#EF4444',
+}
+
+function createTechMarkerIcon(tech: TechnicianState): L.DivIcon {
+  const speedKmh = tech.lastSpeed ? Math.round(tech.lastSpeed * 3.6) : 0
+  const speedText = tech.status === 'moving' ? ` • ${speedKmh} km/h` : ''
+  const color = STATUS_COLORS[tech.status] ?? '#64748B'
+
+  const html = `
+    <div class="tech-marker">
+      <div class="tech-marker-dot ${tech.status}" style="background:${color}; transform: rotate(${tech.bearing ?? 0}deg)">
+        ${tech.status === 'moving' ? `<div style="
+          position:absolute; top:-4px; left:50%; transform:translateX(-50%);
+          width:0; height:0; border-left:4px solid transparent;
+          border-right:4px solid transparent; border-bottom:6px solid ${color};
+        "></div>` : ''}
+      </div>
+      <div class="tech-marker-label">${tech.name.split(' ')[0]}${speedText}</div>
+    </div>
+  `
+
+  return L.divIcon({
+    html,
+    className: 'tech-marker-icon',
+    iconSize:  [70, 40],
+    iconAnchor:[35, 12],
+  })
+}
+
+// Componente interno que gestiona los marcadores imperativamente
+function MarkersLayer() {
+  const { technicians, selectedTechnicianId, selectTechnician } = useTrackingStore()
+  const map = useMap()
+  const markersRef  = useRef<Record<string, L.Marker>>({})
+  const prevTechRef = useRef<Record<string, TechnicianState>>({})
+
+  // useLayoutEffect: aplica cambios en Leaflet antes del paint del navegador
+  useLayoutEffect(() => {
+    const techList = Object.values(technicians)
+    const prev = prevTechRef.current
+
+    techList.forEach((tech) => {
+      if (!tech.lat || !tech.lng) return
+
+      const latlng: L.LatLngExpression = [tech.lat, tech.lng]
+      const existing = markersRef.current[tech.id]
+      const prevTech = prev[tech.id]
+
+      if (existing) {
+        // Solo actualizar si la posición o estado cambiaron
+        const posChanged = prevTech?.lat !== tech.lat || prevTech?.lng !== tech.lng
+        const stateChanged = prevTech?.status !== tech.status || prevTech?.bearing !== tech.bearing || prevTech?.lastSpeed !== tech.lastSpeed
+        if (posChanged) existing.setLatLng(latlng)
+        if (posChanged || stateChanged) existing.setIcon(createTechMarkerIcon(tech))
+      } else {
+        const icon = createTechMarkerIcon(tech)
+        const marker = L.marker(latlng, { icon })
+        marker.on('click', () => selectTechnician(tech.id))
+        marker.addTo(map)
+        markersRef.current[tech.id] = marker
+      }
+    })
+
+    // Eliminar marcadores de técnicos que ya no existen
+    Object.keys(markersRef.current).forEach((id) => {
+      if (!technicians[id]) {
+        markersRef.current[id].remove()
+        delete markersRef.current[id]
+      }
+    })
+
+    prevTechRef.current = technicians
+  }, [technicians, map, selectTechnician])
+
+  // Ref para acceder a technicians sin disparar el efecto en cada actualización de posición
+  const techniciansRef = useRef(technicians)
+  techniciansRef.current = technicians
+
+  // Centrar mapa solo cuando el usuario selecciona un técnico diferente
+  useEffect(() => {
+    if (!selectedTechnicianId) return
+    const tech = techniciansRef.current[selectedTechnicianId]
+    if (tech?.lat && tech?.lng) {
+      map.flyTo([tech.lat, tech.lng], 16, { duration: 1.2 })
+    }
+  }, [selectedTechnicianId, map])
+
+  return null
+}
+
+// Centra el mapa en la ubicación real del navegador al cargar
+function AutoCenter() {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!navigator.geolocation) return
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        map.setView([coords.latitude, coords.longitude], 13, { animate: false })
+      },
+      () => { /* permiso denegado o no disponible — mantiene centro por defecto */ },
+      { timeout: 6000, maximumAge: 60_000 }
+    )
+  }, [map])
+
+  return null
+}
+
+// Devuelve solo los puntos de la sesión activa más reciente.
+// Si hay un hueco > 5 min entre puntos consecutivos, descarta todo lo anterior.
+const SESSION_GAP_S = 300
+function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
+  if (pts.length < 2) return pts
+  let start = 0
+  for (let i = pts.length - 1; i > 0; i--) {
+    const gap = (new Date(pts[i].ts).getTime() - new Date(pts[i - 1].ts).getTime()) / 1000
+    if (gap > SESSION_GAP_S) { start = i; break }
+  }
+  return pts.slice(start)
+}
+
+// Reproductor del recorrido completo del día para el técnico seleccionado
+function LiveTrackPlayer() {
+  const { selectedTechnicianId } = useTrackingStore()
+  const map = useMap()
+  const [points, setPoints] = useState<RoutePoint[]>([])
+  const [playhead, setPlayhead] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const markerRef = useRef<L.CircleMarker | null>(null)
+  const intervalRef = useRef<number>()
+  const atEndRef = useRef(true)
+  const TODAY = format(new Date(), 'yyyy-MM-dd')
+
+  useEffect(() => {
+    if (!selectedTechnicianId) {
+      setPoints([])
+      setPlayhead(0)
+      setPlaying(false)
+      return
+    }
+
+    let cancelled = false
+    atEndRef.current = true
+
+    async function loadTrack(silent = false) {
+      try {
+        const res = await axios.get<RoutePoint[]>(
+          `/api/analytics/technicians/${selectedTechnicianId}/track`,
+          { params: { date: TODAY } }
+        )
+        if (cancelled) return
+        const pts = filterCurrentSession(res.data)
+        setPoints(pts)
+        if (!silent || atEndRef.current) {
+          const end = Math.max(pts.length - 1, 0)
+          setPlayhead(end)
+          atEndRef.current = true
+          if (!silent && pts.length > 1) {
+            map.fitBounds(
+              L.latLngBounds(pts.map((p) => [p.lat, p.lng] as [number, number])),
+              { padding: [40, 40] }
+            )
+          }
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+
+    loadTrack()
+    const interval = setInterval(() => loadTrack(true), 30_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTechnicianId])
+
+  useEffect(() => {
+    if (!playing) return
+    intervalRef.current = window.setInterval(() => {
+      setPlayhead((prev) => {
+        if (prev >= points.length - 1) { setPlaying(false); return prev }
+        const next = prev + 1
+        atEndRef.current = next >= points.length - 1
+        return next
+      })
+    }, 100)
+    return () => clearInterval(intervalRef.current)
+  }, [playing, points.length])
+
+  useEffect(() => {
+    const p = points[playhead]
+    if (!p) return
+    if (markerRef.current) map.removeLayer(markerRef.current)
+    markerRef.current = L.circleMarker([p.lat, p.lng], {
+      radius: 8, fillColor: '#00D632', color: '#fff', fillOpacity: 1, weight: 2,
+    }).addTo(map)
+  }, [playhead, points, map])
+
+  if (!selectedTechnicianId || points.length === 0) return null
+
+  const segs: { pts: [number, number][]; color: string }[] = []
+  for (let i = 0; i < Math.min(playhead + 1, points.length - 1); i++) {
+    segs.push({
+      pts: [[points[i].lat, points[i].lng], [points[i + 1].lat, points[i + 1].lng]],
+      color: BAND_COLORS[points[i].speed_band] ?? '#64748B',
+    })
+  }
+
+  const cur = points[playhead]
+  const timeLabel = cur ? format(new Date(cur.ts), 'hh:mm:ss a') : '--:--:--'
+
+  return (
+    <>
+      <Polyline
+        positions={points.map((p) => [p.lat, p.lng] as [number, number])}
+        pathOptions={{ color: '#252540', weight: 2, opacity: 0.5 }}
+      />
+      {segs.map((s, i) => (
+        <Polyline key={i} positions={s.pts} pathOptions={{ color: s.color, weight: 4, opacity: 0.9 }} />
+      ))}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-surface/95 backdrop-blur-sm border border-border-soft rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3 pointer-events-auto">
+        <button
+          onClick={() => { setPlayhead(0); atEndRef.current = false; setPlaying(false) }}
+          className="p-1.5 rounded-lg hover:bg-surface-raised text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <SkipBack className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setPlaying((p) => !p)}
+          className="p-2 bg-primary rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/30"
+        >
+          {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
+        </button>
+        <span className="font-mono text-xs text-text-secondary min-w-[4.5rem]">{timeLabel}</span>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(points.length - 1, 1)}
+          value={playhead}
+          onChange={(e) => {
+            setPlaying(false)
+            const v = Number(e.target.value)
+            atEndRef.current = v >= points.length - 1
+            setPlayhead(v)
+          }}
+          className="w-36 accent-primary"
+        />
+        <span className="text-[10px] text-text-muted whitespace-nowrap">{points.length} pts</span>
+      </div>
+    </>
+  )
+}
+
+interface TrackingMapProps {
+  className?: string
+}
+
+export function TrackingMap({ className }: TrackingMapProps) {
+  const { showHeatmap } = useTrackingStore()
+
+  // Centro de Honduras (o ajustar a tu ciudad)
+  const defaultCenter: L.LatLngExpression = [14.0723, -87.2061]
+  const defaultZoom = 12
+
+  return (
+    <div className={`relative ${className ?? ''}`}>
+      <MapContainer
+        center={defaultCenter}
+        zoom={defaultZoom}
+        style={{ height: '100%', width: '100%' }}
+        zoomControl={false}
+        attributionControl={false}
+      >
+        {/* Tiles de OpenStreetMap con estilo oscuro de Carto */}
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution="© OpenStreetMap contributors, © CARTO"
+          maxZoom={19}
+        />
+
+        <AutoCenter />
+        <ZonesLayer />
+        <MarkersLayer />
+        <LiveTrackPlayer />
+
+        {showHeatmap && <SpeedHeatmap />}
+      </MapContainer>
+    </div>
+  )
+}
