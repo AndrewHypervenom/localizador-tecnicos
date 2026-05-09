@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
 import { supabase } from '@/lib/supabase'
-import axios from 'axios'
+import api from '@/lib/api'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart } from '@/components/charts/SpeedChart'
 import {
@@ -248,8 +248,8 @@ export function History() {
     try {
       const to = trip.ended_at ?? new Date().toISOString()
       const [routeRes, elevRes] = await Promise.all([
-        axios.get(`/api/analytics/trips/${trip.id}/route`),
-        axios.get(`/api/analytics/technicians/${selectedTech}/elevation`, {
+        api.get(`/api/analytics/trips/${trip.id}/route`),
+        api.get(`/api/analytics/technicians/${selectedTech}/elevation`, {
           params: { from: trip.started_at, to },
         }),
       ])

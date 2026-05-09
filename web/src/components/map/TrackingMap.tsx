@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, useMap, Polyline } from 'react-leaflet'
 import L from 'leaflet'
-import axios from 'axios'
+import api from '@/lib/api'
 import { format } from 'date-fns'
 import { Play, Pause, SkipBack } from 'lucide-react'
 import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
@@ -180,7 +180,7 @@ function LiveTrackPlayer() {
 
     async function loadTrack(silent = false) {
       try {
-        const res = await axios.get<RoutePoint[]>(
+        const res = await api.get<RoutePoint[]>(
           `/api/analytics/technicians/${selectedTechnicianId}/track`,
           { params: { date: TODAY } }
         )

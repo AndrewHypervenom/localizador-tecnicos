@@ -4,7 +4,7 @@ import { useTrackingStore, STATUS_THRESHOLDS } from '@/store/trackingStore'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart } from '@/components/charts/SpeedChart'
 import { supabase } from '@/lib/supabase'
-import axios from 'axios'
+import api from '@/lib/api'
 import {
   X, Battery, Gauge, Mountain, Phone,
   RotateCcw, Navigation, Timer, Signal
@@ -191,8 +191,8 @@ export function TechnicianDetail() {
       const from = new Date(Date.now() - 8 * 3600_000).toISOString()
       try {
         const [elevRes, speedRes] = await Promise.all([
-          axios.get(`/api/analytics/technicians/${tech!.id}/elevation`, { params: { from } }),
-          axios.get(`/api/analytics/technicians/${tech!.id}/heatmap`,   { params: { from } }),
+          api.get(`/api/analytics/technicians/${tech!.id}/elevation`, { params: { from } }),
+          api.get(`/api/analytics/technicians/${tech!.id}/heatmap`,   { params: { from } }),
         ])
         setElevData(elevRes.data)
         setSpeedData(speedRes.data.map((p: any) => ({

@@ -3,7 +3,7 @@ import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet.heat'
 import { useTrackingStore } from '@/store/trackingStore'
-import axios from 'axios'
+import api from '@/lib/api'
 
 declare module 'leaflet' {
   function heatLayer(
@@ -29,7 +29,7 @@ export function SpeedHeatmap() {
 
     async function loadHeatmapData() {
       try {
-        const { data } = await axios.get(
+        const { data } = await api.get(
           `/api/analytics/technicians/${selectedTechnicianId}/heatmap`
         )
 
