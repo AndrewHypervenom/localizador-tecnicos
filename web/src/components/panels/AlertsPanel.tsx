@@ -26,7 +26,8 @@ const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ al
 
   const handleAck = async () => {
     acknowledgeAlert(alert.id)
-    await supabase.from('motion_events').update({ acknowledged: true }).eq('id', alert.id)
+    const { error } = await supabase.from('motion_events').update({ acknowledged: true }).eq('id', alert.id)
+    if (error) console.error('[AlertsPanel] Error al marcar motion_event:', error)
   }
 
   return (
@@ -124,7 +125,12 @@ const ZoneAlertItem = forwardRef<HTMLDivElement, { alert: ZoneAlert }>(({ alert 
       </div>
 
       <button
-        onClick={() => { acknowledgeZoneAlert(alert.id); persistZoneAlertAck(alert.id) }}
+        onClick={() => {
+          acknowledgeZoneAlert(alert.id)
+          persistZoneAlertAck(alert.id).catch((err) =>
+            console.error('[AlertsPanel] Error al marcar zone_event:', err)
+          )
+        }}
         title={alert.acknowledged ? 'Vista' : 'Marcar como vista'}
         className={cn(
           'flex-shrink-0 transition-colors rounded-md p-0.5',
@@ -203,13 +209,17 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
           {unackedCount > 0 && (
             <button
               onClick={async () => {
-                acknowledgeAllAlerts()
                 const motionIds = alerts.filter((a) => !a.acknowledged).map((a) => a.id)
                 const zoneIds   = zoneAlerts.filter((a) => !a.acknowledged).map((a) => a.id)
-                if (motionIds.length)
-                  await supabase.from('motion_events').update({ acknowledged: true }).in('id', motionIds)
-                if (zoneIds.length)
-                  await supabase.from('zone_events').update({ acknowledged: true }).in('id', zoneIds)
+                acknowledgeAllAlerts()
+                if (motionIds.length) {
+                  const { error } = await supabase.from('motion_events').update({ acknowledged: true }).in('id', motionIds)
+                  if (error) console.error('[AlertsPanel] Error al marcar todas motion_events:', error)
+                }
+                if (zoneIds.length) {
+                  const { error } = await supabase.from('zone_events').update({ acknowledged: true }).in('id', zoneIds)
+                  if (error) console.error('[AlertsPanel] Error al marcar todas zone_events:', error)
+                }
               }}
               title="Marcar todas como vistas"
               className="flex items-center gap-1 text-xs text-text-muted hover:text-success transition-colors px-1.5 py-1 rounded-lg hover:bg-success/10"

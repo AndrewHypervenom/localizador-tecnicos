@@ -7,7 +7,8 @@ import type { TechnicianState } from '@/store/trackingStore'
 import type { Zone } from '@/types/zones'
 
 export async function persistZoneAlertAck(alertId: string) {
-  await supabase.from('zone_events').update({ acknowledged: true }).eq('id', alertId)
+  const { error } = await supabase.from('zone_events').update({ acknowledged: true }).eq('id', alertId)
+  if (error) throw error
 }
 
 export function useZoneEvents() {
