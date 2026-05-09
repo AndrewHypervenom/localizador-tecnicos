@@ -9,10 +9,11 @@ import { useZones } from '@/hooks/useZones'
 import { useZoneEvents } from '@/hooks/useZoneEvents'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useZonesStore } from '@/store/zonesStore'
+import { getRoleFromSession } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import {
   Users, Bell, ChevronLeft, ChevronRight,
-  LogOut, History, Layers, EyeOff, Eye
+  LogOut, History, Layers, EyeOff, Eye, Shield
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
@@ -69,6 +70,13 @@ export function Dashboard() {
   const { zones, showZones, toggleShowZones } = useZonesStore()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>('technicians')
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsSuperAdmin(getRoleFromSession(session) === 'superadmin')
+    })
+  }, [])
   const unreadAlerts =
     alerts.filter((a) => !a.acknowledged).length +
     zoneAlerts.filter((a) => !a.acknowledged).length
@@ -208,6 +216,15 @@ export function Dashboard() {
               <History className="w-3.5 h-3.5" />
               Historial
             </Link>
+            {isSuperAdmin && (
+              <Link
+                to="/admin"
+                className="bg-primary/90 backdrop-blur-sm border border-primary/50 rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-primary transition-colors shadow-xl text-xs text-white font-medium"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                Admin
+              </Link>
+            )}
             <button
               onClick={handleLogout}
               className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl p-2 hover:bg-surface transition-colors shadow-xl"

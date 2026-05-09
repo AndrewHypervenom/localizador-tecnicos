@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
+import { getRoleFromSession } from '@/lib/roles'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -20,9 +21,10 @@ export function Login() {
     setLoading(true)
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) throw authError
-      navigate('/')
+      const role = getRoleFromSession(data.session)
+      navigate(role === 'superadmin' ? '/admin' : '/')
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials'
         ? 'Email o contraseña incorrectos'
