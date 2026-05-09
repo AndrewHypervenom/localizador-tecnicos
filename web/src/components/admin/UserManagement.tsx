@@ -188,7 +188,7 @@ export function UserManagement() {
     setError(null)
     try {
       const { data } = await api.get<WebUser[]>('/api/admin/users')
-      setUsers(data)
+      setUsers(data.filter(u => u.email))
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Error al cargar usuarios')
     } finally {
