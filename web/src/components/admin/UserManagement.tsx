@@ -13,6 +13,7 @@ interface WebUser {
   role: 'superadmin' | 'user'
   createdAt: string
   lastSignIn: string | null
+  mustChangePassword: boolean
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -226,15 +227,96 @@ function CreateUserModal({
   )
 }
 
+// ── Modal de credenciales (reset) ─────────────────────────────────────────────
+function CredentialsModal({
+  credentials,
+  onClose,
+}: {
+  credentials: { email: string; password: string } | null
+  onClose: () => void
+}) {
+  const [allCopied, setAllCopied] = useState(false)
+
+  function handleCopyAll() {
+    navigator.clipboard.writeText(`Email: ${credentials!.email}\nContraseña temporal: ${credentials!.password}`)
+    setAllCopied(true)
+    setTimeout(() => setAllCopied(false), 2000)
+  }
+
+  if (!credentials) return null
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
+      <div
+        style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px' }}
+        className="bg-surface border border-border-soft rounded-2xl shadow-2xl p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-warning" /> Contraseña reseteada
+          </h3>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1 hover:bg-surface-raised">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-text-muted text-xs mb-4">
+          Envía estas credenciales al usuario. Al ingresar se le pedirá que cree su propia contraseña.
+        </p>
+        <div className="space-y-3 mb-5">
+          <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-text-muted mb-0.5">Email</p>
+                <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
+              </div>
+              <CopyButton text={credentials.email} />
+            </div>
+          </div>
+          <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
+              </div>
+              <CopyButton text={credentials.password} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleCopyAll}
+            className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
+          >
+            {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+            {allCopied ? 'Copiado' : 'Copiar todo'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors"
+          >
+            Listo
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 export function UserManagement() {
   const [users, setUsers]           = useState<WebUser[]>([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [changingId, setChangingId] = useState<string | null>(null)
-  const [currentId, setCurrentId]   = useState<string | null>(null)
+  const [createOpen, setCreateOpen]       = useState(false)
+  const [deletingId, setDeletingId]       = useState<string | null>(null)
+  const [changingId, setChangingId]       = useState<string | null>(null)
+  const [resettingId, setResettingId]     = useState<string | null>(null)
+  const [resetCredentials, setResetCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [currentId, setCurrentId]         = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -271,6 +353,22 @@ export function UserManagement() {
       alert(err?.response?.data?.error ?? 'Error al cambiar rol')
     } finally {
       setChangingId(null)
+    }
+  }
+
+  async function handleResetPassword(user: WebUser) {
+    const confirmed = window.confirm(
+      `¿Resetear la contraseña de "${user.email}"?\nSe generará una nueva contraseña temporal.`,
+    )
+    if (!confirmed) return
+    setResettingId(user.id)
+    try {
+      const { data } = await api.post<{ email: string; tempPassword: string }>(`/api/admin/users/${user.id}/reset-password`)
+      setResetCredentials({ email: data.email, password: data.tempPassword })
+    } catch (err: any) {
+      alert(err?.response?.data?.error ?? 'Error al resetear contraseña')
+    } finally {
+      setResettingId(null)
     }
   }
 
@@ -341,13 +439,19 @@ export function UserManagement() {
                 const isSelf = user.id === currentId
                 const isChanging = changingId === user.id
                 const isDeleting = deletingId === user.id
+                const isResetting = resettingId === user.id
                 return (
                   <tr key={user.id} className="border-b border-border-soft last:border-0 hover:bg-surface-raised transition-colors">
                     <td className="px-4 py-3">
-                      <span className="text-text-primary text-xs font-mono">{user.email}</span>
-                      {isSelf && (
-                        <span className="ml-2 text-xs text-primary">(tú)</span>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-text-primary text-xs font-mono">{user.email}</span>
+                        {isSelf && <span className="text-xs text-primary">(tú)</span>}
+                        {user.mustChangePassword && (
+                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-warning/10 border border-warning/30 text-warning font-medium" title="Debe cambiar su contraseña en el próximo inicio de sesión">
+                            <KeyRound className="w-2.5 h-2.5" /> clave pendiente
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <RoleBadge role={user.role} />
@@ -366,7 +470,7 @@ export function UserManagement() {
                           <>
                             <button
                               onClick={() => handleChangeRole(user)}
-                              disabled={isChanging || isDeleting}
+                              disabled={isChanging || isDeleting || isResetting}
                               title={user.role === 'superadmin' ? 'Quitar superadmin' : 'Hacer superadmin'}
                               className="text-xs text-text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10 disabled:opacity-40"
                             >
@@ -375,8 +479,18 @@ export function UserManagement() {
                                 : user.role === 'superadmin' ? 'Quitar admin' : 'Hacer admin'}
                             </button>
                             <button
+                              onClick={() => handleResetPassword(user)}
+                              disabled={isResetting || isChanging || isDeleting}
+                              title="Resetear contraseña"
+                              className="text-text-muted hover:text-warning transition-colors p-1 rounded-lg hover:bg-warning/10 disabled:opacity-40"
+                            >
+                              {isResetting
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <KeyRound className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
                               onClick={() => handleDelete(user)}
-                              disabled={isDeleting || isChanging}
+                              disabled={isDeleting || isChanging || isResetting}
                               title="Eliminar usuario"
                               className="text-text-muted hover:text-danger transition-colors p-1 rounded-lg hover:bg-danger/10 disabled:opacity-40"
                             >
@@ -400,6 +514,10 @@ export function UserManagement() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={load}
+      />
+      <CredentialsModal
+        credentials={resetCredentials}
+        onClose={() => setResetCredentials(null)}
       />
     </div>
   )

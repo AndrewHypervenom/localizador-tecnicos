@@ -43,6 +43,7 @@ router.get('/users', async (_req: Request, res: Response) => {
       role: (u.app_metadata?.role as string) ?? 'user',
       createdAt: u.created_at,
       lastSignIn: u.last_sign_in_at,
+      mustChangePassword: u.user_metadata?.must_change_password === true,
     })))
   } catch (err) {
     console.error('[admin/users GET]', err)
@@ -79,6 +80,29 @@ router.post('/users', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[admin/users POST]', err)
     res.status(500).json({ error: err.message ?? 'Error al crear usuario' })
+  }
+})
+
+// POST /api/admin/users/:id/reset-password
+router.post('/users/:id/reset-password', async (req: Request, res: Response) => {
+  const { id } = req.params
+  const tempPassword = generateTempPassword()
+
+  try {
+    const { data, error } = await supabase.auth.admin.updateUserById(id, {
+      password: tempPassword,
+      user_metadata: { must_change_password: true },
+    })
+    if (error) throw error
+
+    logActivity(req.adminUser!.id, req.adminUser!.email, 'reset_password', 'user', id, {
+      targetEmail: data.user.email,
+    })
+
+    res.json({ email: data.user.email, tempPassword })
+  } catch (err: any) {
+    console.error('[admin/users reset-password]', err)
+    res.status(500).json({ error: err.message ?? 'Error al resetear contraseña' })
   }
 })
 
