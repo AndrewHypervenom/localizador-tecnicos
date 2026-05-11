@@ -3,6 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { LOCATION_TASK } from './locationTask';
 import { removeTechnicianId, storeTechnicianId } from './offlineQueue';
 import { setTechIdForSensor, startAccelerometer, stopAccelerometer } from './sensorService';
+import { supabase } from '../lib/supabase';
 
 const UPDATE_INTERVAL_MS = 2_000;
 
@@ -39,6 +40,11 @@ export async function startTracking(technicianId: string): Promise<void> {
   await storeTechnicianId(technicianId);
   setTechIdForSensor(technicianId);
   startAccelerometer();
+
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  supabase.from('technicians').update({ timezone: tz }).eq('id', technicianId).then(
+    ({ error }) => { if (error) console.warn('[startTracking] timezone update:', error.message) }
+  );
 
   await Location.startLocationUpdatesAsync(LOCATION_TASK, {
     accuracy:                         Location.Accuracy.High,

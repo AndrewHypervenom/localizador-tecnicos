@@ -176,9 +176,11 @@ router.get('/stats', async (_req: Request, res: Response) => {
       `),
       query<{ total: number }>(`
         SELECT count(*)::int AS total
-        FROM trips
-        WHERE status = 'completed'
-          AND started_at > NOW() - INTERVAL '1 day'
+        FROM trips tr
+        JOIN technicians t ON t.id = tr.technician_id
+        WHERE tr.status = 'completed'
+          AND (tr.ended_at AT TIME ZONE COALESCE(t.timezone, 'UTC'))::date
+            = (NOW() AT TIME ZONE COALESCE(t.timezone, 'UTC'))::date
       `),
       query<{ total: number }>(`
         SELECT count(*)::int AS total
