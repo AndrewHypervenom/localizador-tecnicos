@@ -13,7 +13,7 @@ import { getRoleFromSession } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import {
   Users, Bell, ChevronLeft, ChevronRight,
-  LogOut, History, Layers, EyeOff, Eye, Shield
+  LogOut, History, Layers, EyeOff, Eye, Shield, FileText
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
@@ -215,6 +215,13 @@ export function Dashboard() {
             >
               <History className="w-3.5 h-3.5" />
               Historial
+            </Link>
+            <Link
+              to="/reports"
+              className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-surface transition-colors shadow-xl text-xs text-text-secondary hover:text-text-primary"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Reportes
             </Link>
             {isSuperAdmin && (
               <Link

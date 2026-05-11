@@ -9,6 +9,7 @@ import { Login } from '@/pages/Login'
 import { Zones } from '@/pages/Zones'
 import { Admin } from '@/pages/Admin'
 import { ChangePassword } from '@/pages/ChangePassword'
+import { Reports } from '@/pages/Reports'
 import type { Session } from '@supabase/supabase-js'
 
 const Spinner = () => (
@@ -79,6 +80,9 @@ export default function App() {
         } />
         <Route path="/zones" element={
           <ProtectedRoute><Zones /></ProtectedRoute>
+        } />
+        <Route path="/reports" element={
+          <ProtectedRoute><Reports /></ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

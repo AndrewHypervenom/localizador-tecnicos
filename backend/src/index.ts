@@ -4,6 +4,7 @@ import cors from 'cors'
 import cron from 'node-cron'
 import analyticsRoutes from './routes/analytics.routes'
 import adminRoutes from './routes/admin.routes'
+import reportsRoutes from './routes/reports.routes'
 import { detectAndCloseTrips } from './services/tripDetectionService'
 
 const app  = express()
@@ -22,6 +23,7 @@ app.use(express.json())
 // Routes
 app.use('/api/analytics', analyticsRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/reports', reportsRoutes)
 
 // Health check
 app.get('/health', (_req, res) => {
