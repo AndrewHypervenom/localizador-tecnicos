@@ -5,11 +5,16 @@ import { requireAuth } from '../middleware/requireAuth'
 const router = Router()
 router.use(requireAuth)
 
-// GET /api/reports/technicians  — lista para el selector del frontend
+// GET /api/reports/technicians  — lista con metadata para selector y filtros
 router.get('/technicians', async (_req: Request, res: Response) => {
   try {
-    const rows = await query<{ id: string; name: string; phone: string }>(`
-      SELECT id, name, COALESCE(phone, '') AS phone
+    const rows = await query<{
+      id: string; name: string; phone: string
+      client: string | null; project: string | null; country: string | null
+    }>(`
+      SELECT id, name,
+        COALESCE(phone, '')   AS phone,
+        client, project, country
       FROM technicians
       WHERE active = true
       ORDER BY name ASC
@@ -21,14 +26,18 @@ router.get('/technicians', async (_req: Request, res: Response) => {
   }
 })
 
-// GET /api/reports/fleet?from=YYYY-MM-DD&to=YYYY-MM-DD
+// GET /api/reports/fleet?from=&to=&country=&client=&project=
 router.get('/fleet', async (req: Request, res: Response) => {
-  const from = (req.query.from as string) || daysAgo(7)
-  const to   = (req.query.to   as string) || today()
+  const from    = (req.query.from     as string) || daysAgo(7)
+  const to      = (req.query.to       as string) || today()
+  const country = (req.query.country  as string) || null
+  const client  = (req.query.client   as string) || null
+  const project = (req.query.project  as string) || null
 
   try {
     const rows = await query<{
       id: string; name: string; phone: string
+      client: string | null; project: string | null; country: string | null
       total_trips: number; total_km: number
       avg_speed_kmh: number; max_speed_kmh: number
       hard_brakes: number; rapid_accels: number; harsh_turns: number; accidents: number
@@ -37,26 +46,32 @@ router.get('/fleet', async (req: Request, res: Response) => {
       SELECT
         t.id,
         t.name,
-        COALESCE(t.phone, '') AS phone,
-        COUNT(DISTINCT tr.id)::int                               AS total_trips,
-        COALESCE(ROUND(SUM(tr.distance_km)::numeric, 1), 0)::float  AS total_km,
+        COALESCE(t.phone, '')    AS phone,
+        t.client,
+        t.project,
+        t.country,
+        COUNT(DISTINCT tr.id)::int                                   AS total_trips,
+        COALESCE(ROUND(SUM(tr.distance_km)::numeric, 1), 0)::float   AS total_km,
         COALESCE(ROUND(AVG(tr.avg_speed_kmh)::numeric, 1), 0)::float AS avg_speed_kmh,
         COALESCE(ROUND(MAX(tr.max_speed_kmh)::numeric, 1), 0)::float AS max_speed_kmh,
-        COALESCE(SUM(tr.hard_brakes), 0)::int                    AS hard_brakes,
-        COALESCE(SUM(tr.rapid_accels), 0)::int                   AS rapid_accels,
-        COALESCE(SUM(tr.harsh_turns), 0)::int                    AS harsh_turns,
-        COALESCE(SUM(tr.accidents), 0)::int                      AS accidents,
-        COALESCE(SUM(tr.duration_min), 0)::int                   AS total_min
+        COALESCE(SUM(tr.hard_brakes), 0)::int                        AS hard_brakes,
+        COALESCE(SUM(tr.rapid_accels), 0)::int                       AS rapid_accels,
+        COALESCE(SUM(tr.harsh_turns), 0)::int                        AS harsh_turns,
+        COALESCE(SUM(tr.accidents), 0)::int                          AS accidents,
+        COALESCE(SUM(tr.duration_min), 0)::int                       AS total_min
       FROM technicians t
       LEFT JOIN trips tr ON tr.technician_id = t.id
         AND tr.status = 'completed'
         AND tr.started_at::date BETWEEN $1 AND $2
       WHERE t.active = true
-      GROUP BY t.id, t.name, t.phone
+        AND ($3::text IS NULL OR t.country = $3)
+        AND ($4::text IS NULL OR t.client  = $4)
+        AND ($5::text IS NULL OR t.project = $5)
+      GROUP BY t.id, t.name, t.phone, t.client, t.project, t.country
       ORDER BY total_km DESC NULLS LAST
-    `, [from, to])
+    `, [from, to, country, client, project])
 
-    res.json({ from, to, technicians: rows })
+    res.json({ from, to, country, client, project, technicians: rows })
   } catch (err) {
     console.error('[reports/fleet]', err)
     res.status(500).json({ error: 'Error al generar reporte de flota' })
@@ -71,8 +86,8 @@ router.get('/technician/:id', async (req: Request, res: Response) => {
 
   try {
     const [techRows, summaryRows, dailyRows, tripRows] = await Promise.all([
-      query<{ name: string; phone: string }>(`
-        SELECT name, COALESCE(phone, '') AS phone
+      query<{ name: string; phone: string; client: string | null; project: string | null; country: string | null }>(`
+        SELECT name, COALESCE(phone, '') AS phone, client, project, country
         FROM technicians WHERE id = $1
       `, [id]),
 

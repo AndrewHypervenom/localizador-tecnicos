@@ -9,9 +9,9 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Legend,
 } from 'recharts'
 import {
-  ArrowLeft, Download, RefreshCw, Route, Clock,
+  ArrowLeft, Download, RefreshCw, Route,
   AlertTriangle, Users, TrendingUp, ChevronDown,
-  FileText, Activity,
+  FileText, Activity, MapPin, Building2, FolderOpen, X, SlidersHorizontal,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 
 interface TechnicianRow {
   id: string; name: string; phone: string
+  client: string | null; project: string | null; country: string | null
   total_trips: number; total_km: number
   avg_speed_kmh: number; max_speed_kmh: number
   hard_brakes: number; rapid_accels: number; harsh_turns: number; accidents: number
@@ -31,6 +32,7 @@ interface TechnicianRow {
 
 interface FleetReport {
   from: string; to: string
+  country: string | null; client: string | null; project: string | null
   technicians: TechnicianRow[]
 }
 
@@ -52,13 +54,16 @@ interface Summary {
 
 interface TechnicianReport {
   from: string; to: string
-  technician: { name: string; phone: string }
+  technician: { name: string; phone: string; client: string | null; project: string | null; country: string | null }
   summary: Summary | null
   daily: DailyRow[]
   trips: TripRow[]
 }
 
-interface TechnicianOption { id: string; name: string; phone: string }
+interface TechnicianOption {
+  id: string; name: string; phone: string
+  client: string | null; project: string | null; country: string | null
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -123,7 +128,7 @@ function generateFleetPDF(report: FleetReport) {
   const now = format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })
 
   doc.setFillColor(10, 10, 20)
-  doc.rect(0, 0, 297, 30, 'F')
+  doc.rect(0, 0, 297, 34, 'F')
   doc.setTextColor(0, 214, 50)
   doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
@@ -132,10 +137,14 @@ function generateFleetPDF(report: FleetReport) {
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.text('PositivoS+ · Localizador GPS', 14, 20)
-  doc.text(`Período: ${fmtDate(report.from)} — ${fmtDate(report.to)}`, 14, 26)
-  doc.text(`Generado: ${now}`, 200, 26)
+  doc.text(`Período: ${fmtDate(report.from)} — ${fmtDate(report.to)}`, 14, 27)
 
-  // Summary
+  const filters = [report.country, report.client, report.project].filter(Boolean)
+  if (filters.length) doc.text(`Filtros: ${filters.join(' · ')}`, 14, 33)
+  doc.text(`Generado: ${now}`, 220, 27)
+
+  const startY = filters.length ? 44 : 40
+
   const totals = report.technicians.reduce((acc, t) => ({
     trips: acc.trips + t.total_trips,
     km: acc.km + t.total_km,
@@ -146,10 +155,10 @@ function generateFleetPDF(report: FleetReport) {
   doc.setTextColor(30, 30, 30)
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.text('Resumen general', 14, 40)
+  doc.text('Resumen general', 14, startY)
 
   autoTable(doc, {
-    startY: 44,
+    startY: startY + 4,
     head: [['Técnicos', 'Total viajes', 'Total km', 'Total horas', 'Total incidentes']],
     body: [[
       report.technicians.length,
@@ -165,7 +174,6 @@ function generateFleetPDF(report: FleetReport) {
   })
 
   const y1 = (doc as any).lastAutoTable.finalY + 8
-
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(30, 30, 30)
@@ -173,35 +181,42 @@ function generateFleetPDF(report: FleetReport) {
 
   autoTable(doc, {
     startY: y1 + 4,
-    head: [['Técnico', 'Viajes', 'Km', 'Vel. prom.', 'Vel. máx.', 'Horas', 'Frenadas', 'Aceleraciones', 'Giros', 'Accidentes']],
+    head: [['Técnico', 'País', 'Cliente', 'Proyecto', 'Viajes', 'Km', 'Vel. prom.', 'Vel. máx.', 'Horas', 'Frenos', 'Acels.', 'Giros', 'Accid.']],
     body: report.technicians.map(t => [
       t.name,
+      t.country ?? '—',
+      t.client  ?? '—',
+      t.project ?? '—',
       t.total_trips,
-      t.total_km.toFixed(1) + ' km',
-      t.avg_speed_kmh.toFixed(1) + ' km/h',
-      t.max_speed_kmh.toFixed(1) + ' km/h',
+      t.total_km.toFixed(1),
+      t.avg_speed_kmh.toFixed(1),
+      t.max_speed_kmh.toFixed(1),
       fmtMin(t.total_min),
       t.hard_brakes,
       t.rapid_accels,
       t.harsh_turns,
       t.accidents,
     ]),
-    styles: { fontSize: 8, cellPadding: 3 },
+    styles: { fontSize: 7.5, cellPadding: 2.5 },
     headStyles: { fillColor: [20, 20, 32], textColor: [200, 200, 200], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 245, 248] },
     margin: { left: 14, right: 14 },
   })
 
-  doc.save(`reporte-flota-${report.from}-${report.to}.pdf`)
+  const suffix = [report.country, report.client, report.project].filter(Boolean).join('-') || 'todos'
+  doc.save(`reporte-flota-${report.from}-${report.to}-${suffix}.pdf`)
 }
 
 function generateTechnicianPDF(report: TechnicianReport) {
   const doc = new jsPDF()
   const now = format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })
   const s = report.summary
+  const tech = report.technician
+  const meta = [tech.country, tech.client, tech.project].filter(Boolean).join(' · ')
 
+  const headerH = meta ? 38 : 32
   doc.setFillColor(10, 10, 20)
-  doc.rect(0, 0, 210, 30, 'F')
+  doc.rect(0, 0, 210, headerH, 'F')
   doc.setTextColor(0, 214, 50)
   doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
@@ -209,17 +224,19 @@ function generateTechnicianPDF(report: TechnicianReport) {
   doc.setTextColor(200, 200, 200)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Técnico: ${report.technician.name}`, 14, 20)
-  doc.text(`Período: ${fmtDate(report.from)} — ${fmtDate(report.to)}`, 14, 26)
-  doc.text(`Generado: ${now}`, 140, 26)
+  doc.text(`Técnico: ${tech.name}`, 14, 20)
+  doc.text(`Período: ${fmtDate(report.from)} — ${fmtDate(report.to)}`, 14, 27)
+  if (meta) doc.text(meta, 14, 34)
+  doc.text(`Generado: ${now}`, 140, 27)
 
+  const startY2 = headerH + 8
   doc.setTextColor(30, 30, 30)
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.text('Resumen del período', 14, 40)
+  doc.text('Resumen del período', 14, startY2)
 
   autoTable(doc, {
-    startY: 44,
+    startY: startY2 + 4,
     head: [['Viajes', 'Km total', 'Vel. promedio', 'Vel. máxima', 'Horas', 'Incidentes totales']],
     body: [[
       s?.total_trips ?? 0,
@@ -296,6 +313,11 @@ export function Reports() {
   const [fromDate, setFromDate] = useState(sevenDaysAgo)
   const [toDate, setToDate] = useState(today)
 
+  // Filters
+  const [filterCountry, setFilterCountry] = useState('')
+  const [filterClient, setFilterClient]   = useState('')
+  const [filterProject, setFilterProject] = useState('')
+
   // Fleet
   const [fleetReport, setFleetReport] = useState<FleetReport | null>(null)
   const [fleetLoading, setFleetLoading] = useState(false)
@@ -324,7 +346,11 @@ export function Reports() {
     setFleetLoading(true)
     setFleetError(null)
     try {
-      const { data } = await api.get(`/api/reports/fleet?from=${fromDate}&to=${toDate}`)
+      const params = new URLSearchParams({ from: fromDate, to: toDate })
+      if (filterCountry) params.set('country', filterCountry)
+      if (filterClient)  params.set('client',  filterClient)
+      if (filterProject) params.set('project', filterProject)
+      const { data } = await api.get(`/api/reports/fleet?${params}`)
       setFleetReport(data)
     } catch {
       setFleetError('Error al cargar el reporte de flota')
@@ -436,6 +462,16 @@ export function Reports() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Fleet filters — shown when fleet tab is active and there are options */}
+        {tab === 'fleet' && (
+          <FleetFilters
+            technicians={technicians}
+            filterCountry={filterCountry} setFilterCountry={setFilterCountry}
+            filterClient={filterClient}   setFilterClient={setFilterClient}
+            filterProject={filterProject} setFilterProject={setFilterProject}
+          />
+        )}
+
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-surface rounded-xl p-1 border border-border-soft w-fit">
           {isSuperAdmin && (
@@ -575,7 +611,7 @@ function FleetTab({ report, loading, error, totalIncidents, onDownloadPDF }: {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border-soft bg-base/50">
-                {['Técnico', 'Viajes', 'Km', 'Vel. prom.', 'Vel. máx.', 'Horas', 'Frenos', 'Acels.', 'Giros', 'Accident.'].map(h => (
+                {['Técnico', 'País / Cliente', 'Viajes', 'Km', 'Vel. prom.', 'Vel. máx.', 'Horas', 'Frenos', 'Acels.', 'Giros', 'Accident.'].map(h => (
                   <th key={h} className="text-left px-4 py-2.5 text-text-muted font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -583,7 +619,15 @@ function FleetTab({ report, loading, error, totalIncidents, onDownloadPDF }: {
             <tbody>
               {report.technicians.map((t, i) => (
                 <tr key={t.id} className={cn('border-b border-border-soft/50', i % 2 === 0 ? '' : 'bg-base/30')}>
-                  <td className="px-4 py-2.5 font-medium text-text-primary">{t.name}</td>
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-text-primary">{t.name}</p>
+                    {t.project && <p className="text-text-muted text-xs">{t.project}</p>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {t.country && <p className="text-text-secondary text-xs">{t.country}</p>}
+                    {t.client  && <p className="text-text-muted text-xs">{t.client}</p>}
+                    {!t.country && !t.client && <span className="text-text-muted/50">—</span>}
+                  </td>
                   <td className="px-4 py-2.5 text-text-secondary">{t.total_trips}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{t.total_km.toFixed(1)}</td>
                   <td className="px-4 py-2.5 text-text-secondary">{t.avg_speed_kmh.toFixed(1)}</td>
@@ -596,7 +640,7 @@ function FleetTab({ report, loading, error, totalIncidents, onDownloadPDF }: {
                 </tr>
               ))}
               {report.technicians.length === 0 && (
-                <tr><td colSpan={10} className="text-center py-8 text-text-muted">Sin datos para el período seleccionado</td></tr>
+                <tr><td colSpan={11} className="text-center py-8 text-text-muted">Sin datos para el período seleccionado</td></tr>
               )}
             </tbody>
           </table>
@@ -657,6 +701,26 @@ function TechnicianTab({ technicians, selectedTech, onSelectTech, onLoadReport, 
 
       {report && !loading && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          {/* Technician context bar */}
+          {(report.technician.country || report.technician.client || report.technician.project) && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              {report.technician.country && (
+                <span className="flex items-center gap-1 bg-surface border border-border-soft rounded-lg px-2.5 py-1 text-text-secondary">
+                  <MapPin className="w-3 h-3 text-text-muted" />{report.technician.country}
+                </span>
+              )}
+              {report.technician.client && (
+                <span className="flex items-center gap-1 bg-surface border border-border-soft rounded-lg px-2.5 py-1 text-text-secondary">
+                  <Building2 className="w-3 h-3 text-text-muted" />{report.technician.client}
+                </span>
+              )}
+              {report.technician.project && (
+                <span className="flex items-center gap-1 bg-surface border border-border-soft rounded-lg px-2.5 py-1 text-text-secondary">
+                  <FolderOpen className="w-3 h-3 text-text-muted" />{report.technician.project}
+                </span>
+              )}
+            </div>
+          )}
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <KpiCard label="Total viajes" value={s?.total_trips ?? 0} icon={Route} color="bg-accent" />
@@ -776,6 +840,86 @@ function Badge({ val, color }: { val: number; color: 'warning' | 'danger' }) {
     <span className={cn('inline-flex items-center justify-center w-5 h-5 rounded text-white text-xs font-bold', color === 'warning' ? 'bg-warning' : 'bg-danger')}>
       {val}
     </span>
+  )
+}
+
+// ── Fleet filters panel ───────────────────────────────────────────────
+
+function FleetFilters({ technicians, filterCountry, setFilterCountry, filterClient, setFilterClient, filterProject, setFilterProject }: {
+  technicians: TechnicianOption[]
+  filterCountry: string; setFilterCountry: (v: string) => void
+  filterClient: string;  setFilterClient:  (v: string) => void
+  filterProject: string; setFilterProject: (v: string) => void
+}) {
+  const countries = [...new Set(technicians.map(t => t.country).filter(Boolean) as string[])].sort()
+  const clients   = [...new Set(technicians.map(t => t.client).filter(Boolean)  as string[])].sort()
+  const projects  = [...new Set(technicians.map(t => t.project).filter(Boolean) as string[])].sort()
+
+  const active = [filterCountry, filterClient, filterProject].filter(Boolean).length
+  if (countries.length === 0 && clients.length === 0 && projects.length === 0) return null
+
+  return (
+    <div className="bg-surface border border-border-soft rounded-xl p-3 mb-5 flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-1.5 text-xs text-text-muted font-medium">
+        <SlidersHorizontal className="w-3.5 h-3.5" />
+        Filtrar flota:
+      </div>
+      {countries.length > 0 && (
+        <FilterPill
+          icon={<MapPin className="w-3 h-3" />}
+          value={filterCountry} onChange={setFilterCountry}
+          options={countries} placeholder="País"
+        />
+      )}
+      {clients.length > 0 && (
+        <FilterPill
+          icon={<Building2 className="w-3 h-3" />}
+          value={filterClient} onChange={setFilterClient}
+          options={clients} placeholder="Cliente"
+        />
+      )}
+      {projects.length > 0 && (
+        <FilterPill
+          icon={<FolderOpen className="w-3 h-3" />}
+          value={filterProject} onChange={setFilterProject}
+          options={projects} placeholder="Proyecto"
+        />
+      )}
+      {active > 0 && (
+        <button
+          onClick={() => { setFilterCountry(''); setFilterClient(''); setFilterProject('') }}
+          className="flex items-center gap-1 text-xs text-danger hover:text-danger/80 transition-colors px-2 py-1 rounded-lg hover:bg-danger/10"
+        >
+          <X className="w-3 h-3" />
+          Limpiar ({active})
+        </button>
+      )}
+    </div>
+  )
+}
+
+function FilterPill({ icon, value, onChange, options, placeholder }: {
+  icon: React.ReactNode; value: string; onChange: (v: string) => void; options: string[]; placeholder: string
+}) {
+  return (
+    <div className="relative">
+      <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">{icon}</div>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className={cn(
+          'appearance-none bg-base border rounded-lg pl-7 pr-6 py-1.5 text-xs cursor-pointer',
+          'focus:outline-none focus:ring-1 transition-colors',
+          value
+            ? 'border-primary text-primary focus:ring-primary/30'
+            : 'border-border-soft text-text-muted hover:border-border focus:ring-primary/30'
+        )}
+      >
+        <option value="">{placeholder}</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" />
+    </div>
   )
 }
 
