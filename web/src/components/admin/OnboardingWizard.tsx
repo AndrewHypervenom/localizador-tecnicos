@@ -12,12 +12,7 @@ import { cn } from '@/lib/utils'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const COUNTRIES = [
-  'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
-  'Cuba', 'Ecuador', 'El Salvador', 'España', 'Estados Unidos', 'Guatemala',
-  'Honduras', 'México', 'Nicaragua', 'Panamá', 'Paraguay', 'Perú',
-  'República Dominicana', 'Uruguay', 'Venezuela',
-]
+const COUNTRIES = ['Argentina', 'Brasil', 'Colombia', 'México']
 
 const STATUS_CFG = {
   active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },

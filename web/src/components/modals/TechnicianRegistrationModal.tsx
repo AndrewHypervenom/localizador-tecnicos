@@ -5,12 +5,7 @@ import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileTex
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
-const COUNTRIES = [
-  'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
-  'Cuba', 'Ecuador', 'El Salvador', 'España', 'Estados Unidos', 'Guatemala',
-  'Honduras', 'México', 'Nicaragua', 'Panamá', 'Paraguay', 'Perú',
-  'República Dominicana', 'Uruguay', 'Venezuela',
-]
+const COUNTRIES = ['Argentina', 'Brasil', 'Colombia', 'México']
 
 interface Props {
   open: boolean
