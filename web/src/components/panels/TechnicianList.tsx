@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
+import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 
 const STATUS_LABELS: Record<TechnicianStatus, string> = {
   moving:   'En movimiento',
@@ -154,17 +155,13 @@ export function TechnicianList({ className }: TechnicianListProps) {
   const { technicians } = useTrackingStore()
   const techList = Object.values(technicians)
 
-  const [modalOpen, setModalOpen]           = useState(false)
+  const [wizardOpen, setWizardOpen]         = useState(false)
+  const [qrModalOpen, setQrModalOpen]       = useState(false)
   const [selectedForQr, setSelectedForQr]   = useState<{ id: string; name: string } | undefined>()
-
-  function openNewTechModal() {
-    setSelectedForQr(undefined)
-    setModalOpen(true)
-  }
 
   function openQrForTech(tech: TechnicianState) {
     setSelectedForQr({ id: tech.id, name: tech.name })
-    setModalOpen(true)
+    setQrModalOpen(true)
   }
 
   const sortedTechs = [...techList].sort((a, b) => {
@@ -188,7 +185,7 @@ export function TechnicianList({ className }: TechnicianListProps) {
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold text-text-primary text-sm">Técnicos</h2>
             <button
-              onClick={openNewTechModal}
+              onClick={() => setWizardOpen(true)}
               title="Agregar técnico"
               className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 rounded-lg px-2 py-1 transition-colors"
             >
@@ -221,7 +218,7 @@ export function TechnicianList({ className }: TechnicianListProps) {
               <MapPin className="w-8 h-8 opacity-30" />
               <span className="text-sm">Sin técnicos registrados</span>
               <button
-                onClick={openNewTechModal}
+                onClick={() => setWizardOpen(true)}
                 className="text-xs text-primary hover:underline"
               >
                 Agregar el primero
@@ -237,9 +234,14 @@ export function TechnicianList({ className }: TechnicianListProps) {
         </div>
       </div>
 
+      <OnboardingWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onComplete={() => {}}
+      />
       <TechnicianRegistrationModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
+        open={qrModalOpen}
+        onOpenChange={setQrModalOpen}
         existingTechnician={selectedForQr}
       />
     </>
