@@ -189,7 +189,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
     ])
 
     res.json({
-      totalUsers: usersResult.data?.users?.length ?? 0,
+      totalUsers: usersResult.data?.users?.filter(u => u.email).length ?? 0,
       totalTechnicians: techsResult[0]?.total ?? 0,
       activeTechnicians: techsResult[0]?.active ?? 0,
       tripsToday: tripsResult[0]?.total ?? 0,
