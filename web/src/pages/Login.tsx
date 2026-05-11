@@ -23,6 +23,10 @@ export function Login() {
     try {
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) throw authError
+      if (data.session?.user?.user_metadata?.must_change_password) {
+        navigate('/change-password', { replace: true })
+        return
+      }
       const role = getRoleFromSession(data.session)
       navigate(role === 'superadmin' ? '/admin' : '/')
     } catch (err: any) {

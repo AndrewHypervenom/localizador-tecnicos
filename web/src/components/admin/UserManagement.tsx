@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, RefreshCw, X, Shield, User, Eye, EyeOff, Loader2, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, Check, KeyRound } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
@@ -30,6 +30,25 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 // ── Modal para crear usuario ──────────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function handleCopy() {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="text-text-muted hover:text-primary transition-colors p-1 rounded"
+      title="Copiar"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  )
+}
+
 function CreateUserModal({
   open,
   onClose,
@@ -39,28 +58,32 @@ function CreateUserModal({
   onClose: () => void
   onCreated: () => void
 }) {
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [role, setRole]         = useState<'user' | 'superadmin'>('user')
-  const [showPwd, setShowPwd]   = useState(false)
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [email, setEmail]   = useState('')
+  const [role, setRole]     = useState<'user' | 'superadmin'>('user')
+  const [loading, setLoading] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [allCopied, setAllCopied] = useState(false)
 
   function reset() {
-    setEmail(''); setPassword(''); setRole('user')
-    setShowPwd(false); setError(null)
+    setEmail(''); setRole('user'); setError(null); setCredentials(null); setAllCopied(false)
   }
 
   function handleClose() { reset(); onClose() }
+
+  function handleDone() {
+    reset()
+    onCreated()
+    onClose()
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setLoading(true)
     try {
-      await api.post('/api/admin/users', { email, password, role })
-      onCreated()
-      handleClose()
+      const { data } = await api.post<{ email: string; tempPassword: string }>('/api/admin/users', { email, role })
+      setCredentials({ email: data.email, password: data.tempPassword })
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Error al crear usuario')
     } finally {
@@ -68,99 +91,135 @@ function CreateUserModal({
     }
   }
 
+  function handleCopyAll() {
+    navigator.clipboard.writeText(`Email: ${credentials!.email}\nContraseña temporal: ${credentials!.password}`)
+    setAllCopied(true)
+    setTimeout(() => setAllCopied(false), 2000)
+  }
+
   if (!open) return null
 
   return createPortal(
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) handleClose() }}
+      onClick={e => { if (e.target === e.currentTarget && !credentials) handleClose() }}
     >
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
       <div
         style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px' }}
         className="bg-surface border border-border-soft rounded-2xl shadow-2xl p-6"
       >
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-            <Plus className="w-4 h-4 text-primary" /> Nuevo Usuario
-          </h3>
-          <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1 hover:bg-surface-raised">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-              Correo electrónico *
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoFocus
-              placeholder="usuario@empresa.com"
-              className="w-full bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-              Contraseña *
-            </label>
-            <div className="relative">
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={8}
-                placeholder="Mínimo 8 caracteres"
-                className="w-full bg-base border border-border-soft rounded-xl px-3.5 py-2.5 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
-              />
+        {credentials ? (
+          <>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-success" /> Credenciales generadas
+              </h3>
+            </div>
+            <p className="text-text-muted text-xs mb-4">
+              Copia y envía estas credenciales al usuario. Al primer inicio de sesión se le pedirá que cree su propia contraseña.
+            </p>
+            <div className="space-y-3 mb-5">
+              <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-text-muted mb-0.5">Email</p>
+                    <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
+                  </div>
+                  <CopyButton text={credentials.email} />
+                </div>
+              </div>
+              <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                    <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
+                  </div>
+                  <CopyButton text={credentials.password} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowPwd(!showPwd)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                onClick={handleCopyAll}
+                className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
               >
-                {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                {allCopied ? 'Copiado' : 'Copiar todo'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDone}
+                className="flex-1 bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors"
+              >
+                Listo
               </button>
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" /> Nuevo Usuario
+              </h3>
+              <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1 hover:bg-surface-raised">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-text-muted text-xs mb-4">
+              Se generará una contraseña temporal que podrás copiar y enviar al usuario.
+            </p>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                  Correo electrónico *
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="usuario@empresa.com"
+                  className="w-full bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-              Rol
-            </label>
-            <div className="relative">
-              <select
-                value={role}
-                onChange={e => setRole(e.target.value as 'user' | 'superadmin')}
-                className="w-full appearance-none bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors pr-8"
+              <div>
+                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                  Rol
+                </label>
+                <div className="relative">
+                  <select
+                    value={role}
+                    onChange={e => setRole(e.target.value as 'user' | 'superadmin')}
+                    className="w-full appearance-none bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors pr-8"
+                  >
+                    <option value="user">Usuario (acceso al dashboard)</option>
+                    <option value="superadmin">Superadmin (acceso total)</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-danger/10 border border-danger/30 text-danger text-xs rounded-xl px-3 py-2">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <option value="user">Usuario (acceso al dashboard)</option>
-                <option value="superadmin">Superadmin (acceso total)</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-danger/10 border border-danger/30 text-danger text-xs rounded-xl px-3 py-2">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {loading ? 'Creando…' : 'Crear usuario'}
-          </button>
-        </form>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {loading ? 'Creando…' : 'Crear usuario'}
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>,
     document.body,

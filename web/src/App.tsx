@@ -8,6 +8,7 @@ import { History } from '@/pages/History'
 import { Login } from '@/pages/Login'
 import { Zones } from '@/pages/Zones'
 import { Admin } from '@/pages/Admin'
+import { ChangePassword } from '@/pages/ChangePassword'
 import type { Session } from '@supabase/supabase-js'
 
 const Spinner = () => (
@@ -66,6 +67,7 @@ export default function App() {
       />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/admin" element={
           <AdminRoute><Admin /></AdminRoute>
         } />

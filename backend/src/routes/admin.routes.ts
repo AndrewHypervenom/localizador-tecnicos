@@ -1,7 +1,14 @@
 import { Router, Request, Response } from 'express'
+import { randomBytes } from 'crypto'
 import { supabase } from '../config/supabase'
 import { query } from '../config/db'
 import { requireSuperAdmin } from '../middleware/requireSuperAdmin'
+
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$'
+  const bytes = randomBytes(12)
+  return Array.from(bytes, b => chars[b % chars.length]).join('')
+}
 
 const router = Router()
 router.use(requireSuperAdmin)
@@ -45,18 +52,20 @@ router.get('/users', async (_req: Request, res: Response) => {
 
 // POST /api/admin/users
 router.post('/users', async (req: Request, res: Response) => {
-  const { email, password, role } = req.body as { email: string; password: string; role: string }
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email y contraseña son requeridos' })
+  const { email, role } = req.body as { email: string; role: string }
+  if (!email) {
+    res.status(400).json({ error: 'El email es requerido' })
     return
   }
   const assignedRole = role === 'superadmin' ? 'superadmin' : 'user'
+  const tempPassword = generateTempPassword()
 
   try {
     const { data, error } = await supabase.auth.admin.createUser({
       email,
-      password,
+      password: tempPassword,
       app_metadata: { role: assignedRole },
+      user_metadata: { must_change_password: true },
       email_confirm: true,
     })
     if (error) throw error
@@ -66,7 +75,7 @@ router.post('/users', async (req: Request, res: Response) => {
       newRole: assignedRole,
     })
 
-    res.status(201).json({ id: data.user.id, email: data.user.email, role: assignedRole })
+    res.status(201).json({ id: data.user.id, email: data.user.email, role: assignedRole, tempPassword })
   } catch (err: any) {
     console.error('[admin/users POST]', err)
     res.status(500).json({ error: err.message ?? 'Error al crear usuario' })
