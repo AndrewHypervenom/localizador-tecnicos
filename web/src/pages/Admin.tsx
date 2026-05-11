@@ -1,24 +1,28 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield } from 'lucide-react'
+import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield, FolderOpen } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { StatsOverview } from '@/components/admin/StatsOverview'
 import { UserManagement } from '@/components/admin/UserManagement'
 import { TechnicianManagement } from '@/components/admin/TechnicianManagement'
 import { ActivityLog } from '@/components/admin/ActivityLog'
+import { ProjectsOverview } from '@/components/admin/ProjectsOverview'
+import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 
-type AdminTab = 'stats' | 'users' | 'technicians' | 'activity'
+type AdminTab = 'stats' | 'users' | 'technicians' | 'activity' | 'projects'
 
 const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
-  { id: 'stats',       label: 'Resumen',    icon: BarChart2 },
-  { id: 'users',       label: 'Usuarios',   icon: Users     },
-  { id: 'technicians', label: 'Técnicos',   icon: Wrench    },
-  { id: 'activity',    label: 'Actividad',  icon: Activity  },
+  { id: 'stats',       label: 'Resumen',    icon: BarChart2   },
+  { id: 'users',       label: 'Usuarios',   icon: Users       },
+  { id: 'technicians', label: 'Técnicos',   icon: Wrench      },
+  { id: 'activity',    label: 'Actividad',  icon: Activity    },
+  { id: 'projects',    label: 'Proyectos',  icon: FolderOpen  },
 ]
 
 export function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>('stats')
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -70,6 +74,13 @@ export function Admin() {
 
           {/* Acciones de la derecha */}
           <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => setWizardOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              Nuevo proyecto
+            </button>
             <Link
               to="/"
               className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors px-2.5 py-1.5 rounded-lg hover:bg-surface-raised"
@@ -116,7 +127,14 @@ export function Admin() {
         {activeTab === 'users'       && <UserManagement />}
         {activeTab === 'technicians' && <TechnicianManagement />}
         {activeTab === 'activity'    && <ActivityLog />}
+        {activeTab === 'projects'    && <ProjectsOverview onOpenWizard={() => setWizardOpen(true)} />}
       </main>
+
+      <OnboardingWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onComplete={() => {}}
+      />
     </div>
   )
 }
