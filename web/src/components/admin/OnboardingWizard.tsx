@@ -724,11 +724,18 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
 
         let count = 0
 
+        const techMeta = {
+          project_id: selectedProjectId,
+          client:  selectedClient?.name  ?? null,
+          project: selectedProject?.name ?? null,
+          country: selectedClient?.country ?? null,
+        }
+
         // Assign existing technicians
         if (selectedTechIds.size > 0) {
           const { error: err } = await supabase
             .from('technicians')
-            .update({ project_id: selectedProjectId })
+            .update(techMeta)
             .in('id', [...selectedTechIds])
           if (err) throw err
           count = selectedTechIds.size
@@ -743,7 +750,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
             .insert({
               name: techForm.name.trim(),
               phone: techForm.phone.trim() || null,
-              project_id: selectedProjectId,
+              ...techMeta,
               active: true,
             })
             .select('id, name').single()
