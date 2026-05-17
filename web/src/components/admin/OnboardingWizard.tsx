@@ -6,11 +6,12 @@ import {
   X, Building2, FolderOpen, UserPlus, CheckCircle2,
   MapPin, Plus, Check, Search, ChevronRight,
   Loader2, RefreshCw, Sparkles, Users, ArrowLeft,
-  Navigation, Clock,
+  Navigation,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
+import { TimeSelect } from '@/components/ui/TimeSelect'
 
 const STATUS_CFG = {
   active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },
@@ -491,19 +492,11 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                     <div className="col-span-2">
                       <label className="block text-xs text-text-muted font-medium mb-1.5">Horario de trabajo</label>
                       <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" />
-                          <input type="time" value={form.shiftStart}
-                            onChange={e => setForm({ ...form, shiftStart: e.target.value })}
-                            className={cn(inp, 'pl-8 cursor-pointer text-sm')} />
-                        </div>
+                        <TimeSelect value={form.shiftStart} onChange={v => setForm({ ...form, shiftStart: v })}
+                          placeholder="Inicio" className="flex-1" />
                         <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
-                        <div className="relative flex-1">
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" />
-                          <input type="time" value={form.shiftEnd}
-                            onChange={e => setForm({ ...form, shiftEnd: e.target.value })}
-                            className={cn(inp, 'pl-8 cursor-pointer text-sm')} />
-                        </div>
+                        <TimeSelect value={form.shiftEnd} onChange={v => setForm({ ...form, shiftEnd: v })}
+                          placeholder="Fin" className="flex-1" />
                       </div>
                     </div>
                   </div>

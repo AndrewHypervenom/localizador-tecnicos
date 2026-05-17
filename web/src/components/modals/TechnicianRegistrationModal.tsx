@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Clock } from 'lucide-react'
+import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
+import { TimeSelect } from '@/components/ui/TimeSelect'
 
 interface Props {
   open: boolean
@@ -244,17 +245,9 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                 <div className="col-span-2">
                   <Field label="Horario de trabajo">
                     <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                        <input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}
-                          className={cn(inputCls, 'pl-8 cursor-pointer')} />
-                      </div>
+                      <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder="Inicio" className="flex-1" />
                       <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
-                      <div className="relative flex-1">
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                        <input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}
-                          className={cn(inputCls, 'pl-8 cursor-pointer')} />
-                      </div>
+                      <TimeSelect value={shiftEnd} onChange={setShiftEnd} placeholder="Fin" className="flex-1" />
                     </div>
                   </Field>
                 </div>

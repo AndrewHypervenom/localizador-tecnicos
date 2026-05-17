@@ -12,6 +12,7 @@ import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
+import { TimeSelect } from '@/components/ui/TimeSelect'
 
 interface Technician {
   id: string
@@ -169,17 +170,9 @@ function EditModal({ tech, onSave, onClose }: {
               <div className="col-span-2">
                 <FieldLabel label="Horario de trabajo" />
                 <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                    <input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}
-                      className={cn(inputCls, 'pl-8 cursor-pointer')} />
-                  </div>
+                  <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder="Inicio" className="flex-1" />
                   <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
-                  <div className="relative flex-1">
-                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                    <input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}
-                      className={cn(inputCls, 'pl-8 cursor-pointer')} />
-                  </div>
+                  <TimeSelect value={shiftEnd} onChange={setShiftEnd} placeholder="Fin" className="flex-1" />
                 </div>
               </div>
             </div>
