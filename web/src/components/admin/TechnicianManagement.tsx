@@ -12,7 +12,7 @@ import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
-import { TimeSelect } from '@/components/ui/TimeSelect'
+import { TimeSelect, to12h } from '@/components/ui/TimeSelect'
 
 interface Technician {
   id: string
@@ -521,9 +521,12 @@ export function TechnicianManagement() {
                         )}
                         {tech.shift && (
                           <div className="mb-1">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border bg-base text-text-muted border-border font-mono">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border bg-base text-text-muted border-border">
                               <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-                              {tech.shift.replace('-', ' – ')}
+                              {(() => {
+                                const { start, end } = parseShift(tech.shift)
+                                return start && end ? `${to12h(start)} – ${to12h(end)}` : tech.shift
+                              })()}
                             </span>
                           </div>
                         )}
