@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-import { COUNTRIES, CITIES_BY_COUNTRY, SHIFTS, SHIFT_COLORS } from '@/lib/geo'
+import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 
 const STATUS_CFG = {
   active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },
@@ -379,7 +379,7 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
 function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, showForm, onToggleForm, form, setForm, clientCountry }: {
   techs: TechRow[]; loading: boolean; selectedIds: Set<string>; onToggle: (id: string) => void
   projectName: string; showForm: boolean; onToggleForm: () => void
-  form: { name: string; phone: string; city: string; shift: string }; setForm: (f: any) => void
+  form: { name: string; phone: string; city: string; shiftStart: string; shiftEnd: string }; setForm: (f: any) => void
   clientCountry?: string | null
 }) {
   const [search, setSearch] = useState('')
@@ -487,31 +487,24 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                         </div>
                       </div>
                     )}
-                    {/* Jornada */}
+                    {/* Horario */}
                     <div className="col-span-2">
-                      <label className="block text-xs text-text-muted font-medium mb-1.5">Jornada de trabajo</label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {SHIFTS.map(s => (
-                          <button key={s.value} type="button"
-                            onClick={() => setForm({ ...form, shift: form.shift === s.value ? '' : s.value })}
-                            title={s.hint}
-                            className={cn(
-                              'flex-1 min-w-[60px] flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all',
-                              form.shift === s.value
-                                ? SHIFT_COLORS[s.value] + ' ring-1 ring-inset ring-current'
-                                : 'border-border-soft text-text-muted hover:border-border hover:text-text-secondary bg-base'
-                            )}
-                          >
-                            <Clock className="w-3 h-3" />
-                            {s.label}
-                          </button>
-                        ))}
+                      <label className="block text-xs text-text-muted font-medium mb-1.5">Horario de trabajo</label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" />
+                          <input type="time" value={form.shiftStart}
+                            onChange={e => setForm({ ...form, shiftStart: e.target.value })}
+                            className={cn(inp, 'pl-8 cursor-pointer text-sm')} />
+                        </div>
+                        <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
+                        <div className="relative flex-1">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-text-muted pointer-events-none" />
+                          <input type="time" value={form.shiftEnd}
+                            onChange={e => setForm({ ...form, shiftEnd: e.target.value })}
+                            className={cn(inp, 'pl-8 cursor-pointer text-sm')} />
+                        </div>
                       </div>
-                      {form.shift && (
-                        <p className="text-[11px] text-text-muted mt-1">
-                          {SHIFTS.find(s => s.value === form.shift)?.hint}
-                        </p>
-                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -638,7 +631,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
   // Step 3: technician
   const [selectedTechIds, setSelectedTechIds] = useState<Set<string>>(new Set())
   const [showTechForm, setShowTechForm]       = useState(false)
-  const [techForm, setTechForm]               = useState({ name: '', phone: '', city: '', shift: '' })
+  const [techForm, setTechForm]               = useState({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
 
   // Step 4: done
   const [createdTechName, setCreatedTechName] = useState<string | null>(null)
@@ -787,7 +780,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
               name: techForm.name.trim(),
               phone: techForm.phone.trim() || null,
               city: techForm.city || null,
-              shift: techForm.shift || null,
+              shift: buildShift(techForm.shiftStart, techForm.shiftEnd),
               ...techMeta,
               active: true,
             })
@@ -826,7 +819,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
 
   function handleAddAnother() {
     setSelectedTechIds(new Set())
-    setTechForm({ name: '', phone: '', city: '', shift: '' })
+    setTechForm({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
     setShowTechForm(false)
     setCreatedTechName(null)
     setQrToken(null)
@@ -845,7 +838,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
     setSelectedProjectId(initialProjectId ?? null)
     setShowClientForm(false); setClientForm({ name: '', country: '', notes: '' })
     setShowProjectForm(false); setProjectForm({ name: '', description: '', status: 'active' })
-    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '', city: '', shift: '' })
+    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
     setCreatedTechName(null); setQrToken(null); setAssignedCount(0)
   }
 

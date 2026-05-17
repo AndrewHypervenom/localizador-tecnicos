@@ -34,21 +34,13 @@ export const CITIES_BY_COUNTRY: Record<string, string[]> = {
   ],
 }
 
-// Jornadas de trabajo
-export const SHIFTS = [
-  { value: 'mañana',   label: 'Mañana',   hint: '06:00–14:00' },
-  { value: 'tarde',    label: 'Tarde',    hint: '14:00–22:00' },
-  { value: 'noche',    label: 'Noche',    hint: '22:00–06:00' },
-  { value: 'completa', label: 'Completa', hint: '08:00–17:00' },
-  { value: 'rotativo', label: 'Rotativo', hint: 'Turnos variables' },
-] as const
+// Shift stored as "HH:MM-HH:MM", e.g. "08:00-17:00"
+export function parseShift(shift: string | null): { start: string; end: string } {
+  if (!shift) return { start: '', end: '' }
+  const m = shift.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/)
+  return m ? { start: m[1], end: m[2] } : { start: '', end: '' }
+}
 
-export type ShiftValue = typeof SHIFTS[number]['value']
-
-export const SHIFT_COLORS: Record<string, string> = {
-  mañana:   'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  tarde:    'bg-orange-500/10 text-orange-600 border-orange-500/20',
-  noche:    'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
-  completa: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-  rotativo: 'bg-text-muted/10 text-text-muted border-border',
+export function buildShift(start: string, end: string): string | null {
+  return start && end ? `${start}-${end}` : null
 }

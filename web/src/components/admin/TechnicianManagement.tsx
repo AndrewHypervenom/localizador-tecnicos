@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
-import { COUNTRIES, CITIES_BY_COUNTRY, SHIFTS, SHIFT_COLORS } from '@/lib/geo'
+import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
 
 interface Technician {
   id: string
@@ -59,10 +59,12 @@ function EditModal({ tech, onSave, onClose }: {
   const [phone, setPhone]     = useState(tech.phone ?? '')
   const [client, setClient]   = useState(tech.client ?? '')
   const [project, setProject] = useState(tech.project ?? '')
-  const [country, setCountry] = useState(tech.country ?? '')
-  const [city, setCity]       = useState(tech.city ?? '')
-  const [shift, setShift]     = useState(tech.shift ?? '')
-  const [notes, setNotes]     = useState(tech.notes ?? '')
+  const [country, setCountry]       = useState(tech.country ?? '')
+  const [city, setCity]             = useState(tech.city ?? '')
+  const { start: s0, end: e0 }      = parseShift(tech.shift)
+  const [shiftStart, setShiftStart] = useState(s0)
+  const [shiftEnd, setShiftEnd]     = useState(e0)
+  const [notes, setNotes]           = useState(tech.notes ?? '')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
@@ -84,9 +86,9 @@ function EditModal({ tech, onSave, onClose }: {
         phone:   phone.trim()   || null,
         client:  client.trim()  || null,
         project: project.trim() || null,
-        country: country        || null,
-        city:    city           || null,
-        shift:   shift          || null,
+        country: country                          || null,
+        city:    city                             || null,
+        shift:   buildShift(shiftStart, shiftEnd) ?? null,
         notes:   notes.trim()   || null,
       })
       onClose()
@@ -165,29 +167,20 @@ function EditModal({ tech, onSave, onClose }: {
               )}
               {/* Jornada */}
               <div className="col-span-2">
-                <FieldLabel label="Jornada de trabajo" />
-                <div className="flex gap-2 flex-wrap">
-                  {SHIFTS.map(s => (
-                    <button key={s.value} type="button"
-                      onClick={() => setShift(shift === s.value ? '' : s.value)}
-                      title={s.hint}
-                      className={cn(
-                        'flex-1 min-w-[72px] flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-xs font-medium transition-all',
-                        shift === s.value
-                          ? SHIFT_COLORS[s.value] + ' ring-1 ring-inset ring-current'
-                          : 'border-border-soft text-text-muted hover:border-border hover:text-text-secondary bg-base'
-                      )}
-                    >
-                      <Clock className="w-3.5 h-3.5" />
-                      {s.label}
-                    </button>
-                  ))}
+                <FieldLabel label="Horario de trabajo" />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                    <input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}
+                      className={cn(inputCls, 'pl-8 cursor-pointer')} />
+                  </div>
+                  <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
+                  <div className="relative flex-1">
+                    <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                    <input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}
+                      className={cn(inputCls, 'pl-8 cursor-pointer')} />
+                  </div>
                 </div>
-                {shift && (
-                  <p className="text-xs text-text-muted mt-1.5 ml-0.5">
-                    {SHIFTS.find(s => s.value === shift)?.hint}
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -535,12 +528,9 @@ export function TechnicianManagement() {
                         )}
                         {tech.shift && (
                           <div className="mb-1">
-                            <span className={cn(
-                              'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border',
-                              SHIFT_COLORS[tech.shift] ?? 'bg-base text-text-muted border-border'
-                            )}>
-                              <Clock className="w-2.5 h-2.5" />
-                              {SHIFTS.find(s => s.value === tech.shift)?.label ?? tech.shift}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border bg-base text-text-muted border-border font-mono">
+                              <Clock className="w-2.5 h-2.5 flex-shrink-0" />
+                              {tech.shift.replace('-', ' – ')}
                             </span>
                           </div>
                         )}

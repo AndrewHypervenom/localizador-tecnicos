@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Clock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-import { COUNTRIES, CITIES_BY_COUNTRY, SHIFTS, SHIFT_COLORS } from '@/lib/geo'
+import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 
 interface Props {
   open: boolean
@@ -36,9 +36,10 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   const [phone, setPhone]     = useState('')
   const [client, setClient]   = useState('')
   const [project, setProject] = useState('')
-  const [country, setCountry] = useState('')
-  const [city, setCity]       = useState('')
-  const [shift, setShift]     = useState('')
+  const [country, setCountry]       = useState('')
+  const [city, setCity]             = useState('')
+  const [shiftStart, setShiftStart] = useState('')
+  const [shiftEnd, setShiftEnd]     = useState('')
   const [notes, setNotes]     = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -92,9 +93,9 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
           phone:   phone.trim()   || null,
           client:  client.trim()  || null,
           project: project.trim() || null,
-          country: country        || null,
-          city:    city           || null,
-          shift:   shift          || null,
+          country: country                          || null,
+          city:    city                             || null,
+          shift:   buildShift(shiftStart, shiftEnd) ?? null,
           notes:   notes.trim()   || null,
           active:  true,
         })
@@ -132,7 +133,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     setTimeout(() => {
       setStep(existingTechnician ? 'qr' : 'form')
       setName(''); setPhone(''); setClient(''); setProject('')
-      setCountry(''); setCity(''); setShift(''); setNotes('')
+      setCountry(''); setCity(''); setShiftStart(''); setShiftEnd(''); setNotes('')
       setError(null); setQrToken(null)
     }, 200)
   }
@@ -239,31 +240,22 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                     </Field>
                   </div>
                 )}
-                {/* Jornada */}
+                {/* Horario */}
                 <div className="col-span-2">
-                  <Field label="Jornada de trabajo">
-                    <div className="flex gap-2 flex-wrap">
-                      {SHIFTS.map(s => (
-                        <button key={s.value} type="button"
-                          onClick={() => setShift(shift === s.value ? '' : s.value)}
-                          title={s.hint}
-                          className={cn(
-                            'flex-1 min-w-[72px] flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-xs font-medium transition-all',
-                            shift === s.value
-                              ? SHIFT_COLORS[s.value] + ' ring-1 ring-inset ring-current'
-                              : 'border-border-soft text-text-muted hover:border-border hover:text-text-secondary bg-base'
-                          )}
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          {s.label}
-                        </button>
-                      ))}
+                  <Field label="Horario de trabajo">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                        <input type="time" value={shiftStart} onChange={e => setShiftStart(e.target.value)}
+                          className={cn(inputCls, 'pl-8 cursor-pointer')} />
+                      </div>
+                      <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
+                      <div className="relative flex-1">
+                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                        <input type="time" value={shiftEnd} onChange={e => setShiftEnd(e.target.value)}
+                          className={cn(inputCls, 'pl-8 cursor-pointer')} />
+                      </div>
                     </div>
-                    {shift && (
-                      <p className="text-xs text-text-muted mt-1.5">
-                        {SHIFTS.find(s => s.value === shift)?.hint}
-                      </p>
-                    )}
                   </Field>
                 </div>
               </div>
