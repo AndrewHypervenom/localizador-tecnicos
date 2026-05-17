@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield, FolderOpen } from 'lucide-react'
+import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield, FolderOpen, History } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { StatsOverview } from '@/components/admin/StatsOverview'
@@ -9,8 +9,9 @@ import { TechnicianManagement } from '@/components/admin/TechnicianManagement'
 import { ActivityLog } from '@/components/admin/ActivityLog'
 import { ProjectsOverview } from '@/components/admin/ProjectsOverview'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
+import { AdminHistory } from '@/components/admin/AdminHistory'
 
-type AdminTab = 'stats' | 'users' | 'technicians' | 'activity' | 'projects'
+type AdminTab = 'stats' | 'users' | 'technicians' | 'activity' | 'projects' | 'history'
 
 const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',       label: 'Resumen',    icon: BarChart2   },
@@ -18,6 +19,7 @@ const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: 'technicians', label: 'Técnicos',   icon: Wrench      },
   { id: 'activity',    label: 'Actividad',  icon: Activity    },
   { id: 'projects',    label: 'Proyectos',  icon: FolderOpen  },
+  { id: 'history',    label: 'Historial',  icon: History     },
 ]
 
 export function Admin() {
@@ -128,6 +130,7 @@ export function Admin() {
         {activeTab === 'technicians' && <TechnicianManagement />}
         {activeTab === 'activity'    && <ActivityLog />}
         {activeTab === 'projects'    && <ProjectsOverview onOpenWizard={() => setWizardOpen(true)} />}
+        {activeTab === 'history'     && <AdminHistory />}
       </main>
 
       <OnboardingWizard
