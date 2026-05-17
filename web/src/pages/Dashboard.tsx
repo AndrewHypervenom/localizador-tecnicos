@@ -12,7 +12,7 @@ import { useZonesStore } from '@/store/zonesStore'
 import { getRoleFromSession } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import {
-  Users, Bell, ChevronLeft, ChevronRight,
+  Users, Bell, ChevronRight,
   LogOut, History, Layers, EyeOff, Eye, Shield, FileText
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -91,90 +91,108 @@ export function Dashboard() {
       <motion.div
         animate={{ width: sidebarCollapsed ? 0 : 320 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="relative flex-shrink-0 bg-surface border-r border-border-soft overflow-hidden"
+        className="flex-shrink-0 bg-surface border-r border-border-soft overflow-hidden"
       >
-        {/* Tabs del sidebar */}
-        <div className="flex border-b border-border-soft">
-          <button
-            onClick={() => setActiveTab('technicians')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors',
-              activeTab === 'technicians'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-text-muted hover:text-text-primary'
-            )}
-          >
-            <Users className="w-3.5 h-3.5" />
-            Técnicos
-          </button>
-          <button
-            onClick={() => setActiveTab('alerts')}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors relative',
-              activeTab === 'alerts'
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-text-muted hover:text-text-primary'
-            )}
-          >
-            <Bell className="w-3.5 h-3.5" />
-            Alertas
-            {unreadAlerts > 0 && (
-              <span className="absolute top-2 right-6 bg-danger text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
-                {unreadAlerts > 9 ? '9+' : unreadAlerts}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Wrapper de ancho fijo — evita reflow del contenido durante la animación */}
+        <motion.div
+          animate={{ opacity: sidebarCollapsed ? 0 : 1 }}
+          transition={{ duration: 0.12 }}
+          className="w-[320px] h-full flex flex-col"
+        >
+          {/* Tabs del sidebar */}
+          <div className="flex border-b border-border-soft flex-shrink-0">
+            <button
+              onClick={() => setActiveTab('technicians')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors',
+                activeTab === 'technicians'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-muted hover:text-text-primary'
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Técnicos
+            </button>
+            <button
+              onClick={() => setActiveTab('alerts')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-colors relative',
+                activeTab === 'alerts'
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-muted hover:text-text-primary'
+              )}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              Alertas
+              {unreadAlerts > 0 && (
+                <span className="absolute top-2 right-6 bg-danger text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                  {unreadAlerts > 9 ? '9+' : unreadAlerts}
+                </span>
+              )}
+            </button>
+          </div>
 
-        {/* Contenido del panel */}
-        <div className="h-[calc(100%-48px)] overflow-hidden">
-          <AnimatePresence mode="wait">
-            {activeTab === 'alerts' ? (
-              <motion.div
-                key="alerts"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="h-full overflow-y-auto"
-              >
-                <AlertsPanel className="h-full" />
-              </motion.div>
-            ) : selectedTechnicianId ? (
-              <motion.div
-                key="detail"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="h-full overflow-y-auto"
-              >
-                <TechnicianDetail />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="list"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="h-full overflow-y-auto"
-              >
-                <TechnicianList className="h-full" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+          {/* Contenido del panel */}
+          <div className="flex-1 overflow-hidden">
+            <AnimatePresence mode="wait">
+              {activeTab === 'alerts' ? (
+                <motion.div
+                  key="alerts"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <AlertsPanel className="h-full" />
+                </motion.div>
+              ) : selectedTechnicianId ? (
+                <motion.div
+                  key="detail"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <TechnicianDetail />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="list"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <TechnicianList className="h-full" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
       </motion.div>
 
-      {/* Botón colapsar sidebar */}
-      <button
-        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-[500] bg-surface border border-border-soft rounded-r-lg p-1 hover:bg-surface-raised transition-colors"
-        style={{ left: sidebarCollapsed ? 0 : 320 }}
+      {/* Botón colapsar/expandir sidebar — sigue el borde del sidebar con spring sincronizado */}
+      <motion.button
+        animate={{ left: sidebarCollapsed ? 0 : 320 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        onClick={() => setSidebarCollapsed(v => !v)}
+        title={sidebarCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
+        className="absolute top-1/2 -translate-y-1/2 z-[500] group"
       >
-        {sidebarCollapsed
-          ? <ChevronRight className="w-3.5 h-3.5 text-text-muted" />
-          : <ChevronLeft  className="w-3.5 h-3.5 text-text-muted" />
-        }
-      </button>
+        <div className={cn(
+          'flex items-center justify-center px-[5px] py-7 rounded-r-xl',
+          'bg-surface border border-l-0 border-border-soft shadow-md',
+          'group-hover:bg-primary/5 group-hover:border-primary/30 group-hover:shadow-primary/10',
+          'transition-colors duration-200'
+        )}>
+          <motion.div
+            animate={{ rotate: sidebarCollapsed ? 0 : 180 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-primary transition-colors duration-200" />
+          </motion.div>
+        </div>
+      </motion.button>
 
       {/* Mapa principal (ocupa el resto) */}
       <div className="flex-1 relative">
