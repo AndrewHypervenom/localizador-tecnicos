@@ -210,7 +210,8 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
-  const [deletingId, setDeletingId]   = useState<string | null>(null)
+  const [deletingId, setDeletingId]         = useState<string | null>(null)
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null)
 
   const [wizardOpen, setWizardOpen]           = useState(false)
   const [wizardClientId, setWizardClientId]   = useState<string | undefined>()
@@ -238,6 +239,29 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
   }
 
   useEffect(() => { load() }, [])
+
+  async function deleteClient(id: string) {
+    const client = clients.find(c => c.id === id)
+    const cProjects = clientProjects(id)
+    const msg = cProjects.length > 0
+      ? `¿Eliminar el cliente "${client?.name}"? Se eliminarán también sus ${cProjects.length} proyecto${cProjects.length > 1 ? 's' : ''} y los técnicos quedarán sin proyecto asignado.`
+      : `¿Eliminar el cliente "${client?.name}"?`
+    if (!window.confirm(msg)) return
+    setDeletingClientId(id)
+    try {
+      for (const p of cProjects) {
+        await supabase.from('technicians').update({ project_id: null }).eq('project_id', p.id)
+      }
+      if (cProjects.length > 0) {
+        await supabase.from('projects').delete().in('id', cProjects.map(p => p.id))
+        setProjects(prev => prev.filter(p => p.client_id !== id))
+      }
+      await supabase.from('clients').delete().eq('id', id)
+      setClients(prev => prev.filter(c => c.id !== id))
+    } finally {
+      setDeletingClientId(null)
+    }
+  }
 
   async function deleteProject(id: string) {
     if (!window.confirm('¿Eliminar este proyecto? Los técnicos quedarán sin proyecto asignado.')) return
@@ -321,32 +345,45 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
             return (
               <div key={client.id} className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
                 {/* Client header */}
-                <button
-                  onClick={() => setExpandedClients(prev => {
-                    const n = new Set(prev)
-                    n.has(client.id) ? n.delete(client.id) : n.add(client.id)
-                    return n
-                  })}
-                  className="w-full flex items-center gap-3 px-5 py-4 hover:bg-surface-raised transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Building2 className="w-4.5 h-4.5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-text-primary">{client.name}</p>
-                    <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                      {client.country && (
-                        <span className="flex items-center gap-1 text-xs text-text-muted">
-                          <MapPin className="w-3 h-3" />{client.country}
-                        </span>
-                      )}
-                      <span className="text-xs text-text-muted">
-                        {cProjects.length} proyecto{cProjects.length !== 1 ? 's' : ''}
-                      </span>
+                <div className="flex items-center gap-3 px-5 py-4 hover:bg-surface-raised transition-colors">
+                  <button
+                    onClick={() => setExpandedClients(prev => {
+                      const n = new Set(prev)
+                      n.has(client.id) ? n.delete(client.id) : n.add(client.id)
+                      return n
+                    })}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-4.5 h-4.5 text-primary" />
                     </div>
-                  </div>
-                  <ChevronDown className={cn('w-4 h-4 text-text-muted transition-transform flex-shrink-0', expanded && 'rotate-180')} />
-                </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-text-primary">{client.name}</p>
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        {client.country && (
+                          <span className="flex items-center gap-1 text-xs text-text-muted">
+                            <MapPin className="w-3 h-3" />{client.country}
+                          </span>
+                        )}
+                        <span className="text-xs text-text-muted">
+                          {cProjects.length} proyecto{cProjects.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronDown className={cn('w-4 h-4 text-text-muted transition-transform flex-shrink-0', expanded && 'rotate-180')} />
+                  </button>
+                  <button
+                    onClick={() => deleteClient(client.id)}
+                    disabled={deletingClientId === client.id}
+                    title="Eliminar cliente"
+                    className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 flex-shrink-0"
+                  >
+                    {deletingClientId === client.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Trash2 className="w-4 h-4" />
+                    }
+                  </button>
+                </div>
 
                 {/* Projects list */}
                 {expanded && (
