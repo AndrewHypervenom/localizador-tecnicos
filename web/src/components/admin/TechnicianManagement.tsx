@@ -4,20 +4,14 @@ import {
   Plus, RefreshCw, Trash2, Edit2, QrCode,
   Loader2, Smartphone, WifiOff, Search, X,
   MapPin, Building2, FolderOpen, FileText, Save,
-  Filter, ChevronDown,
+  Filter, ChevronDown, Navigation, Clock,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
-
-const COUNTRIES = [
-  'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Colombia', 'Costa Rica',
-  'Cuba', 'Ecuador', 'El Salvador', 'España', 'Estados Unidos', 'Guatemala',
-  'Honduras', 'México', 'Nicaragua', 'Panamá', 'Paraguay', 'Perú',
-  'República Dominicana', 'Uruguay', 'Venezuela',
-]
+import { COUNTRIES, CITIES_BY_COUNTRY, SHIFTS, SHIFT_COLORS } from '@/lib/geo'
 
 interface Technician {
   id: string
@@ -26,6 +20,8 @@ interface Technician {
   client: string | null
   project: string | null
   country: string | null
+  city: string | null
+  shift: string | null
   notes: string | null
   device_id: string | null
   active: boolean
@@ -64,9 +60,19 @@ function EditModal({ tech, onSave, onClose }: {
   const [client, setClient]   = useState(tech.client ?? '')
   const [project, setProject] = useState(tech.project ?? '')
   const [country, setCountry] = useState(tech.country ?? '')
+  const [city, setCity]       = useState(tech.city ?? '')
+  const [shift, setShift]     = useState(tech.shift ?? '')
   const [notes, setNotes]     = useState(tech.notes ?? '')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
+
+  const cityOptions = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+
+  function handleCountryChange(newCountry: string) {
+    setCountry(newCountry)
+    const valid = CITIES_BY_COUNTRY[newCountry] ?? []
+    if (city && !valid.includes(city)) setCity('')
+  }
 
   async function handleSave() {
     if (!name.trim()) { setError('El nombre es obligatorio'); return }
@@ -79,6 +85,8 @@ function EditModal({ tech, onSave, onClose }: {
         client:  client.trim()  || null,
         project: project.trim() || null,
         country: country        || null,
+        city:    city           || null,
+        shift:   shift          || null,
         notes:   notes.trim()   || null,
       })
       onClose()
@@ -134,12 +142,52 @@ function EditModal({ tech, onSave, onClose }: {
                 <FieldLabel label="País" />
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                  <select value={country} onChange={e => setCountry(e.target.value)}
+                  <select value={country} onChange={e => handleCountryChange(e.target.value)}
                     className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}>
                     <option value="">Sin especificar</option>
                     {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
+              </div>
+              {/* Ciudad — aparece solo cuando hay país seleccionado */}
+              {country && (
+                <div className="col-span-2">
+                  <FieldLabel label="Ciudad" />
+                  <div className="relative">
+                    <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                    <select value={city} onChange={e => setCity(e.target.value)}
+                      className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}>
+                      <option value="">Seleccionar ciudad</option>
+                      {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+              {/* Jornada */}
+              <div className="col-span-2">
+                <FieldLabel label="Jornada de trabajo" />
+                <div className="flex gap-2 flex-wrap">
+                  {SHIFTS.map(s => (
+                    <button key={s.value} type="button"
+                      onClick={() => setShift(shift === s.value ? '' : s.value)}
+                      title={s.hint}
+                      className={cn(
+                        'flex-1 min-w-[72px] flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-xs font-medium transition-all',
+                        shift === s.value
+                          ? SHIFT_COLORS[s.value] + ' ring-1 ring-inset ring-current'
+                          : 'border-border-soft text-text-muted hover:border-border hover:text-text-secondary bg-base'
+                      )}
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                {shift && (
+                  <p className="text-xs text-text-muted mt-1.5 ml-0.5">
+                    {SHIFTS.find(s => s.value === shift)?.hint}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -226,7 +274,7 @@ export function TechnicianManagement() {
       const [techsRes, statusRes] = await Promise.all([
         supabase
           .from('technicians')
-          .select('id, name, phone, client, project, country, notes, device_id, active, created_at')
+          .select('id, name, phone, client, project, country, city, shift, notes, device_id, active, created_at')
           .order('created_at', { ascending: false }),
         supabase
           .from('technician_current_status')
@@ -306,16 +354,18 @@ export function TechnicianManagement() {
   }
 
   function downloadCSV() {
-    const header = 'ID,Nombre,Teléfono,Cliente,Proyecto,País,Notas,Device ID,Activo,Estado,Batería,Último acceso,Registrado'
+    const header = 'ID,Nombre,Teléfono,País,Ciudad,Jornada,Cliente,Proyecto,Notas,Device ID,Activo,Estado,Batería,Último acceso,Registrado'
     const rows = techs.map(t => {
       const s = statuses[t.id]
       return [
         t.id,
         `"${t.name}"`,
         t.phone ?? '',
+        t.country ?? '',
+        t.city ?? '',
+        t.shift ?? '',
         `"${t.client ?? ''}"`,
         `"${t.project ?? ''}"`,
-        t.country ?? '',
         `"${(t.notes ?? '').replace(/"/g, '""')}"`,
         t.device_id ?? '',
         t.active ? 'Sí' : 'No',
@@ -473,12 +523,25 @@ export function TechnicianManagement() {
                         {!tech.active && <span className="text-xs text-warning font-medium">Desactivado</span>}
                       </td>
 
-                      {/* Country + Client/Project */}
-                      <td className="px-4 py-3 max-w-[180px]">
-                        {tech.country && (
+                      {/* Country / City / Shift / Client / Project */}
+                      <td className="px-4 py-3 max-w-[200px]">
+                        {(tech.country || tech.city) && (
                           <div className="flex items-center gap-1 text-xs text-text-secondary mb-0.5">
                             <MapPin className="w-3 h-3 text-text-muted flex-shrink-0" />
-                            <span className="truncate">{tech.country}</span>
+                            <span className="truncate">
+                              {[tech.city, tech.country].filter(Boolean).join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {tech.shift && (
+                          <div className="mb-1">
+                            <span className={cn(
+                              'inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md border',
+                              SHIFT_COLORS[tech.shift] ?? 'bg-base text-text-muted border-border'
+                            )}>
+                              <Clock className="w-2.5 h-2.5" />
+                              {SHIFTS.find(s => s.value === tech.shift)?.label ?? tech.shift}
+                            </span>
                           </div>
                         )}
                         {tech.client && (
@@ -493,7 +556,7 @@ export function TechnicianManagement() {
                             <span className="truncate">{tech.project}</span>
                           </div>
                         )}
-                        {!tech.country && !tech.client && !tech.project && (
+                        {!tech.country && !tech.city && !tech.shift && !tech.client && !tech.project && (
                           <span className="text-xs text-text-muted/50">—</span>
                         )}
                       </td>

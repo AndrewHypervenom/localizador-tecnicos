@@ -6,13 +6,11 @@ import {
   X, Building2, FolderOpen, UserPlus, CheckCircle2,
   MapPin, Plus, Check, Search, ChevronRight,
   Loader2, RefreshCw, Sparkles, Users, ArrowLeft,
+  Navigation, Clock,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const COUNTRIES = ['Argentina', 'Brasil', 'Colombia', 'México']
+import { COUNTRIES, CITIES_BY_COUNTRY, SHIFTS, SHIFT_COLORS } from '@/lib/geo'
 
 const STATUS_CFG = {
   active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },
@@ -378,10 +376,11 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
 
 // ── Step 3: Técnico ───────────────────────────────────────────────────────────
 
-function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, showForm, onToggleForm, form, setForm }: {
+function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, showForm, onToggleForm, form, setForm, clientCountry }: {
   techs: TechRow[]; loading: boolean; selectedIds: Set<string>; onToggle: (id: string) => void
   projectName: string; showForm: boolean; onToggleForm: () => void
-  form: { name: string; phone: string }; setForm: (f: any) => void
+  form: { name: string; phone: string; city: string; shift: string }; setForm: (f: any) => void
+  clientCountry?: string | null
 }) {
   const [search, setSearch] = useState('')
   const filtered = techs.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
@@ -471,6 +470,48 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                       <label className="block text-xs text-text-muted font-medium mb-1">Teléfono</label>
                       <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                         placeholder="+504 9999-0001" className={inp} />
+                    </div>
+                    {/* Ciudad — basada en el país del cliente */}
+                    {clientCountry && (CITIES_BY_COUNTRY[clientCountry]?.length ?? 0) > 0 && (
+                      <div className="col-span-2">
+                        <label className="block text-xs text-text-muted font-medium mb-1">Ciudad</label>
+                        <div className="relative">
+                          <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                          <select value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+                            className={cn(inp, 'pl-8 appearance-none cursor-pointer')}>
+                            <option value="">Seleccionar ciudad</option>
+                            {(CITIES_BY_COUNTRY[clientCountry] ?? []).map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {/* Jornada */}
+                    <div className="col-span-2">
+                      <label className="block text-xs text-text-muted font-medium mb-1.5">Jornada de trabajo</label>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {SHIFTS.map(s => (
+                          <button key={s.value} type="button"
+                            onClick={() => setForm({ ...form, shift: form.shift === s.value ? '' : s.value })}
+                            title={s.hint}
+                            className={cn(
+                              'flex-1 min-w-[60px] flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all',
+                              form.shift === s.value
+                                ? SHIFT_COLORS[s.value] + ' ring-1 ring-inset ring-current'
+                                : 'border-border-soft text-text-muted hover:border-border hover:text-text-secondary bg-base'
+                            )}
+                          >
+                            <Clock className="w-3 h-3" />
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                      {form.shift && (
+                        <p className="text-[11px] text-text-muted mt-1">
+                          {SHIFTS.find(s => s.value === form.shift)?.hint}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -597,7 +638,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
   // Step 3: technician
   const [selectedTechIds, setSelectedTechIds] = useState<Set<string>>(new Set())
   const [showTechForm, setShowTechForm]       = useState(false)
-  const [techForm, setTechForm]               = useState({ name: '', phone: '' })
+  const [techForm, setTechForm]               = useState({ name: '', phone: '', city: '', shift: '' })
 
   // Step 4: done
   const [createdTechName, setCreatedTechName] = useState<string | null>(null)
@@ -745,6 +786,8 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
             .insert({
               name: techForm.name.trim(),
               phone: techForm.phone.trim() || null,
+              city: techForm.city || null,
+              shift: techForm.shift || null,
               ...techMeta,
               active: true,
             })
@@ -783,7 +826,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
 
   function handleAddAnother() {
     setSelectedTechIds(new Set())
-    setTechForm({ name: '', phone: '' })
+    setTechForm({ name: '', phone: '', city: '', shift: '' })
     setShowTechForm(false)
     setCreatedTechName(null)
     setQrToken(null)
@@ -802,7 +845,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
     setSelectedProjectId(initialProjectId ?? null)
     setShowClientForm(false); setClientForm({ name: '', country: '', notes: '' })
     setShowProjectForm(false); setProjectForm({ name: '', description: '', status: 'active' })
-    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '' })
+    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '', city: '', shift: '' })
     setCreatedTechName(null); setQrToken(null); setAssignedCount(0)
   }
 
@@ -880,6 +923,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
                   projectName={selectedProject?.name ?? ''}
                   showForm={showTechForm} onToggleForm={() => setShowTechForm(v => !v)}
                   form={techForm} setForm={setTechForm}
+                  clientCountry={selectedClient?.country}
                 />
               )}
               {step === 4 && (
