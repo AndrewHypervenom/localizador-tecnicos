@@ -69,6 +69,7 @@ interface TrackingStore {
   lastRealtimeEvent: string | null   // ISO timestamp del último evento recibido
   // Actions
   setTechnicians: (techs: TechnicianState[]) => void
+  replaceTechnicians: (techs: TechnicianState[]) => void
   updateTechnicianPosition: (payload: LocationPayload) => void
   updateTechnicianMeta: (id: string, patch: { name?: string; phone?: string; home_lat?: number | null; home_lng?: number | null; home_address?: string | null }) => void
   addAlert: (alert: MotionAlert) => void
@@ -125,6 +126,23 @@ export const useTrackingStore = create<TrackingStore>()(
             ...t,
             status,
             trail:        state.technicians[t.id]?.trail ?? [],
+            home_lat:     t.home_lat,
+            home_lng:     t.home_lng,
+            home_address: t.home_address,
+          }
+        })
+      }),
+
+    replaceTechnicians: (techs) =>
+      set((state) => {
+        const now = Date.now()
+        state.technicians = {}
+        techs.forEach((t) => {
+          const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now)
+          state.technicians[t.id] = {
+            ...t,
+            status,
+            trail:        [],
             home_lat:     t.home_lat,
             home_lng:     t.home_lng,
             home_address: t.home_address,

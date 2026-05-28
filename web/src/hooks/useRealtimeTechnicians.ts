@@ -21,7 +21,7 @@ function playAccidentAlert() {
 //   null      → leader scope not yet resolved, skip fetch
 //   string[]  → leader mode, filter to these IDs only
 export function useRealtimeTechnicians(filterByIds?: string[] | null) {
-  const { setTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
+  const { setTechnicians, replaceTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
   const prevStatusesRef = useRef<Record<string, TechnicianStatus>>({})
   const filterRef = useRef(filterByIds)
 
@@ -77,7 +77,11 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
         }
       })
 
-      setTechnicians(techs)
+      if (ids !== undefined) {
+        replaceTechnicians(techs)
+      } else {
+        setTechnicians(techs)
+      }
     }
 
     // Carga inicial de alertas históricas (últimos 30 días)
