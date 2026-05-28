@@ -1197,6 +1197,11 @@ export function Zones() {
                     </button>
                   </div>
 
+                  <p className="text-[11px] text-text-muted flex items-start gap-1.5 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1.5 leading-relaxed">
+                    <span className="flex-shrink-0">🗺️</span>
+                    <span>Puedes escribir la dirección <strong className="text-text-secondary">o pegar un link de Google Maps</strong> para ubicar el punto exacto en el mapa</span>
+                  </p>
+
                   {geocodeResult && (
                     <div className="bg-base border border-primary/20 rounded-xl p-3 space-y-3">
                       <div className="flex items-start gap-2">

@@ -736,7 +736,7 @@ export function Dashboard() {
                       <div className="space-y-4">
                         <div className="text-center py-4 space-y-1">
                           <p className="text-text-muted text-sm">Ningún técnico tiene ciudad asignada.</p>
-                          <p className="text-text-muted/60 text-xs">Podés crear una zona de ciudad manualmente:</p>
+                          <p className="text-text-muted/60 text-xs">Puedes crear una zona de ciudad manualmente:</p>
                         </div>
 
                         <div className="border-t border-border-soft pt-4 space-y-3">

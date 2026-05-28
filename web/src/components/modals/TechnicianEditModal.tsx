@@ -185,7 +185,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
       const label = [matchedCity || result.city, matchedCountry || result.country].filter(Boolean).join(', ')
       setCitySuggestion(label)
-      if (!matchedCity) toast.info(`Detectado: ${result.city}, ${result.country} — seleccioná la ciudad manualmente`)
+      if (!matchedCity) toast.info(`Detectado: ${result.city}, ${result.country} — selecciona la ciudad manualmente`)
     } catch {
       toast.error('Error al detectar ubicación')
     } finally {
@@ -508,7 +508,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               </>
             ) : homeAddress ? (
               <p className="text-[11px] text-text-muted mt-1.5">
-                Presioná el botón buscar para geolocalizar la dirección
+                Presiona el botón buscar para geolocalizar la dirección
               </p>
             ) : null}
           </div>
