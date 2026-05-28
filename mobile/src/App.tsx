@@ -5,16 +5,31 @@ import { useDeviceId } from './hooks/useDeviceId';
 import { supabase, ensureAuth } from './lib/supabase';
 import HomeScreen from './screens/HomeScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import TermsScreen, { hasAcceptedTerms } from './screens/TermsScreen';
 
-type AppState = 'loading' | 'register' | 'home';
+type AppState = 'loading' | 'terms' | 'register' | 'home';
 
 export default function App() {
   const deviceId = useDeviceId();
-  const [appState, setAppState]     = useState<AppState>('loading');
-  const [techName, setTechName]     = useState<string | null>(null);
+  const [appState, setAppState]         = useState<AppState>('loading');
+  const [techName, setTechName]         = useState<string | null>(null);
+  const [termsOk, setTermsOk]           = useState(false);
 
+  // Paso 1: verificar términos al iniciar
   useEffect(() => {
     if (!deviceId) return;
+    hasAcceptedTerms().then(accepted => {
+      if (accepted) {
+        setTermsOk(true);
+      } else {
+        setAppState('terms');
+      }
+    });
+  }, [deviceId]);
+
+  // Paso 2: verificar registro del dispositivo una vez que los términos están ok
+  useEffect(() => {
+    if (!termsOk || !deviceId) return;
 
     ensureAuth().then(() =>
       supabase
@@ -31,7 +46,7 @@ export default function App() {
           }
         })
     );
-  }, [deviceId]);
+  }, [termsOk, deviceId]);
 
   if (appState === 'loading') {
     return (
@@ -39,6 +54,15 @@ export default function App() {
         <StatusBar style="light" />
         <ActivityIndicator size="large" color="#00D632" />
       </View>
+    );
+  }
+
+  if (appState === 'terms') {
+    return (
+      <>
+        <StatusBar style="light" />
+        <TermsScreen onAccept={() => setTermsOk(true)} />
+      </>
     );
   }
 

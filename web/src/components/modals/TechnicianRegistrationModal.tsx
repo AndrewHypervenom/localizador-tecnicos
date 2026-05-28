@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Check } from 'lucide-react'
+import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Check, FolderOpen } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
@@ -35,8 +35,6 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   const [step, setStep]       = useState<Step>(existingTechnician ? 'qr' : 'form')
   const [name, setName]       = useState('')
   const [phone, setPhone]     = useState('')
-  const [client, setClient]   = useState('')
-  const [project, setProject] = useState('')
   const [country, setCountry]       = useState('')
   const [city, setCity]             = useState('')
   const [shiftStart, setShiftStart] = useState('')
@@ -47,13 +45,40 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [techName, setTechName] = useState(existingTechnician?.name ?? '')
 
-  const cityOptions = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+  // Org dropdowns
+  const [companies, setCompanies]       = useState<{ id: string; name: string }[]>([])
+  const [allCampaigns, setAllCampaigns] = useState<{ id: string; name: string; company_id: string }[]>([])
+  const [loadingOrgs, setLoadingOrgs]   = useState(false)
+  const [selectedCompanyId, setSelectedCompanyId]   = useState('')
+  const [selectedCampaignId, setSelectedCampaignId] = useState('')
+
+  const cityOptions        = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+  const filteredCampaigns  = allCampaigns.filter(c => c.company_id === selectedCompanyId)
 
   function handleCountryChange(newCountry: string) {
     setCountry(newCountry)
     const valid = CITIES_BY_COUNTRY[newCountry] ?? []
     if (city && !valid.includes(city)) setCity('')
   }
+
+  function handleCompanyChange(id: string) {
+    setSelectedCompanyId(id)
+    setSelectedCampaignId('')
+  }
+
+  // Load companies + campaigns when modal opens
+  useEffect(() => {
+    if (!open) return
+    setLoadingOrgs(true)
+    Promise.all([
+      supabase.from('companies').select('id, name').order('name'),
+      supabase.from('campaigns').select('id, name, company_id').eq('is_active', true).order('name'),
+    ]).then(([{ data: cos }, { data: cps }]) => {
+      setCompanies(cos ?? [])
+      setAllCampaigns(cps ?? [])
+      setLoadingOrgs(false)
+    })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -87,18 +112,22 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     setLoading(true)
     setError(null)
     try {
+      const selectedCompany  = companies.find(c => c.id === selectedCompanyId)
+      const selectedCampaign = filteredCampaigns.find(c => c.id === selectedCampaignId)
+
       const { data: tech, error: techError } = await supabase
         .from('technicians')
         .insert({
-          name:    name.trim(),
-          phone:   phone.trim()   || null,
-          client:  client.trim()  || null,
-          project: project.trim() || null,
-          country: country                          || null,
-          city:    city                             || null,
-          shift:   buildShift(shiftStart, shiftEnd) ?? null,
-          notes:   notes.trim()   || null,
-          active:  true,
+          name:       name.trim(),
+          phone:      phone.trim()  || null,
+          client:     selectedCompany?.name  ?? null,
+          project:    selectedCampaign?.name ?? null,
+          company_id: selectedCompanyId      || null,
+          country:    country                || null,
+          city:       city                   || null,
+          shift:      buildShift(shiftStart, shiftEnd) ?? null,
+          notes:      notes.trim()           || null,
+          active:     true,
         })
         .select('id, name')
         .single()
@@ -133,8 +162,9 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     onOpenChange(false)
     setTimeout(() => {
       setStep(existingTechnician ? 'qr' : 'form')
-      setName(''); setPhone(''); setClient(''); setProject('')
+      setName(''); setPhone('')
       setCountry(''); setCity(''); setShiftStart(''); setShiftEnd(''); setNotes('')
+      setSelectedCompanyId(''); setSelectedCampaignId('')
       setError(null); setQrToken(null)
     }, 200)
   }
@@ -283,28 +313,41 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Field label="Cliente / Empresa">
+                  <Field label="Empresa">
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                      <input
-                        type="text"
-                        value={client}
-                        onChange={e => setClient(e.target.value)}
-                        placeholder="Empresa ABC"
-                        className={cn(inputCls, 'pl-8')}
-                      />
+                      <select
+                        value={selectedCompanyId}
+                        onChange={e => handleCompanyChange(e.target.value)}
+                        disabled={loadingOrgs}
+                        className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
+                      >
+                        <option value="">{loadingOrgs ? 'Cargando…' : 'Sin empresa'}</option>
+                        {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
                     </div>
                   </Field>
                 </div>
                 <div>
-                  <Field label="Proyecto">
-                    <input
-                      type="text"
-                      value={project}
-                      onChange={e => setProject(e.target.value)}
-                      placeholder="Instalación Zona Norte"
-                      className={inputCls}
-                    />
+                  <Field label="Campaña">
+                    <div className="relative">
+                      <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                      <select
+                        value={selectedCampaignId}
+                        onChange={e => setSelectedCampaignId(e.target.value)}
+                        disabled={!selectedCompanyId || filteredCampaigns.length === 0}
+                        className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
+                      >
+                        <option value="">
+                          {!selectedCompanyId
+                            ? 'Seleccionar empresa primero'
+                            : filteredCampaigns.length === 0
+                              ? 'Sin campañas activas'
+                              : 'Sin campaña'}
+                        </option>
+                        {filteredCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
                   </Field>
                 </div>
               </div>
