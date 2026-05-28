@@ -835,18 +835,17 @@ export function Zones() {
                 <button
                   onClick={() => setClearAllConfirm(true)}
                   title="Borrar todas las zonas"
-                  className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
+                  className="p-1.5 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Borrar todo
                 </button>
               )}
               <button
                 onClick={startCreate}
-                className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                title="Nueva zona"
+                className="p-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Nueva
               </button>
             </div>
           )}

@@ -411,7 +411,7 @@ function LocationCard({ loc, onEdit, onDelete, onToggle, deleting, toggling }: {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-semibold text-text-primary text-sm truncate">{loc.name}</p>
+            <p className="font-semibold text-text-primary text-sm break-words">{loc.name}</p>
             <p className="text-xs text-text-muted">{cfg.label}</p>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -429,9 +429,9 @@ function LocationCard({ loc, onEdit, onDelete, onToggle, deleting, toggling }: {
           </div>
         </div>
         {loc.address && (
-          <div className="flex items-center gap-1 mt-2">
-            <MapPin className="w-3 h-3 text-text-muted flex-shrink-0" />
-            <p className="text-xs text-text-muted truncate">{loc.address}</p>
+          <div className="flex items-start gap-1 mt-2 min-w-0">
+            <MapPin className="w-3 h-3 text-text-muted flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-text-muted break-words min-w-0">{loc.address}</p>
           </div>
         )}
         {loc.notes && <p className="text-xs text-text-muted mt-1 line-clamp-1">{loc.notes}</p>}
