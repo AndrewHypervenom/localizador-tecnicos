@@ -612,12 +612,14 @@ export function Zones() {
     try {
       const raw = geocodeQuery.trim()
 
+      const radiusKm = Math.max(geocodeRadius, 150) / 1000  // nunca menos de 150 m
+
       // 1. Link de Google Maps → extraer coordenadas directamente
       const gmCoords = extractGoogleMapsCoords(raw)
       if (gmCoords) {
         const result: GeocodingResult = { lat: gmCoords.lat, lng: gmCoords.lng, displayName: `📍 ${gmCoords.lat.toFixed(6)}, ${gmCoords.lng.toFixed(6)}` }
         setGeocodeResult(result)
-        const circle = circlePolygon(gmCoords.lat, gmCoords.lng, geocodeRadius / 1000)
+        const circle = circlePolygon(gmCoords.lat, gmCoords.lng, radiusKm)
         setDrawnCoords(circle)
         setFitCoords(circle)
         return
@@ -630,8 +632,7 @@ export function Zones() {
       if (!result) result = await geocodeAddress(raw)
       if (!result) { toast.error('No se encontró la dirección'); return }
       setGeocodeResult(result)
-      // Generar círculo automáticamente al encontrar la dirección
-      const circle = circlePolygon(result.lat, result.lng, geocodeRadius / 1000)
+      const circle = circlePolygon(result.lat, result.lng, radiusKm)
       setDrawnCoords(circle)
       setFitCoords(circle)
     } catch {
@@ -643,7 +644,7 @@ export function Zones() {
 
   function handleGenerateFromAddress() {
     if (!geocodeResult) return
-    const coords = circlePolygon(geocodeResult.lat, geocodeResult.lng, geocodeRadius / 1000) // metros → km
+    const coords = circlePolygon(geocodeResult.lat, geocodeResult.lng, Math.max(geocodeRadius, 150) / 1000)
     setDrawnCoords(coords)
     setFitCoords(coords)
   }
