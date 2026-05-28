@@ -649,6 +649,17 @@ export function Zones() {
     setFitCoords(coords)
   }
 
+  function clearAddress() {
+    setGeocodeQuery('')
+    setGeocodeResult(null)
+  }
+
+  function clearCity() {
+    setCitySearch('')
+    setCityBoundary(null)
+    setCityError(null)
+  }
+
   async function handleFetchCityBoundary(name?: string) {
     const query = (name ?? citySearch).trim()
     if (!query || cityLoading) return
@@ -1079,127 +1090,181 @@ export function Zones() {
             )}
             <FormFields form={newZoneForm} onChange={setNewZoneForm} autoFocus />
 
-            {/* Geocoding */}
+            {/* ── Dirección / Ciudad (bloqueo mutuo) ── */}
+            {(() => {
+              const addressActive = !!geocodeQuery.trim() || !!geocodeResult
+              const cityActive    = !!citySearch.trim()   || !!cityBoundary
+              return (<>
+
+            {/* SECCIÓN 1: Buscar por dirección */}
             <div className="mt-4 space-y-2">
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-                Buscar por dirección o link de Google Maps
-              </label>
-              <div className="flex gap-2">
-                <input
-                  value={geocodeQuery}
-                  onChange={(e) => setGeocodeQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !geocodeLoading) handleGeocode() }}
-                  placeholder="Dirección o pega un link de Google Maps"
-                  className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
-                />
-                <button
-                  onClick={handleGeocode}
-                  disabled={geocodeLoading || !geocodeQuery.trim()}
-                  className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50 flex items-center justify-center"
-                >
-                  {geocodeLoading
-                    ? <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin block" />
-                    : <Search className="w-4 h-4" />
-                  }
-                </button>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs text-text-muted uppercase tracking-wider">
+                  Buscar por dirección o link de Google Maps
+                </label>
+                {addressActive && !cityActive && (
+                  <button onClick={clearAddress} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title="Limpiar">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              {geocodeResult && (
-                <div className="bg-base border border-primary/20 rounded-xl p-3 space-y-3">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">{geocodeResult.displayName}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs text-text-muted">Radio de zona</span>
-                      <span className="text-xs font-mono text-text-primary">{Math.max(geocodeRadius, 150)} m</span>
-                    </div>
+              {cityActive ? (
+                <div className="flex items-center gap-2 bg-surface-raised border border-border-soft rounded-xl px-3 py-2.5">
+                  <span className="text-xs text-text-muted flex-1 leading-relaxed">
+                    No disponible mientras tengas una ciudad seleccionada. Borra la ciudad para usar esta opción.
+                  </span>
+                  <button
+                    onClick={clearCity}
+                    className="text-xs text-primary font-semibold whitespace-nowrap hover:underline flex-shrink-0 ml-1"
+                  >
+                    Limpiar ciudad
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2">
                     <input
-                      type="range"
-                      min={150} max={5000} step={50}
-                      value={Math.max(geocodeRadius, 150)}
-                      onChange={(e) => setGeocodeRadius(Math.max(Number(e.target.value), 150))}
-                      className="w-full accent-primary"
+                      value={geocodeQuery}
+                      onChange={(e) => setGeocodeQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !geocodeLoading) handleGeocode() }}
+                      placeholder="Dirección o pega un link de Google Maps"
+                      className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                     />
+                    <button
+                      onClick={handleGeocode}
+                      disabled={geocodeLoading || !geocodeQuery.trim()}
+                      className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50 flex items-center justify-center"
+                    >
+                      {geocodeLoading
+                        ? <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin block" />
+                        : <Search className="w-4 h-4" />
+                      }
+                    </button>
                   </div>
-                  <button
-                    onClick={handleGenerateFromAddress}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
-                  >
-                    <MapPin className="w-3.5 h-3.5" />
-                    Generar zona circular
-                  </button>
-                </div>
+
+                  {geocodeResult && (
+                    <div className="bg-base border border-primary/20 rounded-xl p-3 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">{geocodeResult.displayName}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs text-text-muted">Radio de zona</span>
+                          <span className="text-xs font-mono text-text-primary">{Math.max(geocodeRadius, 150)} m</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={150} max={5000} step={50}
+                          value={Math.max(geocodeRadius, 150)}
+                          onChange={(e) => setGeocodeRadius(Math.max(Number(e.target.value), 150))}
+                          className="w-full accent-primary"
+                        />
+                      </div>
+                      <button
+                        onClick={handleGenerateFromAddress}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        Actualizar zona circular
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            {/* Importar límites de ciudad */}
+            {/* SECCIÓN 2: Importar ciudad */}
             <div className="mt-4 space-y-2">
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-                Importar ciudad (límites reales)
-              </label>
-
-              {/* Chips de ciudades conocidas del sistema */}
-              {knownCities.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {knownCities.map((city) => (
-                    <button
-                      key={city}
-                      type="button"
-                      onClick={() => { setCitySearch(city); handleFetchCityBoundary(city) }}
-                      className="px-2.5 py-1 rounded-lg border border-border-soft bg-base text-xs text-text-secondary hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
-                    >
-                      {city}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <input
-                  value={citySearch}
-                  onChange={(e) => setCitySearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !cityLoading) handleFetchCityBoundary() }}
-                  placeholder="Ej: Bogotá, Medellín, Cali..."
-                  className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
-                />
-                <button
-                  onClick={() => handleFetchCityBoundary()}
-                  disabled={cityLoading || !citySearch.trim()}
-                  className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50 flex items-center justify-center"
-                >
-                  {cityLoading
-                    ? <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin block" />
-                    : <Building2 className="w-4 h-4" />
-                  }
-                </button>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs text-text-muted uppercase tracking-wider">
+                  Importar ciudad (límites reales)
+                </label>
+                {cityActive && !addressActive && (
+                  <button onClick={clearCity} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title="Limpiar">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
-              {cityError && (
-                <p className="text-xs text-danger px-1">{cityError}</p>
-              )}
-
-              {cityBoundary && (
-                <div className="bg-base border border-primary/20 rounded-xl p-3 space-y-2.5">
-                  <div className="flex items-start gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-text-primary">{cityBoundary.name}</p>
-                      <p className="text-xs text-text-muted line-clamp-1 mt-0.5">{cityBoundary.displayName}</p>
-                      <p className="text-xs text-text-muted mt-0.5">{cityBoundary.coords.length} vértices</p>
-                    </div>
-                  </div>
+              {addressActive ? (
+                <div className="flex items-center gap-2 bg-surface-raised border border-border-soft rounded-xl px-3 py-2.5">
+                  <span className="text-xs text-text-muted flex-1 leading-relaxed">
+                    No disponible mientras tengas una dirección ingresada. Borra la dirección para usar esta opción.
+                  </span>
                   <button
-                    onClick={handleApplyCityBoundary}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                    onClick={clearAddress}
+                    className="text-xs text-primary font-semibold whitespace-nowrap hover:underline flex-shrink-0 ml-1"
                   >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Usar estos límites
+                    Limpiar dirección
                   </button>
                 </div>
+              ) : (
+                <>
+                  {knownCities.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {knownCities.map((city) => (
+                        <button
+                          key={city}
+                          type="button"
+                          onClick={() => { setCitySearch(city); handleFetchCityBoundary(city) }}
+                          className="px-2.5 py-1 rounded-lg border border-border-soft bg-base text-xs text-text-secondary hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+                        >
+                          {city}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input
+                      value={citySearch}
+                      onChange={(e) => setCitySearch(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !cityLoading) handleFetchCityBoundary() }}
+                      placeholder="Ej: Bogotá, Medellín, Cali..."
+                      className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+                    />
+                    <button
+                      onClick={() => handleFetchCityBoundary()}
+                      disabled={cityLoading || !citySearch.trim()}
+                      className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors disabled:opacity-50 flex items-center justify-center"
+                    >
+                      {cityLoading
+                        ? <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin block" />
+                        : <Building2 className="w-4 h-4" />
+                      }
+                    </button>
+                  </div>
+
+                  {cityError && (
+                    <p className="text-xs text-danger px-1">{cityError}</p>
+                  )}
+
+                  {cityBoundary && (
+                    <div className="bg-base border border-primary/20 rounded-xl p-3 space-y-2.5">
+                      <div className="flex items-start gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-text-primary">{cityBoundary.name}</p>
+                          <p className="text-xs text-text-muted line-clamp-1 mt-0.5">{cityBoundary.displayName}</p>
+                          <p className="text-xs text-text-muted mt-0.5">{cityBoundary.coords.length} vértices</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleApplyCityBoundary}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Usar estos límites
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
+
+            </> ) })()}
 
             <div className="mt-5 space-y-3">
               {drawnCoords ? (
