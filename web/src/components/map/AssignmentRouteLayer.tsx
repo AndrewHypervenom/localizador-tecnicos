@@ -75,11 +75,22 @@ function buildPopup(a: TechnicianAssignment): string {
   </div>`
 }
 
-function buildHomePopup(name: string, address?: string | null, city?: string | null, country?: string | null): string {
-  return `<div style="font-family:system-ui,sans-serif;padding:4px 2px;min-width:165px;">
-    <div style="font-weight:700;font-size:13px;margin-bottom:5px;">🏠 Casa de ${name}</div>
-    ${address  ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">📍 ${address}</div>` : ''}
-    ${city     ? `<div style="font-size:11px;color:#94a3b8;">🏙️ ${city}${country ? `, ${country}` : ''}</div>` : ''}
+function buildHomePopup(
+  name: string, lat: number, lng: number,
+  address?: string | null, city?: string | null, country?: string | null,
+): string {
+  const isUrl = (s: string) => s.startsWith('http://') || s.startsWith('https://')
+  const showAddress = address && !isUrl(address)
+  const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`
+  return `<div style="font-family:system-ui,sans-serif;padding:6px 4px;min-width:190px;">
+    <div style="font-weight:700;font-size:13px;color:#f1f5f9;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #1e293b;">
+      Casa de ${name}
+    </div>
+    ${showAddress ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">${address}</div>` : ''}
+    ${city ? `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${city}${country ? `, ${country}` : ''}</div>` : ''}
+    <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;color:#60a5fa;text-decoration:none;font-weight:600;">
+      Ver en Google Maps &rarr;
+    </a>
   </div>`
 }
 
@@ -143,7 +154,7 @@ export function AssignmentRouteLayer() {
       homeCircleRef.current = circle
 
       const hm = L.marker([homeLat, homeLng], { icon: createHomeIcon(), zIndexOffset: 200 })
-      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', tech?.home_address, techExtra?.city, techExtra?.country))
+      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', homeLat, homeLng, tech?.home_address, techExtra?.city, techExtra?.country))
       hm.addTo(map)
       homeRef.current = hm
     }

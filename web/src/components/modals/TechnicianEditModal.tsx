@@ -271,7 +271,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         city:         city           || null,
         shift:        buildShift(shiftStart, shiftEnd) ?? null,
         notes:        notes.trim()   || null,
-        home_address: homeAddress.trim() || null,
+        home_address: (() => { const a = homeAddress.trim(); return (a && !a.startsWith('http')) ? a : null })(),
         home_lat:     finalLat,
         home_lng:     finalLng,
       })
