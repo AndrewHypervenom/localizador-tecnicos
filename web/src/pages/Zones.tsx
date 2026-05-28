@@ -1113,13 +1113,13 @@ export function Zones() {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs text-text-muted">Radio de zona</span>
-                      <span className="text-xs font-mono text-text-primary">{geocodeRadius} m</span>
+                      <span className="text-xs font-mono text-text-primary">{Math.max(geocodeRadius, 150)} m</span>
                     </div>
                     <input
                       type="range"
                       min={150} max={5000} step={50}
-                      value={geocodeRadius}
-                      onChange={(e) => setGeocodeRadius(Number(e.target.value))}
+                      value={Math.max(geocodeRadius, 150)}
+                      onChange={(e) => setGeocodeRadius(Math.max(Number(e.target.value), 150))}
                       className="w-full accent-primary"
                     />
                   </div>
