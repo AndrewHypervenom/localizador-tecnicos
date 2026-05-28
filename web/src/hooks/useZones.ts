@@ -72,8 +72,8 @@ export function useZones(date?: string) {
     }
 
     // Aplica filtro de empresa cuando no es superadmin
-    const applyScope = (q: ReturnType<typeof supabase.from>) =>
-      companyIds ? (q as any).in('company_id', companyIds) : q
+    const applyScope = (q: any) =>
+      companyIds ? q.in('company_id', companyIds) : q
 
     // ── Sin filtro de fecha: vista de administrador/editor ──────────────
     if (!filterDate) {
