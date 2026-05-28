@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { format, isToday, isTomorrow } from 'date-fns'
@@ -75,6 +75,14 @@ function buildPopup(a: TechnicianAssignment): string {
   </div>`
 }
 
+function buildHomePopup(name: string, address?: string | null, city?: string | null, country?: string | null): string {
+  return `<div style="font-family:system-ui,sans-serif;padding:4px 2px;min-width:165px;">
+    <div style="font-weight:700;font-size:13px;margin-bottom:5px;">🏠 Casa de ${name}</div>
+    ${address  ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">📍 ${address}</div>` : ''}
+    ${city     ? `<div style="font-size:11px;color:#94a3b8;">🏙️ ${city}${country ? `, ${country}` : ''}</div>` : ''}
+  </div>`
+}
+
 export function AssignmentRouteLayer() {
   const { selectedTechnicianId, technicians, updateTechnicianMeta } = useTrackingStore()
   const { assignments } = useTechnicianAssignments(selectedTechnicianId)
@@ -85,16 +93,19 @@ export function AssignmentRouteLayer() {
   const homeRef       = useRef<L.Marker | null>(null)
   const homeCircleRef = useRef<L.Circle | null>(null)
 
+  const [techExtra, setTechExtra] = useState<{ city?: string; country?: string } | null>(null)
+
   const tech    = selectedTechnicianId ? technicians[selectedTechnicianId] : null
   const homeLat = tech?.home_lat ?? null
   const homeLng = tech?.home_lng ?? null
 
-  // Carga home data desde Supabase al seleccionar un técnico
+  // Carga home + ciudad desde Supabase al seleccionar un técnico
   useEffect(() => {
+    setTechExtra(null)
     if (!selectedTechnicianId) return
     supabase
       .from('technicians')
-      .select('home_lat, home_lng, home_address')
+      .select('home_lat, home_lng, home_address, city, country')
       .eq('id', selectedTechnicianId)
       .single()
       .then(({ data }) => {
@@ -104,13 +115,9 @@ export function AssignmentRouteLayer() {
           home_lng:     data.home_lng     ?? null,
           home_address: data.home_address ?? null,
         })
-        // Si el técnico no tiene GPS, volar al home
-        const currentTech = useTrackingStore.getState().technicians[selectedTechnicianId]
-        if (!currentTech?.lat && !currentTech?.lng && data.home_lat && data.home_lng) {
-          map.flyTo([data.home_lat, data.home_lng], 15, { duration: 1.2 })
-        }
+        setTechExtra({ city: data.city ?? undefined, country: data.country ?? undefined })
       })
-  }, [selectedTechnicianId, map])
+  }, [selectedTechnicianId])
 
   useLayoutEffect(() => {
     markersRef.current.forEach(m => m.remove())
@@ -136,10 +143,7 @@ export function AssignmentRouteLayer() {
       homeCircleRef.current = circle
 
       const hm = L.marker([homeLat, homeLng], { icon: createHomeIcon(), zIndexOffset: 200 })
-      const popupContent = tech?.home_address
-        ? `<div style="font-family:system-ui;font-weight:700;padding:4px 2px;">🏠 Casa del técnico</div><div style="font-size:11px;color:#94a3b8;margin-top:3px;">${tech.home_address}</div>`
-        : '<div style="font-family:system-ui;font-weight:700;padding:4px 2px;">🏠 Casa del técnico</div>'
-      hm.bindPopup(popupContent)
+      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', tech?.home_address, techExtra?.city, techExtra?.country))
       hm.addTo(map)
       homeRef.current = hm
     }
@@ -174,7 +178,7 @@ export function AssignmentRouteLayer() {
       line.addTo(map)
       polylinesRef.current.push(line)
     }
-  }, [selectedTechnicianId, assignments, homeLat, homeLng, technicians, map])
+  }, [selectedTechnicianId, assignments, homeLat, homeLng, technicians, map, techExtra])
 
   return null
 }

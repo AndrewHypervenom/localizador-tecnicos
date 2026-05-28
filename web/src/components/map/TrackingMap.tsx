@@ -7,7 +7,6 @@ import { Play, Pause, SkipBack } from 'lucide-react'
 import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { SpeedHeatmap } from './SpeedHeatmap'
 import { ZonesLayer } from './ZonesLayer'
-import { TechnicianCityLayer } from './TechnicianCityLayer'
 import { AssignmentRouteLayer } from './AssignmentRouteLayer'
 
 interface RoutePoint {
@@ -331,7 +330,6 @@ export function TrackingMap({ className, date }: TrackingMapProps) {
 
         <MapSizeInvalidator />
         <ZonesLayer />
-        <TechnicianCityLayer />
         <AssignmentRouteLayer />
         <MarkersLayer />
         <LiveTrackPlayer date={activeDate} />
