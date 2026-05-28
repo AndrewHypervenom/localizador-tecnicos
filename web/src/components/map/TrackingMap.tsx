@@ -8,7 +8,6 @@ import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { SpeedHeatmap } from './SpeedHeatmap'
 import { ZonesLayer } from './ZonesLayer'
 import { TechnicianCityLayer } from './TechnicianCityLayer'
-import { FleetLocationsLayer } from './FleetLocationsLayer'
 import { AssignmentRouteLayer } from './AssignmentRouteLayer'
 
 interface RoutePoint {
@@ -333,7 +332,6 @@ export function TrackingMap({ className, date }: TrackingMapProps) {
         <MapSizeInvalidator />
         <ZonesLayer />
         <TechnicianCityLayer />
-        <FleetLocationsLayer />
         <AssignmentRouteLayer />
         <MarkersLayer />
         <LiveTrackPlayer date={activeDate} />

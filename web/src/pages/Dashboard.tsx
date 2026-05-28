@@ -9,10 +9,9 @@ import { ZoneDetailPanel } from '@/components/map/ZoneDetailPanel'
 import { useRealtimeTechnicians } from '@/hooks/useRealtimeTechnicians'
 import { useZones } from '@/hooks/useZones'
 import { useZoneEvents } from '@/hooks/useZoneEvents'
-import { useFleetLocations } from '@/hooks/useFleetLocations'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useZonesStore } from '@/store/zonesStore'
-import { useFleetStore } from '@/store/fleetStore'
+
 import { getRoleFromSession } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useSearchParams } from 'react-router-dom'
@@ -79,16 +78,12 @@ function RealtimeIndicator({ status, lastEvent }: { status: RealtimeStatus; last
 // ── Menú desplegable de Zonas ──────────────────────────────────────
 function ZonesMenu({
   showZones, zones, toggleShowZones, isSuperAdmin, onGenerateZones,
-  showLocations, locationCount, toggleShowLocations,
 }: {
   showZones: boolean
   zones: unknown[]
   toggleShowZones: () => void
   isSuperAdmin: boolean
   onGenerateZones: () => void
-  showLocations: boolean
-  locationCount: number
-  toggleShowLocations: () => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -131,18 +126,6 @@ function ZonesMenu({
             {showZones ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             {showZones ? 'Ocultar zonas' : 'Mostrar zonas'}
           </button>
-          <button
-            onClick={() => { toggleShowLocations(); setOpen(false) }}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors"
-          >
-            {showLocations ? <EyeOff className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
-            <span className="flex-1 text-left">{showLocations ? 'Ocultar ubicaciones' : 'Mostrar ubicaciones'}</span>
-            {locationCount > 0 && (
-              <span className={cn('font-mono font-bold text-[10px]', showLocations ? 'text-primary' : 'text-text-muted')}>
-                {locationCount}
-              </span>
-            )}
-          </button>
           <Link
             to="/zones"
             onClick={() => setOpen(false)}
@@ -175,12 +158,10 @@ export function Dashboard() {
   useRealtimeTechnicians()
   useZones(today)
   useZoneEvents()
-  useFleetLocations()
-
   const [searchParams] = useSearchParams()
   const { selectedTechnicianId, selectTechnician, alerts, zoneAlerts, realtimeStatus, lastRealtimeEvent } = useTrackingStore()
   const { zones, showZones, toggleShowZones, selectedZoneId, selectZone } = useZonesStore()
-  const { locations: fleetLocations, showLocations, toggleShowLocations } = useFleetStore()
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<ActiveTab>('technicians')
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
@@ -474,9 +455,6 @@ export function Dashboard() {
                 toggleShowZones={toggleShowZones}
                 isSuperAdmin={isSuperAdmin}
                 onGenerateZones={openGenerateModal}
-                showLocations={showLocations}
-                locationCount={fleetLocations.length}
-                toggleShowLocations={toggleShowLocations}
               />
             </div>
 

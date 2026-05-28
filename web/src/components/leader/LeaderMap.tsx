@@ -28,7 +28,7 @@ import {
   History, FileText, Bell,
 } from 'lucide-react'
 
-type PanelView = 'stats' | 'upload' | 'routes' | 'technicians' | 'campaigns' | 'fleet'
+type PanelView = 'stats' | 'upload' | 'routes' | 'technicians' | 'campaigns'
   | 'history' | 'reports' | 'alerts'
 
 interface LeaderMapProps {
@@ -41,7 +41,6 @@ const FAB_ACTIONS: { id: PanelView | 'zones'; icon: React.ElementType; label: st
   { id: 'upload',      icon: Upload,       label: 'Subir rutas' },
   { id: 'routes',      icon: ClipboardList,label: 'Ver rutas'   },
   { id: 'technicians', icon: Wrench,       label: 'Técnicos'    },
-  { id: 'fleet',       icon: MapPin,       label: 'Ubicaciones' },
   { id: 'campaigns',   icon: Building2,    label: 'Campañas'    },
   { id: 'history',     icon: History,      label: 'Historial'   },
   { id: 'reports',     icon: FileText,     label: 'Reportes'    },

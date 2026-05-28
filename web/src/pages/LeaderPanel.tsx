@@ -13,12 +13,9 @@ import { LeaderCampaigns } from '@/components/leader/LeaderCampaigns'
 import { LeaderHistory } from '@/components/leader/LeaderHistory'
 import { LeaderReports } from '@/components/leader/LeaderReports'
 import { LeaderAlerts } from '@/components/leader/LeaderAlerts'
-import { FleetLocationsManagement } from '@/components/admin/FleetLocationsManagement'
-import { useFleetLocations } from '@/hooks/useFleetLocations'
-
 export type LeaderPanelView =
   | 'stats' | 'upload' | 'routes' | 'technicians'
-  | 'campaigns' | 'fleet'
+  | 'campaigns'
   | 'history' | 'reports' | 'alerts'
   | null
 
@@ -28,14 +25,12 @@ const PANEL_TITLES: Record<NonNullable<LeaderPanelView>, string> = {
   routes:      'Ver rutas',
   technicians: 'Técnicos',
   campaigns:   'Campañas',
-  fleet:       'Ubicaciones',
   history:     'Historial de viajes',
   reports:     'Reportes',
   alerts:      'Centro de alertas',
 }
 
 export function LeaderPanel() {
-  useFleetLocations()
   const [openPanel, setOpenPanel]             = useState<LeaderPanelView>(null)
   const [userEmail, setUserEmail]             = useState('')
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
@@ -185,7 +180,7 @@ export function LeaderPanel() {
                   {openPanel === 'stats'       && <LeaderStats />}
                   {openPanel === 'routes'      && <RoutesView />}
                   {openPanel === 'technicians' && <LeaderTechnicians />}
-                  {openPanel === 'fleet'       && <FleetLocationsManagement />}
+
                   {openPanel === 'campaigns'   && <LeaderCampaigns />}
                   {openPanel === 'history'     && <LeaderHistory />}
                   {openPanel === 'reports'     && <LeaderReports />}

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTrackingStore, STATUS_THRESHOLDS } from '@/store/trackingStore'
-import { useFleetStore } from '@/store/fleetStore'
 import { useTechnicianAssignments } from '@/hooks/useTechnicianAssignments'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart }     from '@/components/charts/SpeedChart'
@@ -114,7 +113,6 @@ function TripDurationCard({ secs, isActive, hasData }: {
 
 function AgendaSection({ technicianId }: { technicianId: string }) {
   const { assignments, loading, reload } = useTechnicianAssignments(technicianId)
-  const { locations: fleetLocations } = useFleetStore()
   const [showForm, setShowForm] = useState(false)
   const [expanded, setExpanded] = useState(true)
 
@@ -132,24 +130,11 @@ function AgendaSection({ technicianId }: { technicianId: string }) {
   const [duration, setDuration] = useState(30)
   const [geocoding, setGeocoding] = useState(false)
   const [saving,    setSaving]    = useState(false)
-  const [fleetPick, setFleetPick] = useState('')
-
   function resetForm() {
     setTitle(''); setAddress(''); setLat(null); setLng(null)
-    setNotes(''); setDuration(30); setFleetPick('')
+    setNotes(''); setDuration(30)
     const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0)
     setDateTime(format(d, "yyyy-MM-dd'T'HH:mm"))
-  }
-
-  function handleFleetPick(locId: string) {
-    setFleetPick(locId)
-    if (!locId) { setAddress(''); setLat(null); setLng(null); return }
-    const loc = fleetLocations.find(l => l.id === locId)
-    if (!loc) return
-    setAddress(loc.address ?? loc.name)
-    setLat(loc.lat)
-    setLng(loc.lng)
-    if (!title) setTitle(loc.name)
   }
 
   async function handleGeocode() {
@@ -182,7 +167,6 @@ function AgendaSection({ technicianId }: { technicianId: string }) {
         estimated_duration_minutes: duration,
         status:                     'pending',
         notes:                      notes.trim() || null,
-        fleet_location_id:          fleetPick || null,
       })
       if (error) throw error
       toast.success('Parada agregada')
@@ -296,20 +280,6 @@ function AgendaSection({ technicianId }: { technicianId: string }) {
                       onChange={e => setDateTime(e.target.value)}
                       className="w-full bg-surface border border-border-soft rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors"
                     />
-
-                    {/* Ubicación de flota (opcional) */}
-                    {fleetLocations.length > 0 && (
-                      <select
-                        value={fleetPick}
-                        onChange={e => handleFleetPick(e.target.value)}
-                        className="w-full bg-surface border border-border-soft rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors appearance-none cursor-pointer"
-                      >
-                        <option value="">— Seleccionar ubicación de flota (opcional) —</option>
-                        {fleetLocations.map(l => (
-                          <option key={l.id} value={l.id}>{l.name}</option>
-                        ))}
-                      </select>
-                    )}
 
                     {/* Dirección libre */}
                     <div className="flex gap-1.5">
