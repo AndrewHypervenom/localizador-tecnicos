@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   RefreshCw, Search, X, Smartphone, WifiOff,
-  Phone, Building2, FolderOpen, UserX, UserCheck, MapPin, Plus, Edit2, Home,
+  Phone, Building2, FolderOpen, UserX, UserCheck, MapPin, Plus, Edit2, Home, QrCode,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { TechnicianEditModal, type TechnicianEditable } from '@/components/modals/TechnicianEditModal'
+import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { getLeaderScope } from '@/lib/leaderContext'
 
 type Tech = TechnicianEditable & {
@@ -36,6 +37,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
   const [toggling, setToggling] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [editTech, setEditTech] = useState<Tech | null>(null)
+  const [qrTech, setQrTech] = useState<{ id: string; name: string } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -225,9 +227,13 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                             <Smartphone className="w-3 h-3" /> App
                           </span>
                         ) : (
-                          <span className="text-xs text-text-muted flex items-center gap-1 bg-surface-raised px-2 py-0.5 rounded-lg border border-border">
-                            <WifiOff className="w-3 h-3" /> Sin app
-                          </span>
+                          <button
+                            onClick={() => setQrTech({ id: t.id, name: t.name })}
+                            title="Generar QR de registro"
+                            className="text-xs text-text-muted flex items-center gap-1 bg-surface-raised px-2 py-0.5 rounded-lg border border-border hover:border-primary hover:text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <QrCode className="w-3 h-3" /> Sin app
+                          </button>
                         )}
                         {t.device_id && t.status !== 'offline' && (
                           <Link
@@ -328,6 +334,12 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
           tech={editTech}
           onSave={handleSaveEdit}
           onClose={() => setEditTech(null)}
+        />
+      )}
+      {qrTech && (
+        <QrCodeModal
+          tech={qrTech}
+          onClose={() => { setQrTech(null); load() }}
         />
       )}
     </div>
