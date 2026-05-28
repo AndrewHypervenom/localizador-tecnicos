@@ -31,8 +31,9 @@ function rowToZone(row: any): Zone | null {
     coordinates: coords,
     isActive:    row.is_active,
     createdAt:   row.created_at,
-    companyId:   row.company_id ?? null,
-    routeDate:   row.route_date ?? null,
+    companyId:   row.company_id  ?? null,
+    campaignId:  row.campaign_id ?? null,
+    routeDate:   row.route_date  ?? null,
   }
 }
 

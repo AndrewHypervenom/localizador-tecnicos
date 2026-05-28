@@ -533,8 +533,10 @@ export function Zones() {
 
   const [defaultCountry, setDefaultCountry] = useState('Colombia')
 
-  const [companies, setCompanies]         = useState<{ id: string; name: string }[]>([])
-  const [zoneCompanyId, setZoneCompanyId] = useState<string>('')
+  const [companies,      setCompanies]      = useState<{ id: string; name: string }[]>([])
+  const [zoneCompanyId,  setZoneCompanyId]  = useState<string>('')
+  const [zoneCampaignId, setZoneCampaignId] = useState<string>('')
+  const [companyCampaigns, setCompanyCampaigns] = useState<{ id: string; name: string }[]>([])
 
   const [geocodeQuery,   setGeocodeQuery]   = useState('')
   const [geocodeResult,  setGeocodeResult]  = useState<GeocodingResult | null>(null)
@@ -575,6 +577,14 @@ export function Zones() {
     })
   }, [])
 
+  // Cargar campañas de la empresa seleccionada y resetear campaña al cambiar empresa
+  useEffect(() => {
+    setZoneCampaignId('')
+    if (!zoneCompanyId) { setCompanyCampaigns([]); return }
+    supabase.from('campaigns').select('id, name').eq('company_id', zoneCompanyId).eq('is_active', true).order('name')
+      .then(({ data }) => setCompanyCampaigns(data ?? []))
+  }, [zoneCompanyId])
+
   const defaultCenter: L.LatLngExpression = [4.7110, -74.0721] // Bogotá, Colombia
 
   // Escape cancela el modo actual
@@ -597,7 +607,7 @@ export function Zones() {
     setDrawnCoords(null)
     setGeocodeQuery('')
     setGeocodeResult(null)
-    setGeocodeRadius(5)
+    setGeocodeRadius(500)
     setCitySearch('')
     setCityError(null)
     setCityBoundary(null)
@@ -669,7 +679,7 @@ export function Zones() {
     try {
       const result = await fetchCityBoundary(query, defaultCountry)
       if (!result) {
-        setCityError('No se encontraron límites para esa ciudad. Intenta con el nombre oficial.')
+        setCityError(`No se encontró "${query}" en ${defaultCountry}. Tu campaña es de ${defaultCountry} — solo puedes importar ciudades de ese país. Para otras ubicaciones usa "Buscar por dirección".`)
         return
       }
       setCityBoundary(result)
@@ -716,7 +726,8 @@ export function Zones() {
       type:        zone.type,
       color:       zone.color,
     })
-    setZoneCompanyId(zone.companyId ?? '')
+    setZoneCompanyId(zone.companyId   ?? '')
+    setZoneCampaignId(zone.campaignId ?? '')
     setFitCoords([...zone.coordinates])
     setMode('editing')
     selectZone(zone.id)
@@ -746,7 +757,8 @@ export function Zones() {
           type:        newZoneForm.type,
           polygon:     wkt,
           created_by:  userId,
-          company_id:  zoneCompanyId || null,
+          company_id:  zoneCompanyId  || null,
+          campaign_id: zoneCampaignId || null,
         })
         .select('id, created_at')
         .single()
@@ -785,7 +797,8 @@ export function Zones() {
           color:       editForm.color,
           type:        editForm.type,
           polygon:     wkt,
-          company_id:  zoneCompanyId || null,
+          company_id:  zoneCompanyId  || null,
+          campaign_id: zoneCampaignId || null,
         })
         .eq('id', editingZone.id)
       if (error) throw new Error(error.message)
@@ -794,7 +807,8 @@ export function Zones() {
         name:        editForm.name.trim(),
         description: editForm.description.trim() || undefined,
         color:       editForm.color,
-        companyId:   zoneCompanyId || null,
+        companyId:   zoneCompanyId  || null,
+        campaignId:  zoneCampaignId || null,
         type:        editForm.type,
         coordinates: editCoords,
       })
@@ -1075,19 +1089,40 @@ export function Zones() {
         {/* ── CREATING: formulario + dibujar/guardar ── */}
         {mode === 'creating' && (
           <div className="flex-1 overflow-y-auto p-4">
-            {companies.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">Empresa</label>
+            {/* ── Visibilidad / scope de la zona ── */}
+            <div className="mb-4 space-y-2">
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">Visible para</label>
+
+              <select
+                value={zoneCompanyId}
+                onChange={e => setZoneCompanyId(e.target.value)}
+                className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+              >
+                <option value="">Todas las empresas</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+
+              {zoneCompanyId && (
                 <select
-                  value={zoneCompanyId}
-                  onChange={e => setZoneCompanyId(e.target.value)}
+                  value={zoneCampaignId}
+                  onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Sin empresa (global)</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Toda la empresa (sin campaña específica)</option>
+                  {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-              </div>
-            )}
+              )}
+
+              <p className="text-xs text-text-muted/70 italic px-0.5">
+                {!zoneCompanyId
+                  ? '⚠️ Visible para todos los usuarios del sistema'
+                  : !zoneCampaignId
+                    ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
+                    : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
+                }
+              </p>
+            </div>
+
             <FormFields form={newZoneForm} onChange={setNewZoneForm} autoFocus />
 
             {/* ── Dirección / Ciudad (bloqueo mutuo) ── */}
@@ -1325,19 +1360,38 @@ export function Zones() {
         {/* ── EDITING: formulario + controles de vértices ── */}
         {mode === 'editing' && editingZone && (
           <div className="flex-1 overflow-y-auto p-4">
-            {companies.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">Empresa</label>
+            <div className="mb-4 space-y-2">
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">Visible para</label>
+
+              <select
+                value={zoneCompanyId}
+                onChange={e => setZoneCompanyId(e.target.value)}
+                className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
+              >
+                <option value="">Todas las empresas</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+
+              {zoneCompanyId && (
                 <select
-                  value={zoneCompanyId}
-                  onChange={e => setZoneCompanyId(e.target.value)}
+                  value={zoneCampaignId}
+                  onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Sin empresa (global)</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Toda la empresa (sin campaña específica)</option>
+                  {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-              </div>
-            )}
+              )}
+
+              <p className="text-xs text-text-muted/70 italic px-0.5">
+                {!zoneCompanyId
+                  ? '⚠️ Visible para todos los usuarios del sistema'
+                  : !zoneCampaignId
+                    ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
+                    : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
+                }
+              </p>
+            </div>
             <FormFields form={editForm} onChange={setEditForm} autoFocus />
 
             {/* Panel de ayuda para vértices */}

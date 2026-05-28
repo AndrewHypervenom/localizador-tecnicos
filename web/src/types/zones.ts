@@ -9,8 +9,9 @@ export interface Zone {
   coordinates: [number, number][]  // [lat, lng][] — orden Leaflet
   isActive: boolean
   createdAt: string
-  companyId?: string | null
-  routeDate?: string | null        // null = zona permanente; 'yyyy-MM-dd' = zona de ruta del día
+  companyId?:  string | null
+  campaignId?: string | null
+  routeDate?:  string | null       // null = zona permanente; 'yyyy-MM-dd' = zona de ruta del día
 }
 
 export const ZONE_TYPE_LABELS: Record<ZoneType, string> = {
