@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useTechnicianAssignments } from '@/hooks/useTechnicianAssignments'
 import { supabase } from '@/lib/supabase'
-import { TechnicianAssignment, AssignmentStatus, ASSIGNMENT_STATUS_CFG } from '@/types/fleet'
+import { TechnicianAssignment, AssignmentStatus, ASSIGNMENT_STATUS_CFG } from '@/types/assignments'
 
 function createAssignmentIcon(index: number, a: TechnicianAssignment): L.DivIcon {
   const cfg    = ASSIGNMENT_STATUS_CFG[a.status]

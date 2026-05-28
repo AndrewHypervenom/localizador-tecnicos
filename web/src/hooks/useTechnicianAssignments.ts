@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { addDays, startOfDay } from 'date-fns'
 import { supabase } from '@/lib/supabase'
-import { TechnicianAssignment } from '@/types/fleet'
+import { TechnicianAssignment } from '@/types/assignments'
 
 export function useTechnicianAssignments(technicianId: string | null, daysAhead = 7) {
   const [assignments, setAssignments] = useState<TechnicianAssignment[]>([])

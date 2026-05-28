@@ -22,7 +22,7 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { TechnicianAssignment, AssignmentStatus, ASSIGNMENT_STATUS_CFG } from '@/types/fleet'
+import { TechnicianAssignment, AssignmentStatus, ASSIGNMENT_STATUS_CFG } from '@/types/assignments'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -285,7 +285,7 @@ function AgendaSection({ technicianId }: { technicianId: string }) {
                     <div className="flex gap-1.5">
                       <input
                         value={address}
-                        onChange={e => { setAddress(e.target.value); setFleetPick(''); setLat(null); setLng(null) }}
+                        onChange={e => { setAddress(e.target.value); setLat(null); setLng(null) }}
                         onKeyDown={e => { if (e.key === 'Enter') handleGeocode() }}
                         placeholder="Dirección (opcional)"
                         className="flex-1 bg-surface border border-border-soft rounded-lg px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary/40 transition-colors"
