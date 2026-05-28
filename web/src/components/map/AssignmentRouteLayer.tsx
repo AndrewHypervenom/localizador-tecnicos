@@ -76,7 +76,7 @@ function buildPopup(a: TechnicianAssignment): string {
 }
 
 export function AssignmentRouteLayer() {
-  const { selectedTechnicianId, technicians, updateTechnicianMeta } = useTrackingStore()
+  const { selectedTechnicianId, technicians, updateTechnicianMeta, showHome } = useTrackingStore()
   const { assignments } = useTechnicianAssignments(selectedTechnicianId)
   const map = useMap()
 
@@ -89,9 +89,9 @@ export function AssignmentRouteLayer() {
   const homeLat = tech?.home_lat ?? null
   const homeLng = tech?.home_lng ?? null
 
-  // Carga home data desde Supabase al seleccionar un técnico y la mete en el store
+  // Carga home data desde Supabase solo cuando se solicita explícitamente (showHome=true)
   useEffect(() => {
-    if (!selectedTechnicianId) return
+    if (!selectedTechnicianId || !showHome) return
     supabase
       .from('technicians')
       .select('home_lat, home_lng, home_address')
@@ -110,7 +110,7 @@ export function AssignmentRouteLayer() {
           map.flyTo([data.home_lat, data.home_lng], 15, { duration: 1.2 })
         }
       })
-  }, [selectedTechnicianId, map])
+  }, [selectedTechnicianId, showHome, map])
 
   useLayoutEffect(() => {
     markersRef.current.forEach(m => m.remove())
@@ -122,7 +122,7 @@ export function AssignmentRouteLayer() {
 
     if (!selectedTechnicianId) return
 
-    if (homeLat && homeLng) {
+    if (showHome && homeLat && homeLng) {
       const circle = L.circle([homeLat, homeLng], {
         radius:      300,
         color:       '#10B981',
@@ -174,7 +174,7 @@ export function AssignmentRouteLayer() {
       line.addTo(map)
       polylinesRef.current.push(line)
     }
-  }, [selectedTechnicianId, assignments, homeLat, homeLng, technicians, map])
+  }, [selectedTechnicianId, assignments, homeLat, homeLng, technicians, map, showHome])
 
   return null
 }

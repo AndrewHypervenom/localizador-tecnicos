@@ -64,6 +64,7 @@ interface TrackingStore {
   alerts: MotionAlert[]
   zoneAlerts: ZoneAlert[]
   selectedTechnicianId: string | null
+  showHome: boolean           // true solo cuando se selecciona desde el panel de Técnicos
   showHeatmap: boolean
   realtimeStatus: 'connecting' | 'connected' | 'error' | 'disconnected'
   lastRealtimeEvent: string | null   // ISO timestamp del último evento recibido
@@ -77,6 +78,7 @@ interface TrackingStore {
   addZoneAlert: (alert: ZoneAlert) => void
   acknowledgeZoneAlert: (alertId: string) => void
   selectTechnician: (id: string | null) => void
+  selectTechnicianWithHome: (id: string) => void
   toggleHeatmap: () => void
   setRealtimeStatus: (status: TrackingStore['realtimeStatus']) => void
   markRealtimeEvent: () => void
@@ -112,6 +114,7 @@ export const useTrackingStore = create<TrackingStore>()(
     alerts: [],
     zoneAlerts: [],
     selectedTechnicianId: null,
+    showHome: false,
     showHeatmap: false,
     realtimeStatus: 'connecting',
     lastRealtimeEvent: null,
@@ -222,6 +225,13 @@ export const useTrackingStore = create<TrackingStore>()(
     selectTechnician: (id) =>
       set((state) => {
         state.selectedTechnicianId = id
+        state.showHome = false
+      }),
+
+    selectTechnicianWithHome: (id) =>
+      set((state) => {
+        state.selectedTechnicianId = id
+        state.showHome = true
       }),
 
     toggleHeatmap: () =>

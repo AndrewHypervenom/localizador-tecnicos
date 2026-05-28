@@ -39,10 +39,10 @@ export function LeaderPanel() {
     s => s.alerts.filter(a => !a.acknowledged).length +
          s.zoneAlerts.filter(a => !a.acknowledged).length
   )
-  const selectTechnician = useTrackingStore(s => s.selectTechnician)
+  const selectTechnicianWithHome = useTrackingStore(s => s.selectTechnicianWithHome)
 
   function handleViewTechOnMap(techId: string) {
-    selectTechnician(techId)
+    selectTechnicianWithHome(techId)
     setOpenPanel(null)
   }
 
