@@ -16,18 +16,36 @@ function playAccidentAlert() {
   } catch {}
 }
 
-export function useRealtimeTechnicians() {
+// filterByIds:
+//   undefined → admin mode, load all technicians
+//   null      → leader scope not yet resolved, skip fetch
+//   string[]  → leader mode, filter to these IDs only
+export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   const { setTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
-  // Tracks statuses from the previous refresh cycle to detect active→inactive transitions
   const prevStatusesRef = useRef<Record<string, TechnicianStatus>>({})
+  const filterRef = useRef(filterByIds)
 
   useEffect(() => {
-    // Carga inicial de técnicos y sus estados actuales
+    filterRef.current = filterByIds
+  })
+
+  const loadFnRef = useRef<() => Promise<void>>()
+
+  useEffect(() => {
     async function loadInitialState() {
-      const [statusRes, homeRes] = await Promise.all([
-        supabase.from('technician_current_status').select('*'),
-        supabase.from('technicians').select('id, home_lat, home_lng, home_address'),
-      ])
+      const ids = filterRef.current
+      if (ids === null) return
+
+      let statusQuery = supabase.from('technician_current_status').select('*')
+      let homeQuery   = supabase.from('technicians').select('id, home_lat, home_lng, home_address')
+
+      if (ids !== undefined) {
+        if (ids.length === 0) { setTechnicians([]); return }
+        statusQuery = (statusQuery as any).in('id', ids)
+        homeQuery   = (homeQuery   as any).in('id', ids)
+      }
+
+      const [statusRes, homeRes] = await Promise.all([statusQuery, homeQuery])
 
       if (statusRes.error) {
         console.error('[Realtime] Error cargando técnicos:', statusRes.error)
@@ -90,9 +108,10 @@ export function useRealtimeTechnicians() {
       })
     }
 
+    loadFnRef.current = loadInitialState
+
     loadInitialState()
     loadInitialAlerts()
-    // Fallback: si Realtime se desconecta, recargar estado cada 30s
     const pollInterval = setInterval(loadInitialState, 30_000)
 
     // Recalcular estados basados en tiempo transcurrido (detecta cuando la app deja de enviar)
@@ -237,6 +256,14 @@ export function useRealtimeTechnicians() {
       supabase.removeChannel(alertChannel)
     }
   }, [setTechnicians, updateTechnicianPosition, addAlert])
+
+  // When filterByIds transitions from null to a real array, trigger a reload
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (Array.isArray(filterByIds) && loadFnRef.current) {
+      loadFnRef.current()
+    }
+  }, [JSON.stringify(filterByIds)])
 }
 
 // Handles WKT ("POINT(lng lat)") and EWKB hex from Supabase Realtime

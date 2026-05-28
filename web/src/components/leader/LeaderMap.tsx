@@ -14,11 +14,13 @@ import { cn } from '@/lib/utils'
 import { format, addDays, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DateScroller, getWeekStart } from './DateScroller'
+import { getLeaderScope } from '@/lib/leaderContext'
 import { toast } from 'sonner'
 import {
   generateCityZones, previewCityZones, deleteAllZones, type CityPreview,
   generateRouteZones, previewRouteZones, type RouteZoneResult,
 } from '@/lib/generateCityZones'
+import { TechnicianList } from '@/components/panels/TechnicianList'
 import {
   ChevronRight, RefreshCw, FolderOpen,
   Sun, Sunset, CheckCircle2, Clock, WifiOff,
@@ -82,7 +84,12 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   const today = format(new Date(), 'yyyy-MM-dd')
   const [selectedDate, setSelectedDate] = useState(today)
 
-  useRealtimeTechnicians()
+  const [scopeIds, setScopeIds] = useState<string[] | null>(null)
+  useEffect(() => {
+    getLeaderScope().then(s => setScopeIds(s.technicianIds))
+  }, [])
+
+  useRealtimeTechnicians(scopeIds)
   useZones(selectedDate)
   useZoneEvents()
 
@@ -94,6 +101,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   const [loading, setLoading]           = useState(false)
   const [collapsed, setCollapsed]       = useState(false)
 
+  const [sideTab, setSideTab] = useState<'techs' | 'routes'>('techs')
   const [fabOpen, setFabOpen] = useState(false)
   const [clearingZones, setClearingZones] = useState(false)
   const [genOpen,    setGenOpen]    = useState(false)
@@ -259,133 +267,173 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
           transition={{ duration: 0.12 }}
           className="w-[300px] h-full flex flex-col"
         >
-          {/* Sidebar header */}
-          <div className="px-3 pt-3 pb-2 border-b border-border-soft flex-shrink-0 space-y-2">
-            <DateScroller
-              selected={selectedDate}
-              onChange={handleDateChange}
-              weekStart={weekStart}
-              onWeekChange={setWeekStart}
-              markedDates={markedDates}
-            />
-            <div className="flex items-center gap-1.5">
-              {[
-                { label: 'Ayer',   d: format(addDays(new Date(), -1), 'yyyy-MM-dd') },
-                { label: 'Hoy',    d: today },
-                { label: 'Mañana', d: format(addDays(new Date(), 1),  'yyyy-MM-dd') },
-              ].map(({ label, d }) => (
-                <button key={label} onClick={() => handleDateChange(d)}
-                  className={cn('flex-1 text-xs py-1 rounded-lg border transition-colors font-medium',
-                    selectedDate === d
-                      ? 'bg-primary text-white border-primary'
-                      : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
-                  )}>
-                  {label}
-                </button>
-              ))}
-              <button onClick={loadRoutes} className="p-1.5 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-surface-raised">
-                <RefreshCw className="w-3.5 h-3.5" />
+          {/* Tab switcher */}
+          <div className="px-3 pt-3 pb-2 border-b border-border-soft flex-shrink-0">
+            <div className="flex gap-1 bg-base rounded-xl p-1">
+              <button
+                onClick={() => setSideTab('techs')}
+                className={cn('flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                  sideTab === 'techs' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
+                )}
+              >
+                Técnicos
+              </button>
+              <button
+                onClick={() => setSideTab('routes')}
+                className={cn('flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                  sideTab === 'routes' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
+                )}
+              >
+                Rutas
               </button>
             </div>
           </div>
 
-          {/* Route list */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="flex justify-center py-10">
-                <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          {/* Routes date header */}
+          {sideTab === 'routes' && (
+            <div className="px-3 pt-2 pb-2 border-b border-border-soft flex-shrink-0 space-y-2">
+              <DateScroller
+                selected={selectedDate}
+                onChange={handleDateChange}
+                weekStart={weekStart}
+                onWeekChange={setWeekStart}
+                markedDates={markedDates}
+              />
+              <div className="flex items-center gap-1.5">
+                {[
+                  { label: 'Ayer',   d: format(addDays(new Date(), -1), 'yyyy-MM-dd') },
+                  { label: 'Hoy',    d: today },
+                  { label: 'Mañana', d: format(addDays(new Date(), 1),  'yyyy-MM-dd') },
+                ].map(({ label, d }) => (
+                  <button key={label} onClick={() => handleDateChange(d)}
+                    className={cn('flex-1 text-xs py-1 rounded-lg border transition-colors font-medium',
+                      selectedDate === d
+                        ? 'bg-primary text-white border-primary'
+                        : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
+                    )}>
+                    {label}
+                  </button>
+                ))}
+                <button onClick={loadRoutes} className="p-1.5 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-surface-raised">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               </div>
-            ) : routes.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 px-4 text-center">
-                <FolderOpen className="w-8 h-8 text-text-muted/30" />
-                <p className="text-text-muted text-xs">Sin rutas para {dayLabel(selectedDate).toLowerCase()}</p>
+            </div>
+          )}
+
+          {/* Content */}
+          {sideTab === 'techs' ? (
+            selectedTechnicianId ? (
+              <div className="flex-1 overflow-y-auto">
+                <button
+                  onClick={() => selectTechnician(null)}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+                  Volver a técnicos
+                </button>
+                <TechnicianDetail />
               </div>
             ) : (
-              <>
-                <div className="px-3 py-2 flex items-center justify-between">
-                  <span className="text-text-muted text-xs">{routes.length} técnicos · {routes.reduce((s, r) => s + r.total, 0)} instalaciones</span>
-                  {onField > 0 && (
-                    <span className="text-xs text-success font-medium">{onField} en campo</span>
-                  )}
+              <TechnicianList className="flex-1 overflow-hidden" />
+            )
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
-
-                <AnimatePresence mode="wait">
-                  {selectedTechnicianId ? (
-                    <motion.div
-                      key="detail"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      className="h-full overflow-y-auto"
-                    >
-                      <button
-                        onClick={() => selectTechnician(null)}
-                        className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
+              ) : routes.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-12 px-4 text-center">
+                  <FolderOpen className="w-8 h-8 text-text-muted/30" />
+                  <p className="text-text-muted text-xs">Sin rutas para {dayLabel(selectedDate).toLowerCase()}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="px-3 py-2 flex items-center justify-between">
+                    <span className="text-text-muted text-xs">{routes.length} técnicos · {routes.reduce((s, r) => s + r.total, 0)} instalaciones</span>
+                    {onField > 0 && (
+                      <span className="text-xs text-success font-medium">{onField} en campo</span>
+                    )}
+                  </div>
+                  <AnimatePresence mode="wait">
+                    {selectedTechnicianId ? (
+                      <motion.div
+                        key="detail"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="h-full overflow-y-auto"
                       >
-                        <ChevronRight className="w-3.5 h-3.5 rotate-180" />
-                        Volver a la lista
-                      </button>
-                      <TechnicianDetail />
-                    </motion.div>
-                  ) : (
-                    <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      <div className="divide-y divide-border-soft">
-                        {routes.map(r => (
-                          <div
-                            key={r.id}
-                            onClick={() => r.technician_id && selectTechnician(r.technician_id)}
-                            className={cn(
-                              'px-3 py-3 transition-colors',
-                              r.technician_id
-                                ? 'hover:bg-surface-raised cursor-pointer'
-                                : 'opacity-60',
-                              selectedTechnicianId === r.technician_id && r.technician_id
-                                ? 'bg-primary/5 border-l-2 border-primary pl-[10px]'
-                                : ''
-                            )}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className={cn('w-2 h-2 rounded-full flex-shrink-0',
-                                statusDot[r.techStatus as keyof typeof statusDot] ?? 'bg-border'
-                              )} />
-                              <p className="text-text-primary text-xs font-semibold flex-1 truncate">{r.technician_name}</p>
-                              {r.done > 0 && (
-                                <span className="text-xs text-success font-medium flex items-center gap-0.5">
-                                  <CheckCircle2 className="w-3 h-3" />{r.done}/{r.total}
-                                </span>
+                        <button
+                          onClick={() => selectTechnician(null)}
+                          className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+                          Volver a la lista
+                        </button>
+                        <TechnicianDetail />
+                      </motion.div>
+                    ) : (
+                      <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                        <div className="divide-y divide-border-soft">
+                          {routes.map(r => (
+                            <div
+                              key={r.id}
+                              onClick={() => r.technician_id && selectTechnician(r.technician_id)}
+                              className={cn(
+                                'px-3 py-3 transition-colors',
+                                r.technician_id
+                                  ? 'hover:bg-surface-raised cursor-pointer'
+                                  : 'opacity-60',
+                                selectedTechnicianId === r.technician_id && r.technician_id
+                                  ? 'bg-primary/5 border-l-2 border-primary pl-[10px]'
+                                  : ''
                               )}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={cn('w-2 h-2 rounded-full flex-shrink-0',
+                                  statusDot[r.techStatus as keyof typeof statusDot] ?? 'bg-border'
+                                )} />
+                                <p className="text-text-primary text-xs font-semibold flex-1 truncate">{r.technician_name}</p>
+                                {r.done > 0 && (
+                                  <span className="text-xs text-success font-medium flex items-center gap-0.5">
+                                    <CheckCircle2 className="w-3 h-3" />{r.done}/{r.total}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1.5 pl-4">
+                                {r.am > 0 && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex items-center gap-1">
+                                    <Sun className="w-2.5 h-2.5" />{r.am} AM
+                                  </span>
+                                )}
+                                {r.pm > 0 && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                                    <Sunset className="w-2.5 h-2.5" />{r.pm} PM
+                                  </span>
+                                )}
+                                {r.techStatus === 'offline' && !r.technician_id && (
+                                  <span className="text-xs text-text-muted/50 flex items-center gap-0.5">
+                                    <WifiOff className="w-2.5 h-2.5" /> Sin vincular
+                                  </span>
+                                )}
+                                {r.total > 0 && r.done < r.total && isToday(parseISO(selectedDate)) && r.techStatus !== 'offline' && (
+                                  <span className="text-xs text-text-muted flex items-center gap-0.5 ml-auto">
+                                    <Clock className="w-2.5 h-2.5" />{r.total - r.done} pend.
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 mt-1.5 pl-4">
-                              {r.am > 0 && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex items-center gap-1">
-                                  <Sun className="w-2.5 h-2.5" />{r.am} AM
-                                </span>
-                              )}
-                              {r.pm > 0 && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                                  <Sunset className="w-2.5 h-2.5" />{r.pm} PM
-                                </span>
-                              )}
-                              {r.techStatus === 'offline' && !r.technician_id && (
-                                <span className="text-xs text-text-muted/50 flex items-center gap-0.5">
-                                  <WifiOff className="w-2.5 h-2.5" /> Sin vincular
-                                </span>
-                              )}
-                              {r.total > 0 && r.done < r.total && isToday(parseISO(selectedDate)) && r.techStatus !== 'offline' && (
-                                <span className="text-xs text-text-muted flex items-center gap-0.5 ml-auto">
-                                  <Clock className="w-2.5 h-2.5" />{r.total - r.done} pend.
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </>
-            )}
-          </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Realtime status */}
           <div className="border-t border-border-soft px-3 py-2 flex items-center gap-2 flex-shrink-0">
