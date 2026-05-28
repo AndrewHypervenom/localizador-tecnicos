@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield, FolderOpen, History, Building2, Sparkles, MapPin } from 'lucide-react'
+import { LayoutDashboard, Users, Wrench, Activity, BarChart2, LogOut, Shield, FolderOpen, History, Building2, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { StatsOverview } from '@/components/admin/StatsOverview'
@@ -10,17 +10,15 @@ import { ActivityLog } from '@/components/admin/ActivityLog'
 import { ProjectsOverview } from '@/components/admin/ProjectsOverview'
 import { AdminHistory } from '@/components/admin/AdminHistory'
 import { CompaniesManagement } from '@/components/admin/CompaniesManagement'
-import { FleetLocationsManagement } from '@/components/admin/FleetLocationsManagement'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 
-type AdminTab = 'stats' | 'users' | 'technicians' | 'activity' | 'projects' | 'companies' | 'history' | 'fleet'
+type AdminTab = 'stats' | 'users' | 'technicians' | 'activity' | 'projects' | 'companies' | 'history'
 
 const TABS: { id: AdminTab; label: string; icon: React.ElementType }[] = [
   { id: 'stats',       label: 'Resumen',      icon: BarChart2   },
   { id: 'users',       label: 'Usuarios',     icon: Users       },
   { id: 'technicians', label: 'Técnicos',     icon: Wrench      },
   { id: 'companies',   label: 'Empresas',     icon: Building2   },
-  { id: 'fleet',       label: 'Ubicaciones',  icon: MapPin      },
   { id: 'activity',    label: 'Actividad',    icon: Activity    },
   { id: 'projects',    label: 'Proyectos',    icon: FolderOpen  },
   { id: 'history',     label: 'Historial',    icon: History     },
@@ -161,7 +159,7 @@ export function Admin() {
         {activeTab === 'users'       && <UserManagement />}
         {activeTab === 'technicians' && <TechnicianManagement onOpenWizard={() => setWizardOpen(true)} />}
         {activeTab === 'companies'   && <CompaniesManagement />}
-        {activeTab === 'fleet'       && <FleetLocationsManagement />}
+
         {activeTab === 'activity'    && <ActivityLog />}
         {activeTab === 'projects'    && <ProjectsOverview onOpenWizard={() => setWizardOpen(true)} />}
         {activeTab === 'history'     && <AdminHistory />}
