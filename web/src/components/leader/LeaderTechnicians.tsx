@@ -49,7 +49,7 @@ export function LeaderTechnicians() {
 
       const { data: techData, error } = await supabase
         .from('technicians')
-        .select('id, name, phone, client, project, country, city, shift, notes, device_id, company_id, active, created_at, home_address, home_lat, home_lng')
+        .select('id, name, phone, email, client, project, country, city, shift, notes, device_id, company_id, active, created_at, home_address, home_lat, home_lng')
         .in('company_id', companyIds)
         .order('name')
       if (error) throw error

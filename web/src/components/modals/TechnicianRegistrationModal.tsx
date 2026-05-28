@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Check, FolderOpen } from 'lucide-react'
+import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Check, FolderOpen, Mail } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
@@ -35,6 +35,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   const [step, setStep]       = useState<Step>(existingTechnician ? 'qr' : 'form')
   const [name, setName]       = useState('')
   const [phone, setPhone]     = useState('')
+  const [email, setEmail]     = useState('')
   const [country, setCountry]       = useState('')
   const [city, setCity]             = useState('')
   const [shiftStart, setShiftStart] = useState('')
@@ -109,6 +110,8 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
 
   async function handleCreate() {
     if (!name.trim())        { setError('El nombre es obligatorio'); return }
+    if (!country)            { setError('El país es obligatorio'); return }
+    if (!city)               { setError('La ciudad es obligatoria'); return }
     if (!selectedCompanyId)  { setError('Debes seleccionar una empresa'); return }
     if (!selectedCampaignId) { setError('Debes seleccionar una campaña'); return }
     setLoading(true)
@@ -122,6 +125,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
         .insert({
           name:       name.trim(),
           phone:      phone.trim()  || null,
+          email:      email.trim()  || null,
           client:     selectedCompany?.name  ?? null,
           project:    selectedCampaign?.name ?? null,
           company_id: selectedCompanyId      || null,
@@ -164,7 +168,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     onOpenChange(false)
     setTimeout(() => {
       setStep(existingTechnician ? 'qr' : 'form')
-      setName(''); setPhone('')
+      setName(''); setPhone(''); setEmail('')
       setCountry(''); setCity(''); setShiftStart(''); setShiftEnd(''); setNotes('')
       setSelectedCompanyId(''); setSelectedCampaignId('')
       setError(null); setQrToken(null)
@@ -262,7 +266,21 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <Field label="País">
+                  <Field label="Email">
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="tecnico@ejemplo.com"
+                        className={cn(inputCls, 'pl-8')}
+                      />
+                    </div>
+                  </Field>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <Field label="País" required>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -270,30 +288,28 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                         onChange={e => handleCountryChange(e.target.value)}
                         className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
                       >
-                        <option value="">Sin especificar</option>
+                        <option value="">Seleccionar país</option>
                         {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </Field>
                 </div>
-                {/* Ciudad — aparece cuando hay país seleccionado */}
-                {country && (
-                  <div className="col-span-2">
-                    <Field label="Ciudad">
-                      <div className="relative">
-                        <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                        <select
-                          value={city}
-                          onChange={e => setCity(e.target.value)}
-                          className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
-                        >
-                          <option value="">Seleccionar ciudad</option>
-                          {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                    </Field>
-                  </div>
-                )}
+                <div className="col-span-2 sm:col-span-1">
+                  <Field label="Ciudad" required>
+                    <div className="relative">
+                      <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                      <select
+                        value={city}
+                        onChange={e => setCity(e.target.value)}
+                        disabled={!country}
+                        className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
+                      >
+                        <option value="">{!country ? 'Seleccionar país primero' : 'Seleccionar ciudad'}</option>
+                        {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </Field>
+                </div>
                 {/* Horario */}
                 <div className="col-span-2">
                   <Field label="Horario de trabajo">
@@ -315,7 +331,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Field label="Empresa">
+                  <Field label="Empresa" required>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -331,7 +347,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                   </Field>
                 </div>
                 <div>
-                  <Field label="Campaña">
+                  <Field label="Campaña" required>
                     <div className="relative">
                       <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select

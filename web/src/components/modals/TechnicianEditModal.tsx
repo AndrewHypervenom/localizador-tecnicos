@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Edit2, X, Loader2, Save, MapPin, Building2,
-  FolderOpen, FileText, Navigation, Search, Home, Locate,
+  FolderOpen, FileText, Navigation, Search, Home, Locate, Mail,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -30,6 +30,7 @@ export interface TechnicianEditable {
   home_lat:     number | null
   home_lng:     number | null
   company_id:   string | null
+  email:        string | null
 }
 
 // ── Helpers UI ─────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 }) {
   const [name,    setName]    = useState(tech.name)
   const [phone,   setPhone]   = useState(tech.phone   ?? '')
+  const [email,   setEmail]   = useState(tech.email   ?? '')
   const [country, setCountry] = useState(tech.country ?? '')
   const [city,    setCity]    = useState(tech.city    ?? '')
   const [notes,   setNotes]   = useState(tech.notes   ?? '')
@@ -201,6 +203,8 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
   async function handleSave() {
     if (!name.trim())         { setError('El nombre es obligatorio'); return }
+    if (!country)             { setError('El país es obligatorio'); return }
+    if (!city)                { setError('La ciudad es obligatoria'); return }
     if (!selectedCompanyId)   { setError('Debes seleccionar una empresa'); return }
     if (!selectedCampaignId)  { setError('Debes seleccionar una campaña'); return }
     setSaving(true)
@@ -231,6 +235,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
       await onSave(tech.id, {
         name:         name.trim(),
         phone:        phone.trim()   || null,
+        email:        email.trim()   || null,
         client:       selectedCompany?.name  ?? null,
         project:      selectedCampaign?.name ?? null,
         company_id:   selectedCompanyId      || null,
@@ -300,8 +305,18 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                 />
               </div>
               <div>
+                <FieldLabel label="Email" />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                  <input
+                    type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="tecnico@ejemplo.com" className={cn(inputCls, 'pl-8')}
+                  />
+                </div>
+              </div>
+              <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-text-muted font-medium">País</label>
+                  <label className="text-xs text-text-muted font-medium">País <span className="text-danger">*</span></label>
                   {tech.device_id && (
                     <button
                       type="button" onClick={handleDetectCity} disabled={detectingCity}
@@ -331,7 +346,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
               {country && (
                 <div className="col-span-2">
-                  <FieldLabel label="Ciudad" />
+                  <FieldLabel label="Ciudad" required />
                   <div className="relative">
                     <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                     <select
