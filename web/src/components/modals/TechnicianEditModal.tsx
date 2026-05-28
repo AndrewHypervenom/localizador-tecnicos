@@ -20,6 +20,16 @@ const HOME_PREVIEW_ICON = L.divIcon({
   iconAnchor: [16, 16],
 })
 
+function extractGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
+  const pinMatch = input.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
+  if (pinMatch) return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) }
+  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),/)
+  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
+  const llMatch = input.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
+  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
+  return null
+}
+
 // ── Tipo exportado ─────────────────────────────────────────────────────────────
 
 export interface TechnicianEditable {
@@ -188,6 +198,15 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
     setGeocodingHome(true)
     const selectedCompany = companies.find(c => c.id === selectedCompanyId)
     try {
+      // Link de Google Maps → extraer coordenadas directamente
+      const gmCoords = extractGoogleMapsCoords(homeAddress.trim())
+      if (gmCoords) {
+        setHomeLat(gmCoords.lat)
+        setHomeLng(gmCoords.lng)
+        toast.success('Coordenadas extraídas del link de Google Maps')
+        return
+      }
+
       let lat: number | null = null
       let lng: number | null = null
       if (city) {
@@ -453,7 +472,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                   value={homeAddress}
                   onChange={e => { setHomeAddress(e.target.value); setHomeLat(null); setHomeLng(null) }}
                   onKeyDown={e => { if (e.key === 'Enter') handleGeocodeHome() }}
-                  placeholder="Calle 45 #12-30, Bogotá"
+                  placeholder="Calle 45 #12-30 o pega un link de Google Maps"
                   className={cn(inputCls, 'pl-8')}
                 />
               </div>
@@ -479,7 +498,6 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                     center={[homeLat, homeLng]}
                     zoom={16}
                     scrollWheelZoom={false}
-                    zoomControl={false}
                     attributionControl={false}
                     style={{ height: '100%', width: '100%' }}
                   >
