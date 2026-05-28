@@ -170,22 +170,97 @@ confidence: "high"=calle específica, "medium"=sector/barrio, "low"=solo ciudad`
 
 // ── POST /api/geocoding/resolve (individual, para búsquedas manuales) ─────────
 router.post('/resolve', async (req: Request, res: Response) => {
-  const { direccion, ciudad } = req.body as { direccion: string; ciudad: string }
+  const { direccion, ciudad, cliente } = req.body as { direccion: string; ciudad: string; cliente?: string }
   if (!direccion || !ciudad) return res.status(400).json({ error: 'direccion y ciudad requeridos' })
   if (!process.env.GOOGLE_MAPS_API_KEY) return res.status(503).json({ error: 'GOOGLE_MAPS_API_KEY no configurada' })
 
   const ciudadLimpia = ciudad.replace(/,?\s*D\.?C\.?/i, '').trim()
 
-  const q1 = `${direccion}, ${ciudadLimpia}, Colombia`
-  const r1 = await geocodeGoogle(q1)
-  if (r1) return res.json({ ...r1, confidence: 'google', radius: 0.3 })
+  // ── Paso 1: Claude normaliza la dirección (igual que en /batch) ───────────
+  let normalizedAddress: string | null = null
+  let claudeLat: number | null = null
+  let claudeLng: number | null = null
+
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      const clienteCtx = cliente ? `\ncliente: "${cliente}"` : ''
+      const msg = await anthropic.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 256,
+        messages:   [{
+          role:    'user',
+          content: `Normaliza esta dirección colombiana y estima coordenadas GPS. Devuelve SOLO un JSON.
+
+dirección: "${direccion}"
+ciudad: "${ciudadLimpia}"${clienteCtx}
+
+REGLAS:
+- CL/CLL/CLLE→Calle | CRA/KRA/CR/KR→Carrera | AV→Avenida | DG/DIAG→Diagonal | TV/TR→Transversal
+- Preserva sufijos: SUR, NORTE, ESTE, OCCIDENTE, BIS
+- Agrega # y - donde corresponda: "Calle 74A Sur 92 71" → "Calle 74A Sur #92-71"
+- Elimina: APT, APTO, LC, LOCAL, OFC, PISO, TORRE, BLOQUE, INT, MZ, LOTE
+
+COORDS BOGOTÁ (referencia): Centro:4.6534,-74.0836 | Norte(Cl100+):4.70,-74.05 | Sur(Cl50Sur+):4.58,-74.12 | Suroccidente(Bosa/Kennedy):4.62,-74.16 | Noroccidente:4.69,-74.10
+
+Formato de respuesta (solo JSON, sin texto extra):
+{"normalizedAddress":"Calle 74A Sur #92-71, Bogotá","lat":4.628,"lng":-74.204}`,
+        }],
+      })
+      const text = ((msg.content[0] as { type: string; text: string }).text || '').trim()
+      const match = text.match(/\{[\s\S]*?\}/)
+      if (match) {
+        const parsed = JSON.parse(match[0])
+        if (parsed.normalizedAddress) normalizedAddress = parsed.normalizedAddress
+        if (parsed.lat && parsed.lng)  { claudeLat = parsed.lat; claudeLng = parsed.lng }
+      }
+      console.log(`[geocoding/resolve] Claude → "${normalizedAddress}" (${claudeLat?.toFixed(4)}, ${claudeLng?.toFixed(4)})`)
+    } catch (err) {
+      console.error('[geocoding/resolve] Claude error:', err)
+    }
+  }
+
+  // ── Paso 2: Google Maps con dirección normalizada por Claude ──────────────
+  if (normalizedAddress) {
+    const q = normalizedAddress.toLowerCase().includes(ciudadLimpia.toLowerCase())
+      ? `${normalizedAddress}, Colombia`
+      : `${normalizedAddress}, ${ciudadLimpia}, Colombia`
+    const r = await geocodeGoogle(q)
+    if (r) {
+      console.log(`[geocoding/resolve] Google OK (norm): "${q}" → (${r.lat.toFixed(4)}, ${r.lng.toFixed(4)})`)
+      return res.json({ ...r, confidence: 'google', radius: 0.3 })
+    }
+  }
 
   await sleep(100)
 
+  // ── Paso 3: Google Maps con dirección raw ─────────────────────────────────
+  const q2 = `${direccion}, ${ciudadLimpia}, Colombia`
+  const r2 = await geocodeGoogle(q2)
+  if (r2) {
+    console.log(`[geocoding/resolve] Google OK (raw): "${q2}" → (${r2.lat.toFixed(4)}, ${r2.lng.toFixed(4)})`)
+    return res.json({ ...r2, confidence: 'google', radius: 0.3 })
+  }
+
+  await sleep(100)
+
+  // ── Paso 4: Google Maps limpiando unidad/apartamento ─────────────────────
   const baseDir = direccion.replace(/\b(APT|APTO|LOCAL|LC|OFC|OFICINA|PISO|PI\d*|TORRE|BLOQUE|INT|MZ|LOTE|NIVEL)\s*[\w-]*/gi, '').replace(/\s+/g, ' ').trim()
   if (baseDir !== direccion) {
-    const r2 = await geocodeGoogle(`${baseDir}, ${ciudadLimpia}, Colombia`)
-    if (r2) return res.json({ ...r2, confidence: 'google', radius: 0.3 })
+    const r3 = await geocodeGoogle(`${baseDir}, ${ciudadLimpia}, Colombia`)
+    if (r3) return res.json({ ...r3, confidence: 'google', radius: 0.3 })
+  }
+
+  // ── Paso 5: Coordenadas aproximadas de Claude como último recurso ─────────
+  if (claudeLat && claudeLng) {
+    console.log(`[geocoding/resolve] Claude approx: (${claudeLat}, ${claudeLng})`)
+    return res.json({
+      lat:         claudeLat,
+      lng:         claudeLng,
+      displayName: normalizedAddress ?? `${direccion}, ${ciudadLimpia}`,
+      confidence:  'claude-approx',
+      radius:      0.5,
+    })
   }
 
   return res.json({ confidence: 'failed', radius: 0.3 })
