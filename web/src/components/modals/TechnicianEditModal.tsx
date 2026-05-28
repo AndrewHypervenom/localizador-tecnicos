@@ -111,8 +111,25 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   const [selectedCompanyId,  setSelectedCompanyId]  = useState(tech.company_id ?? '')
   const [selectedCampaignId, setSelectedCampaignId] = useState('')
 
-  const cityOptions       = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
-  const filteredCampaigns = allCampaigns.filter(c => c.company_id === selectedCompanyId)
+  const [companyCountry, setCompanyCountry] = useState<string | null>(null)
+
+  const cityOptions        = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+  const filteredCampaigns  = allCampaigns.filter(c => c.company_id === selectedCompanyId)
+  const availableCountries = companyCountry ? [companyCountry] : COUNTRIES
+
+  async function loadCompanyCountry(companyId: string) {
+    setCompanyCountry(null)
+    if (!companyId) return
+    const { data } = await supabase
+      .from('technicians')
+      .select('country')
+      .eq('company_id', companyId)
+      .neq('id', tech.id)
+      .not('country', 'is', null)
+    const countries = (data ?? []).map((t: any) => t.country as string).filter(Boolean)
+    const unique = [...new Set(countries)]
+    if (unique.length === 1) setCompanyCountry(unique[0])
+  }
 
   // Load companies + campaigns, then pre-select based on existing data
   useEffect(() => {
@@ -133,6 +150,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         if (match) compId = match.id
       }
       setSelectedCompanyId(compId)
+      if (compId) loadCompanyCountry(compId)
 
       // Pre-select campaign by matching project name within that company
       if (compId && tech.project) {
@@ -149,6 +167,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   function handleCompanyChange(id: string) {
     setSelectedCompanyId(id)
     setSelectedCampaignId('')
+    loadCompanyCountry(id)
   }
 
   function handleCountryChange(newCountry: string) {
@@ -235,6 +254,10 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
     if (!city)                { setError('La ciudad es obligatoria'); return }
     if (!selectedCompanyId)   { setError('Debes seleccionar una empresa'); return }
     if (!selectedCampaignId)  { setError('Debes seleccionar una campaña'); return }
+    if (companyCountry && country !== companyCountry) {
+      setError(`Esta empresa solo puede tener técnicos de ${companyCountry}`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -364,11 +387,17 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                   <select
                     value={country} onChange={e => handleCountryChange(e.target.value)}
-                    className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
+                    disabled={!!companyCountry}
+                    className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-80')}
                   >
                     <option value="">Sin especificar</option>
-                    {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {availableCountries.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                  {companyCountry && (
+                    <p className="text-[11px] text-warning mt-1.5">
+                      Esta empresa solo opera en {companyCountry}
+                    </p>
+                  )}
                 </div>
               </div>
 

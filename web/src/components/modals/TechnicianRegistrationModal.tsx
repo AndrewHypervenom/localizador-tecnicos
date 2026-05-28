@@ -52,9 +52,11 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   const [loadingOrgs, setLoadingOrgs]   = useState(false)
   const [selectedCompanyId, setSelectedCompanyId]   = useState('')
   const [selectedCampaignId, setSelectedCampaignId] = useState('')
+  const [companyCountry, setCompanyCountry] = useState<string | null>(null)
 
   const cityOptions        = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
   const filteredCampaigns  = allCampaigns.filter(c => c.company_id === selectedCompanyId)
+  const availableCountries = companyCountry ? [companyCountry] : COUNTRIES
 
   function handleCountryChange(newCountry: string) {
     setCountry(newCountry)
@@ -62,9 +64,23 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     if (city && !valid.includes(city)) setCity('')
   }
 
-  function handleCompanyChange(id: string) {
+  async function handleCompanyChange(id: string) {
     setSelectedCompanyId(id)
     setSelectedCampaignId('')
+    setCompanyCountry(null)
+    if (!id) return
+    const { data } = await supabase
+      .from('technicians')
+      .select('country')
+      .eq('company_id', id)
+      .not('country', 'is', null)
+    const countries = (data ?? []).map((t: any) => t.country as string).filter(Boolean)
+    const unique = [...new Set(countries)]
+    if (unique.length === 1) {
+      setCompanyCountry(unique[0])
+      setCountry(unique[0])
+      if (city && !(CITIES_BY_COUNTRY[unique[0]] ?? []).includes(city)) setCity('')
+    }
   }
 
   // Load companies + campaigns when modal opens
@@ -114,6 +130,10 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     if (!city)               { setError('La ciudad es obligatoria'); return }
     if (!selectedCompanyId)  { setError('Debes seleccionar una empresa'); return }
     if (!selectedCampaignId) { setError('Debes seleccionar una campaña'); return }
+    if (companyCountry && country !== companyCountry) {
+      setError(`Esta empresa solo puede tener técnicos de ${companyCountry}`)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -286,12 +306,18 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                       <select
                         value={country}
                         onChange={e => handleCountryChange(e.target.value)}
-                        className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
+                        disabled={!!companyCountry}
+                        className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-80')}
                       >
                         <option value="">Seleccionar país</option>
-                        {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        {availableCountries.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
+                    {companyCountry && (
+                      <p className="text-[11px] text-warning mt-1.5">
+                        Esta empresa solo opera en {companyCountry}
+                      </p>
+                    )}
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
