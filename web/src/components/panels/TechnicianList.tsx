@@ -7,7 +7,7 @@ import { Battery, MapPin, Wifi, WifiOff, AlertTriangle, ChevronRight, UserPlus, 
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
+import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 
 const STATUS_LABELS: Record<TechnicianStatus, string> = {
@@ -239,11 +239,9 @@ export function TechnicianList({ className }: TechnicianListProps) {
         onOpenChange={setWizardOpen}
         onComplete={() => {}}
       />
-      <TechnicianRegistrationModal
-        open={qrModalOpen}
-        onOpenChange={setQrModalOpen}
-        existingTechnician={selectedForQr}
-      />
+      {qrModalOpen && selectedForQr && (
+        <QrCodeModal tech={selectedForQr} onClose={() => setQrModalOpen(false)} />
+      )}
     </>
   )
 }

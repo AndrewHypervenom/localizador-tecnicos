@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useZonesStore } from '@/store/zonesStore'
 import type { Zone, ZoneType } from '@/types/zones'
@@ -6,7 +6,6 @@ import type { Zone, ZoneType } from '@/types/zones'
 export function parseGeoJsonPolygon(geojsonStr: string): [number, number][] {
   try {
     const gj = JSON.parse(geojsonStr)
-    // GeoJSON ring: [[lng, lat], ...], cierre incluido — convertir a [lat, lng] sin el cierre
     const ring: [number, number][] = gj.coordinates[0]
     return ring.slice(0, -1).map(([lng, lat]: [number, number]) => [lat, lng])
   } catch {
@@ -15,9 +14,8 @@ export function parseGeoJsonPolygon(geojsonStr: string): [number, number][] {
 }
 
 export function coordsToWkt(coords: [number, number][]): string {
-  // coords: [lat, lng] → WKT necesita lng lat
   const pts = coords.map(([lat, lng]) => `${lng} ${lat}`)
-  pts.push(pts[0]) // cerrar anillo
+  pts.push(pts[0])
   return `SRID=4326;POLYGON((${pts.join(', ')}))`
 }
 
@@ -33,54 +31,77 @@ function rowToZone(row: any): Zone | null {
     coordinates: coords,
     isActive:    row.is_active,
     createdAt:   row.created_at,
+    companyId:   row.company_id ?? null,
+    routeDate:   row.route_date ?? null,
   }
 }
 
-async function fetchZone(id: string): Promise<Zone | null> {
-  const { data } = await supabase
-    .from('zones_geojson')
-    .select('*')
-    .eq('id', id)
-    .single()
-  return data ? rowToZone(data) : null
-}
+/**
+ * Sin `date` (página admin): carga todas las zonas activas.
+ *
+ * Con `date` ('yyyy-MM-dd'):
+ *   1. Verifica si hay rutas en technician_routes para ese día.
+ *   2. Si NO hay rutas → setZones([])  — mapa limpio.
+ *   3. Si SÍ hay rutas → muestra solo las zonas cuyo route_date coincide.
+ */
+export function useZones(date?: string) {
+  const { setZones, removeZone } = useZonesStore()
+  const dateRef = useRef(date)
+  dateRef.current = date
 
-export function useZones() {
-  const { setZones, addZone, updateZone, removeZone } = useZonesStore()
+  const loadAll = useCallback(async () => {
+    const filterDate = dateRef.current
 
-  useEffect(() => {
-    async function loadAll() {
+    // ── Sin filtro: vista de administrador ──────────────────────────────────
+    if (!filterDate) {
       const { data, error } = await supabase
         .from('zones_geojson')
         .select('*')
-      if (error) { console.error('[Zones] carga inicial:', error); return }
-      const zones = (data ?? []).map(rowToZone).filter(Boolean) as Zone[]
-      setZones(zones)
+        .eq('is_active', true)
+      if (error) { console.error('[Zones]', error); return }
+      setZones((data ?? []).map((r: any) => rowToZone(r)).filter(Boolean) as Zone[])
+      return
     }
 
-    loadAll()
+    // ── Con fecha: tres consultas en paralelo ────────────────────────────────
+    const [zonesRes, idsRes, routesRes] = await Promise.all([
+      // Geometría de todas las zonas activas
+      supabase.from('zones_geojson').select('*').eq('is_active', true),
+      // IDs de zonas cuyo route_date coincide con la fecha
+      supabase.from('zones').select('id').eq('route_date', filterDate).eq('is_active', true),
+      // ¿Existe alguna ruta para este día? (máximo 1 resultado)
+      supabase.from('technician_routes').select('id').eq('route_date', filterDate).limit(1),
+    ])
 
+    if (zonesRes.error) { console.error('[Zones]', zonesRes.error); return }
+
+    // Sin rutas para este día → mapa sin zonas
+    if ((routesRes.data ?? []).length === 0) {
+      setZones([])
+      return
+    }
+
+    // Con rutas → mostrar solo las zonas de la fecha exacta
+    const matchIds = new Set((idsRes.data ?? []).map((r: any) => r.id))
+    const zones = (zonesRes.data ?? [])
+      .filter((r: any) => matchIds.has(r.id))
+      .map((r: any) => rowToZone(r))
+      .filter(Boolean) as Zone[]
+
+    setZones(zones)
+  }, [setZones])
+
+  useEffect(() => { loadAll() }, [loadAll, date])
+
+  useEffect(() => {
+    const channelName = `zones_ch_${Math.random().toString(36).slice(2)}`
     const channel = supabase
-      .channel('zones_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'zones' },
-        async (payload) => {
-          if (payload.eventType === 'DELETE') {
-            removeZone((payload.old as any).id)
-            return
-          }
-          const zone = await fetchZone((payload.new as any).id)
-          if (!zone) return
-          if (payload.eventType === 'INSERT') addZone(zone)
-          if (payload.eventType === 'UPDATE') {
-            if (!zone.isActive) removeZone(zone.id)
-            else updateZone(zone)
-          }
-        }
-      )
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'zones' }, (payload) => {
+        if (payload.eventType === 'DELETE') removeZone((payload.old as any).id)
+        else loadAll()
+      })
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
-  }, [setZones, addZone, updateZone, removeZone])
+  }, [loadAll, removeZone])
 }

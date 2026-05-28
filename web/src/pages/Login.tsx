@@ -28,7 +28,7 @@ export function Login() {
         return
       }
       const role = getRoleFromSession(data.session)
-      navigate(role === 'superadmin' ? '/admin' : '/')
+      navigate(role === 'superadmin' ? '/admin' : role === 'leader' ? '/leader' : '/')
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials'
         ? 'Email o contraseña incorrectos'

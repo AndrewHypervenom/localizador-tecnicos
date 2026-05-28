@@ -1,24 +1,32 @@
 import { Router, Request, Response } from 'express'
 import { query } from '../config/db'
 import { requireAuth } from '../middleware/requireAuth'
+import { getUserCompanyIds, getTechnicianCompanyId } from '../lib/scopeUtils'
 
 const router = Router()
 router.use(requireAuth)
 
 // GET /api/reports/technicians  — lista con metadata para selector y filtros
-router.get('/technicians', async (_req: Request, res: Response) => {
+router.get('/technicians', async (req: Request, res: Response) => {
+  const user = req.authUser!
   try {
+    const companyIds = await getUserCompanyIds(user.id, user.role)
+    const companyClause = companyIds !== null
+      ? `AND t.company_id = ANY($1::uuid[])`
+      : ''
+    const params: any[] = companyIds !== null ? [companyIds] : []
+
     const rows = await query<{
       id: string; name: string; phone: string
       client: string | null; project: string | null; country: string | null
     }>(`
-      SELECT id, name,
-        COALESCE(phone, '')   AS phone,
-        client, project, country
-      FROM technicians
-      WHERE active = true
-      ORDER BY name ASC
-    `)
+      SELECT t.id, t.name,
+        COALESCE(t.phone, '') AS phone,
+        t.client, t.project, t.country
+      FROM technicians t
+      WHERE t.active = true ${companyClause}
+      ORDER BY t.name ASC
+    `, params)
     res.json(rows)
   } catch (err) {
     console.error('[reports/technicians]', err)
@@ -28,13 +36,24 @@ router.get('/technicians', async (_req: Request, res: Response) => {
 
 // GET /api/reports/fleet?from=&to=&country=&client=&project=
 router.get('/fleet', async (req: Request, res: Response) => {
-  const from    = (req.query.from     as string) || daysAgo(7)
-  const to      = (req.query.to       as string) || today()
-  const country = (req.query.country  as string) || null
-  const client  = (req.query.client   as string) || null
-  const project = (req.query.project  as string) || null
+  const user    = req.authUser!
+  const from    = (req.query.from    as string) || daysAgo(7)
+  const to      = (req.query.to      as string) || today()
+  const country = (req.query.country as string) || null
+  const client  = (req.query.client  as string) || null
+  const project = (req.query.project as string) || null
 
   try {
+    const companyIds = await getUserCompanyIds(user.id, user.role)
+
+    // Parámetros base: $1=from, $2=to, $3=country, $4=client, $5=project
+    // Si hay scope de empresa: $6=companyIds
+    const companyClause = companyIds !== null
+      ? `AND t.company_id = ANY($6::uuid[])`
+      : ''
+    const params: any[] = [from, to, country, client, project]
+    if (companyIds !== null) params.push(companyIds)
+
     const rows = await query<{
       id: string; name: string; phone: string
       client: string | null; project: string | null; country: string | null
@@ -67,9 +86,10 @@ router.get('/fleet', async (req: Request, res: Response) => {
         AND ($3::text IS NULL OR t.country = $3)
         AND ($4::text IS NULL OR t.client  = $4)
         AND ($5::text IS NULL OR t.project = $5)
+        ${companyClause}
       GROUP BY t.id, t.name, t.phone, t.client, t.project, t.country
       ORDER BY total_km DESC NULLS LAST
-    `, [from, to, country, client, project])
+    `, params)
 
     res.json({ from, to, country, client, project, technicians: rows })
   } catch (err) {
@@ -81,10 +101,20 @@ router.get('/fleet', async (req: Request, res: Response) => {
 // GET /api/reports/technician/:id?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/technician/:id', async (req: Request, res: Response) => {
   const { id } = req.params
-  const from = (req.query.from as string) || daysAgo(7)
-  const to   = (req.query.to   as string) || today()
+  const user   = req.authUser!
+  const from   = (req.query.from as string) || daysAgo(7)
+  const to     = (req.query.to   as string) || today()
 
   try {
+    const companyIds = await getUserCompanyIds(user.id, user.role)
+    if (companyIds !== null) {
+      const techCompanyId = await getTechnicianCompanyId(id)
+      if (!techCompanyId || !companyIds.includes(techCompanyId)) {
+        res.status(403).json({ error: 'Acceso denegado' })
+        return
+      }
+    }
+
     const [techRows, summaryRows, dailyRows, tripRows] = await Promise.all([
       query<{ name: string; phone: string; client: string | null; project: string | null; country: string | null }>(`
         SELECT name, COALESCE(phone, '') AS phone, client, project, country
@@ -161,9 +191,9 @@ router.get('/technician/:id', async (req: Request, res: Response) => {
       from,
       to,
       technician: techRows[0],
-      summary: summaryRows[0] ?? null,
-      daily: dailyRows,
-      trips: tripRows,
+      summary:    summaryRows[0] ?? null,
+      daily:      dailyRows,
+      trips:      tripRows,
     })
   } catch (err) {
     console.error('[reports/technician]', err)
@@ -171,7 +201,7 @@ router.get('/technician/:id', async (req: Request, res: Response) => {
   }
 })
 
-function today() { return new Date().toISOString().slice(0, 10) }
+function today()       { return new Date().toISOString().slice(0, 10) }
 function daysAgo(n: number) { return new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10) }
 
 export default router

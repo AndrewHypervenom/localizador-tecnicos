@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, Check, KeyRound } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, Check, KeyRound, Building2 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
@@ -10,22 +10,41 @@ import { supabase } from '@/lib/supabase'
 interface WebUser {
   id: string
   email: string
-  role: 'superadmin' | 'user'
+  role: 'superadmin' | 'leader' | 'user'
   createdAt: string
   lastSignIn: string | null
   mustChangePassword: boolean
 }
 
+interface CompanyInfo {
+  id: string
+  name: string
+  leaderId: string
+}
+
+const ROLE_CYCLE: Record<string, 'user' | 'leader' | 'superadmin'> = {
+  user: 'leader',
+  leader: 'superadmin',
+  superadmin: 'user',
+}
+
+const ROLE_LABELS = { user: 'Usuario', leader: 'Líder', superadmin: 'Superadmin' }
+const ROLE_NEXT_LABELS = { user: 'Hacer Líder', leader: 'Hacer Superadmin', superadmin: 'Hacer Usuario' }
+
 function RoleBadge({ role }: { role: string }) {
+  if (role === 'superadmin') return (
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-primary/10 text-primary border-primary/20">
+      <Shield className="w-3 h-3" /> Superadmin
+    </span>
+  )
+  if (role === 'leader') return (
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-warning/10 text-warning border-warning/20">
+      <Building2 className="w-3 h-3" /> Líder
+    </span>
+  )
   return (
-    <span className={cn(
-      'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium',
-      role === 'superadmin'
-        ? 'bg-primary/10 text-primary border-primary/20'
-        : 'bg-text-muted/10 text-text-secondary border-border',
-    )}>
-      {role === 'superadmin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
-      {role === 'superadmin' ? 'Superadmin' : 'Usuario'}
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-text-muted/10 text-text-secondary border-border">
+      <User className="w-3 h-3" /> Usuario
     </span>
   )
 }
@@ -60,7 +79,7 @@ function CreateUserModal({
   onCreated: () => void
 }) {
   const [email, setEmail]   = useState('')
-  const [role, setRole]     = useState<'user' | 'superadmin'>('user')
+  const [role, setRole]     = useState<'user' | 'leader' | 'superadmin'>('user')
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState<string | null>(null)
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
@@ -105,119 +124,144 @@ function CreateUserModal({
       style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget && !credentials) handleClose() }}
     >
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
       <div
-        style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px' }}
-        className="bg-surface border border-border-soft rounded-2xl shadow-2xl p-6"
+        style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px', maxHeight: '90vh', overflowY: 'auto' }}
+        className="bg-surface border border-border-soft rounded-2xl shadow-2xl"
       >
         {credentials ? (
           <>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-success" /> Credenciales generadas
-              </h3>
-            </div>
-            <p className="text-text-muted text-xs mb-4">
-              Copia y envía estas credenciales al usuario. Al primer inicio de sesión se le pedirá que cree su propia contraseña.
-            </p>
-            <div className="space-y-3 mb-5">
-              <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-text-muted mb-0.5">Email</p>
-                    <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
-                  </div>
-                  <CopyButton text={credentials.email} />
+            {/* Header — credenciales */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-soft sticky top-0 bg-surface rounded-t-2xl z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4 text-success" />
                 </div>
-              </div>
-              <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
-                    <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
-                  </div>
-                  <CopyButton text={credentials.password} />
+                <div>
+                  <p className="font-bold text-text-primary text-sm leading-none">Credenciales generadas</p>
+                  <p className="text-xs text-text-muted mt-0.5">Copia y envía al usuario</p>
                 </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCopyAll}
-                className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
-              >
-                {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                {allCopied ? 'Copiado' : 'Copiar todo'}
-              </button>
-              <button
-                type="button"
-                onClick={handleDone}
-                className="flex-1 bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors"
-              >
-                Listo
-              </button>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-text-muted text-xs">
+                Al primer inicio de sesión se le pedirá que cree su propia contraseña.
+              </p>
+              <div className="space-y-3">
+                <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-text-muted mb-0.5">Email</p>
+                      <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
+                    </div>
+                    <CopyButton text={credentials.email} />
+                  </div>
+                </div>
+                <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                      <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
+                    </div>
+                    <CopyButton text={credentials.password} />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopyAll}
+                  className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
+                >
+                  {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                  {allCopied ? 'Copiado' : 'Copiar todo'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDone}
+                  className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors"
+                >
+                  Listo
+                </button>
+              </div>
             </div>
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-                <Plus className="w-4 h-4 text-primary" /> Nuevo Usuario
-              </h3>
-              <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1 hover:bg-surface-raised">
+            {/* Header — formulario */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-soft sticky top-0 bg-surface rounded-t-2xl z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Plus className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="font-bold text-text-primary text-sm leading-none">Nuevo usuario</p>
+                  <p className="text-xs text-text-muted mt-0.5">Se generará una contraseña temporal</p>
+                </div>
+              </div>
+              <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-text-muted text-xs mb-4">
-              Se generará una contraseña temporal que podrás copiar y enviar al usuario.
-            </p>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
               <div>
-                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-                  Correo electrónico *
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoFocus
-                  placeholder="usuario@empresa.com"
-                  className="w-full bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-                  Rol
-                </label>
-                <div className="relative">
-                  <select
-                    value={role}
-                    onChange={e => setRole(e.target.value as 'user' | 'superadmin')}
-                    className="w-full appearance-none bg-base border border-border-soft rounded-xl px-3.5 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors pr-8"
-                  >
-                    <option value="user">Usuario (acceso al dashboard)</option>
-                    <option value="superadmin">Superadmin (acceso total)</option>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1 h-4 bg-primary rounded-full" />
+                  <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos del usuario</p>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-text-muted font-medium mb-1.5">
+                      Correo electrónico <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                      placeholder="usuario@empresa.com"
+                      className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted font-medium mb-1.5">Rol</label>
+                    <div className="relative">
+                      <select
+                        value={role}
+                        onChange={e => setRole(e.target.value as 'user' | 'leader' | 'superadmin')}
+                        className="w-full appearance-none bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors pr-8"
+                      >
+                        <option value="user">Usuario (acceso al dashboard)</option>
+                        <option value="leader">Líder (carga rutas y gestiona técnicos)</option>
+                        <option value="superadmin">Superadmin (acceso total)</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {error && (
-                <div className="bg-danger/10 border border-danger/30 text-danger text-xs rounded-xl px-3 py-2">
+                <div className="bg-danger/10 border border-danger/30 text-danger text-xs rounded-xl px-3 py-2.5">
                   {error}
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {loading ? 'Creando…' : 'Crear usuario'}
-              </button>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={handleClose}
+                  className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  {loading ? 'Creando…' : 'Crear usuario'}
+                </button>
+              </div>
             </form>
           </>
         )}
@@ -247,58 +291,67 @@ function CredentialsModal({
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }} />
       <div
-        style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px' }}
-        className="bg-surface border border-border-soft rounded-2xl shadow-2xl p-6"
+        style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '400px', margin: '0 16px', maxHeight: '90vh', overflowY: 'auto' }}
+        className="bg-surface border border-border-soft rounded-2xl shadow-2xl"
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-            <KeyRound className="w-4 h-4 text-warning" /> Contraseña reseteada
-          </h3>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1 hover:bg-surface-raised">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-soft sticky top-0 bg-surface rounded-t-2xl z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center">
+              <KeyRound className="w-4 h-4 text-warning" />
+            </div>
+            <div>
+              <p className="font-bold text-text-primary text-sm leading-none">Contraseña reseteada</p>
+              <p className="text-xs text-text-muted mt-0.5">Envía estas credenciales al usuario</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <p className="text-text-muted text-xs mb-4">
-          Envía estas credenciales al usuario. Al ingresar se le pedirá que cree su propia contraseña.
-        </p>
-        <div className="space-y-3 mb-5">
-          <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-text-muted mb-0.5">Email</p>
-                <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-text-muted text-xs">
+            Al ingresar se le pedirá que cree su propia contraseña.
+          </p>
+          <div className="space-y-3">
+            <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-text-muted mb-0.5">Email</p>
+                  <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
+                </div>
+                <CopyButton text={credentials.email} />
               </div>
-              <CopyButton text={credentials.email} />
+            </div>
+            <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                  <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
+                </div>
+                <CopyButton text={credentials.password} />
+              </div>
             </div>
           </div>
-          <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
-                <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
-              </div>
-              <CopyButton text={credentials.password} />
-            </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleCopyAll}
+              className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
+            >
+              {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+              {allCopied ? 'Copiado' : 'Copiar todo'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors"
+            >
+              Listo
+            </button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleCopyAll}
-            className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
-          >
-            {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-            {allCopied ? 'Copiado' : 'Copiar todo'}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 bg-primary hover:bg-primary/90 text-white font-semibold text-sm rounded-xl py-2.5 transition-colors"
-          >
-            Listo
-          </button>
         </div>
       </div>
     </div>,
@@ -309,6 +362,7 @@ function CredentialsModal({
 // ── Componente principal ──────────────────────────────────────────────────────
 export function UserManagement() {
   const [users, setUsers]           = useState<WebUser[]>([])
+  const [companies, setCompanies]   = useState<CompanyInfo[]>([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [createOpen, setCreateOpen]       = useState(false)
@@ -328,8 +382,12 @@ export function UserManagement() {
     setLoading(true)
     setError(null)
     try {
-      const { data } = await api.get<WebUser[]>('/api/admin/users')
-      setUsers(data.filter(u => u.email))
+      const [{ data: userData }, { data: compData }] = await Promise.all([
+        api.get<WebUser[]>('/api/admin/users'),
+        api.get<{ id: string; name: string; leaderId: string }[]>('/api/admin/companies'),
+      ])
+      setUsers(userData.filter(u => u.email))
+      setCompanies(compData.map(c => ({ id: c.id, name: c.name, leaderId: c.leaderId })))
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Error al cargar usuarios')
     } finally {
@@ -340,9 +398,9 @@ export function UserManagement() {
   useEffect(() => { load() }, [])
 
   async function handleChangeRole(user: WebUser) {
-    const newRole = user.role === 'superadmin' ? 'user' : 'superadmin'
+    const newRole = ROLE_CYCLE[user.role] ?? 'user'
     const confirmed = window.confirm(
-      `¿Cambiar rol de "${user.email}" a ${newRole === 'superadmin' ? 'Superadmin' : 'Usuario'}?`,
+      `¿Cambiar rol de "${user.email}" a ${ROLE_LABELS[newRole]}?`,
     )
     if (!confirmed) return
     setChangingId(user.id)
@@ -429,8 +487,9 @@ export function UserManagement() {
               <tr className="border-b border-border-soft">
                 <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Email</th>
                 <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Rol</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Creado</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Último acceso</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden md:table-cell">Empresa</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">Creado</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">Último acceso</th>
                 <th className="text-right text-xs text-text-muted font-medium px-4 py-3">Acciones</th>
               </tr>
             </thead>
@@ -440,6 +499,7 @@ export function UserManagement() {
                 const isChanging = changingId === user.id
                 const isDeleting = deletingId === user.id
                 const isResetting = resettingId === user.id
+                const userCompanies = companies.filter(c => c.leaderId === user.id)
                 return (
                   <tr key={user.id} className="border-b border-border-soft last:border-0 hover:bg-surface-raised transition-colors">
                     <td className="px-4 py-3">
@@ -456,10 +516,24 @@ export function UserManagement() {
                     <td className="px-4 py-3">
                       <RoleBadge role={user.role} />
                     </td>
-                    <td className="px-4 py-3 text-text-muted text-xs">
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {userCompanies.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {userCompanies.slice(0, 2).map(c => (
+                            <span key={c.id} className="text-xs text-text-muted truncate max-w-[140px]">{c.name}</span>
+                          ))}
+                          {userCompanies.length > 2 && (
+                            <span className="text-xs text-text-muted/50">+{userCompanies.length - 2} más</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-text-muted/40">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-text-muted text-xs hidden lg:table-cell">
                       {format(parseISO(user.createdAt), 'dd MMM yyyy', { locale: es })}
                     </td>
-                    <td className="px-4 py-3 text-text-muted text-xs">
+                    <td className="px-4 py-3 text-text-muted text-xs hidden lg:table-cell">
                       {user.lastSignIn
                         ? format(parseISO(user.lastSignIn), 'dd MMM yyyy HH:mm', { locale: es })
                         : 'Nunca'}
@@ -471,12 +545,12 @@ export function UserManagement() {
                             <button
                               onClick={() => handleChangeRole(user)}
                               disabled={isChanging || isDeleting || isResetting}
-                              title={user.role === 'superadmin' ? 'Quitar superadmin' : 'Hacer superadmin'}
-                              className="text-xs text-text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10 disabled:opacity-40"
+                              title={ROLE_NEXT_LABELS[user.role]}
+                              className="text-xs text-text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10 disabled:opacity-40 whitespace-nowrap"
                             >
                               {isChanging
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : user.role === 'superadmin' ? 'Quitar admin' : 'Hacer admin'}
+                                : ROLE_NEXT_LABELS[user.role]}
                             </button>
                             <button
                               onClick={() => handleResetPassword(user)}

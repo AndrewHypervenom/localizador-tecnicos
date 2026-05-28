@@ -6,26 +6,46 @@ import type { Zone } from '@/types/zones'
 import { ZONE_TYPE_LABELS } from '@/types/zones'
 
 function createZoneLayer(zone: Zone, selected: boolean): L.Polygon {
-  const opacity  = selected ? 0.35 : 0.15
-  const weight   = selected ? 3 : 2
+  const fillOp = selected ? 0.25 : 0.12
+  const weight  = selected ? 3 : 2
 
   const polygon = L.polygon(zone.coordinates, {
     color:       zone.color,
     weight,
-    opacity:     selected ? 1 : 0.7,
+    opacity:     selected ? 1 : 0.85,
     fillColor:   zone.color,
-    fillOpacity: opacity,
+    fillOpacity: fillOp,
     dashArray:   zone.type === 'restricted' ? '8 4' : undefined,
   })
 
-  polygon.bindTooltip(
-    `<div style="font-family:Inter,sans-serif;font-size:12px;background:#141420;color:#F1F5F9;border:1px solid #252540;padding:6px 10px;border-radius:8px;white-space:nowrap">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${zone.color};margin-right:6px;vertical-align:middle"></span>
+  const labelHtml = `
+    <div style="
+      font-family:Inter,system-ui,sans-serif;
+      font-size:12px;
+      background:rgba(14,14,26,0.88);
+      color:#F1F5F9;
+      border:1.5px solid ${zone.color}80;
+      padding:5px 10px;
+      border-radius:9px;
+      white-space:nowrap;
+      backdrop-filter:blur(6px);
+      box-shadow:0 2px 10px rgba(0,0,0,.45);
+      pointer-events:none;
+    ">
+      <span style="
+        display:inline-block;width:8px;height:8px;border-radius:50%;
+        background:${zone.color};margin-right:6px;vertical-align:middle;
+      "></span>
       <strong>${zone.name}</strong>
-      <span style="color:#94A3B8;margin-left:6px">${ZONE_TYPE_LABELS[zone.type]}</span>
-    </div>`,
-    { sticky: true, className: 'zone-tooltip', opacity: 1 }
-  )
+      <span style="color:#64748B;margin-left:6px;font-size:11px">${ZONE_TYPE_LABELS[zone.type]}</span>
+    </div>`
+
+  polygon.bindTooltip(labelHtml, { sticky: true, className: 'zone-tooltip', opacity: 1 })
+
+  // Etiqueta fija en el centroide cuando está seleccionada
+  if (selected) {
+    polygon.bindPopup(labelHtml, { closeButton: false, className: 'zone-popup' })
+  }
 
   return polygon
 }

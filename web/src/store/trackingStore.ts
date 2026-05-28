@@ -29,6 +29,10 @@ export interface TechnicianState {
   status: TechnicianStatus
   // Ruta del día (últimos N puntos)
   trail: [number, number][]  // [lat, lng][]
+  // Datos de casa
+  home_lat?:     number
+  home_lng?:     number
+  home_address?: string
 }
 
 export interface MotionAlert {
@@ -66,6 +70,7 @@ interface TrackingStore {
   // Actions
   setTechnicians: (techs: TechnicianState[]) => void
   updateTechnicianPosition: (payload: LocationPayload) => void
+  updateTechnicianMeta: (id: string, patch: { name?: string; phone?: string; home_lat?: number | null; home_lng?: number | null; home_address?: string | null }) => void
   addAlert: (alert: MotionAlert) => void
   acknowledgeAlert: (alertId: string) => void
   acknowledgeAllAlerts: () => void
@@ -115,14 +120,27 @@ export const useTrackingStore = create<TrackingStore>()(
       set((state) => {
         const now = Date.now()
         techs.forEach((t) => {
-          // Recomputar estado desde lastSeen para no congelar el status que trae la DB
           const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now)
           state.technicians[t.id] = {
             ...t,
             status,
-            trail: state.technicians[t.id]?.trail ?? [],
+            trail:        state.technicians[t.id]?.trail ?? [],
+            home_lat:     t.home_lat,
+            home_lng:     t.home_lng,
+            home_address: t.home_address,
           }
         })
+      }),
+
+    updateTechnicianMeta: (id, patch) =>
+      set((state) => {
+        const t = state.technicians[id]
+        if (!t) return
+        if (patch.name         !== undefined) t.name         = patch.name
+        if (patch.phone        !== undefined) t.phone        = patch.phone ?? undefined
+        if (patch.home_lat     !== undefined) t.home_lat     = patch.home_lat ?? undefined
+        if (patch.home_lng     !== undefined) t.home_lng     = patch.home_lng ?? undefined
+        if (patch.home_address !== undefined) t.home_address = patch.home_address ?? undefined
       }),
 
     updateTechnicianPosition: (payload) =>

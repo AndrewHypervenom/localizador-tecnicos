@@ -8,6 +8,7 @@ import { History } from '@/pages/History'
 import { Login } from '@/pages/Login'
 import { Zones } from '@/pages/Zones'
 import { Admin } from '@/pages/Admin'
+import { LeaderPanel } from '@/pages/LeaderPanel'
 import { ChangePassword } from '@/pages/ChangePassword'
 import { Reports } from '@/pages/Reports'
 import type { Session } from '@supabase/supabase-js'
@@ -34,6 +35,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RoleRedirect({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (session === undefined) return <Spinner />
+  if (!session) return <Navigate to="/login" replace />
+  const role = getRoleFromSession(session)
+  if (role === 'superadmin') return <Navigate to="/admin" replace />
+  if (role === 'leader')     return <Navigate to="/leader" replace />
+  return <>{children}</>
+}
+
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
 
@@ -51,7 +71,38 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function LeaderRoute({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null | undefined>(undefined)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (session === undefined) return <Spinner />
+  if (!session) return <Navigate to="/login" replace />
+  const role = getRoleFromSession(session)
+  if (role !== 'leader' && role !== 'superadmin') return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
+  useEffect(() => {
+    // Limpiar sesión inválida automáticamente (token expirado o revocado)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' && !session) {
+        // Limpiar cualquier token residual del localStorage
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('sb-')) localStorage.removeItem(k)
+        })
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   return (
     <BrowserRouter>
       <Toaster
@@ -72,7 +123,13 @@ export default function App() {
         <Route path="/admin" element={
           <AdminRoute><Admin /></AdminRoute>
         } />
+        <Route path="/leader" element={
+          <LeaderRoute><LeaderPanel /></LeaderRoute>
+        } />
         <Route path="/" element={
+          <RoleRedirect><Dashboard /></RoleRedirect>
+        } />
+        <Route path="/map" element={
           <ProtectedRoute><Dashboard /></ProtectedRoute>
         } />
         <Route path="/history" element={

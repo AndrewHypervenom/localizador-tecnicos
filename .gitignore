@@ -38,3 +38,9 @@ npm-debug.log*
 
 # Supabase
 supabase/
+
+# Documentos de pricing y costos
+*.pdf
+*.docx
+crear_word*.py
+*.txt

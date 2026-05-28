@@ -7,6 +7,9 @@ import { Play, Pause, SkipBack } from 'lucide-react'
 import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { SpeedHeatmap } from './SpeedHeatmap'
 import { ZonesLayer } from './ZonesLayer'
+import { TechnicianCityLayer } from './TechnicianCityLayer'
+import { FleetLocationsLayer } from './FleetLocationsLayer'
+import { AssignmentRouteLayer } from './AssignmentRouteLayer'
 
 interface RoutePoint {
   ts: string
@@ -62,6 +65,19 @@ function createTechMarkerIcon(tech: TechnicianState): L.DivIcon {
   })
 }
 
+// Invalida el tamaño del mapa cuando el contenedor cambia de dimensiones (e.g. sidebar animado)
+function MapSizeInvalidator() {
+  const map = useMap()
+  useEffect(() => {
+    const container = map.getContainer()
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(container)
+    map.invalidateSize()
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
 // Componente interno que gestiona los marcadores imperativamente
 function MarkersLayer() {
   const { technicians, selectedTechnicianId, selectTechnician } = useTrackingStore()
@@ -111,36 +127,32 @@ function MarkersLayer() {
   const techniciansRef = useRef(technicians)
   techniciansRef.current = technicians
 
-  // Centrar mapa solo cuando el usuario selecciona un técnico diferente
+  // Fly cuando se selecciona un técnico — o cuando su posición llega por primera vez
+  const hasFlownRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (!selectedTechnicianId) return
+    if (!selectedTechnicianId) { hasFlownRef.current = null; return }
     const tech = techniciansRef.current[selectedTechnicianId]
     if (tech?.lat && tech?.lng) {
+      hasFlownRef.current = selectedTechnicianId
       map.flyTo([tech.lat, tech.lng], 16, { duration: 1.2 })
     }
   }, [selectedTechnicianId, map])
 
-  return null
-}
-
-// Centra el mapa en la ubicación real del navegador al cargar
-function AutoCenter() {
-  const map = useMap()
-
-  useEffect(() => {
-    if (!navigator.geolocation) return
-
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        map.setView([coords.latitude, coords.longitude], 13, { animate: false })
-      },
-      () => { /* permiso denegado o no disponible — mantiene centro por defecto */ },
-      { timeout: 6000, maximumAge: 60_000 }
-    )
-  }, [map])
+  // Segundo disparo: si el técnico seleccionado aún no tenía posición al seleccionarse
+  useLayoutEffect(() => {
+    if (!selectedTechnicianId) return
+    if (hasFlownRef.current === selectedTechnicianId) return
+    const tech = technicians[selectedTechnicianId]
+    if (tech?.lat && tech?.lng) {
+      hasFlownRef.current = selectedTechnicianId
+      map.flyTo([tech.lat, tech.lng], 16, { duration: 1.2 })
+    }
+  }, [technicians, selectedTechnicianId, map])
 
   return null
 }
+
 
 // Devuelve solo los puntos de la sesión activa más reciente.
 // Si hay un hueco > 5 min entre puntos consecutivos, descarta todo lo anterior.
@@ -156,7 +168,7 @@ function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
 }
 
 // Reproductor del recorrido completo del día para el técnico seleccionado
-function LiveTrackPlayer() {
+function LiveTrackPlayer({ date }: { date: string }) {
   const { selectedTechnicianId } = useTrackingStore()
   const map = useMap()
   const [points, setPoints] = useState<RoutePoint[]>([])
@@ -166,6 +178,7 @@ function LiveTrackPlayer() {
   const intervalRef = useRef<number>()
   const atEndRef = useRef(true)
   const TODAY = format(new Date(), 'yyyy-MM-dd')
+  const isToday = date === TODAY
 
   useEffect(() => {
     if (!selectedTechnicianId) {
@@ -182,10 +195,11 @@ function LiveTrackPlayer() {
       try {
         const res = await api.get<RoutePoint[]>(
           `/api/analytics/technicians/${selectedTechnicianId}/track`,
-          { params: { date: TODAY } }
+          { params: { date } }
         )
         if (cancelled) return
-        const pts = filterCurrentSession(res.data)
+        // Solo filtrar sesión activa cuando es hoy (datos en vivo)
+        const pts = isToday ? filterCurrentSession(res.data) : res.data
         setPoints(pts)
         if (!silent || atEndRef.current) {
           const end = Math.max(pts.length - 1, 0)
@@ -204,10 +218,12 @@ function LiveTrackPlayer() {
     }
 
     loadTrack()
+    // Solo hacer polling en tiempo real cuando es el día actual
+    if (!isToday) return () => { cancelled = true }
     const interval = setInterval(() => loadTrack(true), 30_000)
     return () => { cancelled = true; clearInterval(interval) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTechnicianId])
+  }, [selectedTechnicianId, date])
 
   useEffect(() => {
     if (!playing) return
@@ -288,13 +304,15 @@ function LiveTrackPlayer() {
 
 interface TrackingMapProps {
   className?: string
+  date?: string
 }
 
-export function TrackingMap({ className }: TrackingMapProps) {
+export function TrackingMap({ className, date }: TrackingMapProps) {
   const { showHeatmap } = useTrackingStore()
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const activeDate = date ?? today
 
-  // Centro de Honduras (o ajustar a tu ciudad)
-  const defaultCenter: L.LatLngExpression = [14.0723, -87.2061]
+  const defaultCenter: L.LatLngExpression = [4.7110, -74.0721] // Bogotá, Colombia
   const defaultZoom = 12
 
   return (
@@ -306,17 +324,19 @@ export function TrackingMap({ className }: TrackingMapProps) {
         zoomControl={false}
         attributionControl={false}
       >
-        {/* Tiles de OpenStreetMap con estilo oscuro de Carto */}
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution="© OpenStreetMap contributors, © CARTO"
           maxZoom={19}
         />
 
-        <AutoCenter />
+        <MapSizeInvalidator />
         <ZonesLayer />
+        <TechnicianCityLayer />
+        <FleetLocationsLayer />
+        <AssignmentRouteLayer />
         <MarkersLayer />
-        <LiveTrackPlayer />
+        <LiveTrackPlayer date={activeDate} />
 
         {showHeatmap && <SpeedHeatmap />}
       </MapContainer>

@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import type { Session } from '@supabase/supabase-js'
 
-export type UserRole = 'superadmin' | 'user'
+export type UserRole = 'superadmin' | 'leader' | 'user'
 
 export function getRoleFromSession(session: Session | null): UserRole | null {
   if (!session) return null

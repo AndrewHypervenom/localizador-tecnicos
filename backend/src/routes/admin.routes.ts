@@ -58,7 +58,7 @@ router.post('/users', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'El email es requerido' })
     return
   }
-  const assignedRole = role === 'superadmin' ? 'superadmin' : 'user'
+  const assignedRole = ['superadmin', 'leader'].includes(role) ? role : 'user'
   const tempPassword = generateTempPassword()
 
   try {
@@ -110,8 +110,8 @@ router.post('/users/:id/reset-password', async (req: Request, res: Response) => 
 router.patch('/users/:id/role', async (req: Request, res: Response) => {
   const { id } = req.params
   const { role } = req.body as { role: string }
-  if (!['superadmin', 'user'].includes(role)) {
-    res.status(400).json({ error: 'Rol inválido. Use "superadmin" o "user"' })
+  if (!['superadmin', 'leader', 'user'].includes(role)) {
+    res.status(400).json({ error: 'Rol inválido' })
     return
   }
 
@@ -200,6 +200,125 @@ router.get('/stats', async (_req: Request, res: Response) => {
   } catch (err) {
     console.error('[admin/stats]', err)
     res.status(500).json({ error: 'Error al obtener estadísticas' })
+  }
+})
+
+// GET /api/admin/companies — all companies with leader info and stats
+router.get('/companies', async (_req: Request, res: Response) => {
+  try {
+    const { data: companies, error } = await supabase
+      .from('companies')
+      .select('id, name, created_by, created_at')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+
+    const { data: campaigns } = await supabase
+      .from('campaigns')
+      .select('id, name, company_id, is_active')
+    const { data: technicians } = await supabase
+      .from('technicians')
+      .select('id, company_id')
+
+    const { data: authUsers } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+    const userMap = new Map(authUsers?.users?.map(u => [u.id, u.email]) ?? [])
+
+    const result = (companies ?? []).map(co => ({
+      id: co.id,
+      name: co.name,
+      createdAt: co.created_at,
+      leaderId: co.created_by,
+      leaderEmail: userMap.get(co.created_by ?? '') ?? null,
+      campaignCount: (campaigns ?? []).filter(c => c.company_id === co.id).length,
+      activeCampaignCount: (campaigns ?? []).filter(c => c.company_id === co.id && c.is_active).length,
+      technicianCount: (technicians ?? []).filter(t => t.company_id === co.id).length,
+      campaigns: (campaigns ?? []).filter(c => c.company_id === co.id).map(c => ({ id: c.id, name: c.name, is_active: c.is_active })),
+    }))
+
+    res.json(result)
+  } catch (err) {
+    console.error('[admin/companies GET]', err)
+    res.status(500).json({ error: 'Error al obtener empresas' })
+  }
+})
+
+// POST /api/admin/companies — create company assigned to a specific leader
+router.post('/companies', async (req: Request, res: Response) => {
+  const { name, leaderId } = req.body as { name: string; leaderId: string }
+  if (!name?.trim()) { res.status(400).json({ error: 'El nombre es requerido' }); return }
+  if (!leaderId)       { res.status(400).json({ error: 'El líder es requerido' }); return }
+
+  try {
+    const { data, error } = await supabase
+      .from('companies')
+      .insert({ name: name.trim(), created_by: leaderId })
+      .select('id, name, created_by, created_at')
+      .single()
+    if (error) throw error
+
+    logActivity(req.adminUser!.id, req.adminUser!.email, 'create_company', 'company', data.id, { name: data.name, leaderId })
+
+    res.status(201).json(data)
+  } catch (err: any) {
+    console.error('[admin/companies POST]', err)
+    res.status(500).json({ error: err.message ?? 'Error al crear empresa' })
+  }
+})
+
+// PATCH /api/admin/companies/:id — rename or reassign
+router.patch('/companies/:id', async (req: Request, res: Response) => {
+  const { id } = req.params
+  const { name, leaderId } = req.body as { name?: string; leaderId?: string }
+
+  const updates: Record<string, unknown> = {}
+  if (name?.trim()) updates.name = name.trim()
+  if (leaderId)     updates.created_by = leaderId
+  if (!Object.keys(updates).length) { res.status(400).json({ error: 'Nada que actualizar' }); return }
+
+  try {
+    const { data, error } = await supabase
+      .from('companies')
+      .update(updates)
+      .eq('id', id)
+      .select('id, name, created_by')
+      .single()
+    if (error) throw error
+
+    logActivity(req.adminUser!.id, req.adminUser!.email, 'update_company', 'company', id, updates)
+    res.json(data)
+  } catch (err: any) {
+    console.error('[admin/companies PATCH]', err)
+    res.status(500).json({ error: err.message ?? 'Error al actualizar empresa' })
+  }
+})
+
+// DELETE /api/admin/companies/:id
+router.delete('/companies/:id', async (req: Request, res: Response) => {
+  const { id } = req.params
+  try {
+    const { data: co } = await supabase.from('companies').select('name').eq('id', id).single()
+    const { error } = await supabase.from('companies').delete().eq('id', id)
+    if (error) throw error
+
+    logActivity(req.adminUser!.id, req.adminUser!.email, 'delete_company', 'company', id, { name: co?.name })
+    res.json({ success: true })
+  } catch (err: any) {
+    console.error('[admin/companies DELETE]', err)
+    res.status(500).json({ error: err.message ?? 'Error al eliminar empresa' })
+  }
+})
+
+// GET /api/admin/leaders — users with role=leader (for assign dropdown)
+router.get('/leaders', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+    if (error) throw error
+    const leaders = data.users
+      .filter(u => u.app_metadata?.role === 'leader' || u.app_metadata?.role === 'superadmin')
+      .map(u => ({ id: u.id, email: u.email, role: u.app_metadata?.role }))
+    res.json(leaders)
+  } catch (err) {
+    console.error('[admin/leaders GET]', err)
+    res.status(500).json({ error: 'Error al obtener líderes' })
   }
 })
 

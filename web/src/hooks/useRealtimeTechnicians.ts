@@ -17,38 +17,47 @@ function playAccidentAlert() {
 }
 
 export function useRealtimeTechnicians() {
-  const { setTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent } = useTrackingStore()
+  const { setTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
   // Tracks statuses from the previous refresh cycle to detect active→inactive transitions
   const prevStatusesRef = useRef<Record<string, TechnicianStatus>>({})
 
   useEffect(() => {
     // Carga inicial de técnicos y sus estados actuales
     async function loadInitialState() {
-      const { data, error } = await supabase
-        .from('technician_current_status')
-        .select('*')
+      const [statusRes, homeRes] = await Promise.all([
+        supabase.from('technician_current_status').select('*'),
+        supabase.from('technicians').select('id, home_lat, home_lng, home_address'),
+      ])
 
-      if (error) {
-        console.error('[Realtime] Error cargando técnicos:', error)
+      if (statusRes.error) {
+        console.error('[Realtime] Error cargando técnicos:', statusRes.error)
         return
       }
 
-      const techs: TechnicianState[] = (data ?? []).map((row: any) => ({
-        id:           row.id,
-        name:         row.name,
-        deviceId:     row.device_id,
-        phone:        row.phone,
-        supervisorId: row.supervisor_id,
-        lastSeen:     row.last_seen,
-        lat:          row.lat,
-        lng:          row.lng,
-        lastSpeed:    row.last_speed,
-        altitude:     row.last_altitude ?? undefined,
-        bearing:      row.last_bearing  ?? undefined,
-        battery:      row.battery,
-        status:       row.status ?? 'offline',
-        trail:        row.lat && row.lng ? [[row.lat, row.lng]] : [],
-      }))
+      const homeMap = new Map((homeRes.data ?? []).map((h: any) => [h.id, h]))
+
+      const techs: TechnicianState[] = (statusRes.data ?? []).map((row: any) => {
+        const home = homeMap.get(row.id)
+        return {
+          id:           row.id,
+          name:         row.name,
+          deviceId:     row.device_id,
+          phone:        row.phone,
+          supervisorId: row.supervisor_id,
+          lastSeen:     row.last_seen,
+          lat:          row.lat,
+          lng:          row.lng,
+          lastSpeed:    row.last_speed,
+          altitude:     row.last_altitude ?? undefined,
+          bearing:      row.last_bearing  ?? undefined,
+          battery:      row.battery,
+          status:       row.status ?? 'offline',
+          trail:        row.lat && row.lng ? [[row.lat, row.lng]] : [],
+          home_lat:     home?.home_lat     ?? undefined,
+          home_lng:     home?.home_lng     ?? undefined,
+          home_address: home?.home_address ?? undefined,
+        }
+      })
 
       setTechnicians(techs)
     }
@@ -128,6 +137,9 @@ export function useRealtimeTechnicians() {
           const row = payload.new as any
           if (!row) return
 
+          // Guard: ignorar técnicos que no están en nuestro store (fuera de scope)
+          if (!useTrackingStore.getState().technicians[row.technician_id]) return
+
           markRealtimeEvent()
           const [lng, lat] = extractLatLng(row.location)
           updateTechnicianPosition({
@@ -157,6 +169,9 @@ export function useRealtimeTechnicians() {
         async (payload) => {
           const row = payload.new as any
           if (!row) return
+
+          // Guard: ignorar técnicos que no están en nuestro store (fuera de scope)
+          if (!useTrackingStore.getState().technicians[row.technician_id]) return
 
           // Obtener nombre del técnico
           const { data: tech } = await supabase

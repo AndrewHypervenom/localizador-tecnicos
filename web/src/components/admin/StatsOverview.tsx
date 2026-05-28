@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Users, Wrench, Route, AlertTriangle, RefreshCw, Shield, Activity } from 'lucide-react'
+import { Users, Wrench, Route, AlertTriangle, RefreshCw, Shield, Activity, Trash2, Loader2, Layers, Bell, ClipboardList } from 'lucide-react'
+import { toast } from 'sonner'
 import api from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 interface Stats {
@@ -43,6 +45,57 @@ export function StatsOverview() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [backendOk, setBackendOk] = useState<boolean | null>(null)
+  const [deletingZones, setDeletingZones] = useState(false)
+  const [deletingAlerts, setDeletingAlerts] = useState(false)
+  const [deletingRoutes, setDeletingRoutes] = useState(false)
+
+  async function handleDeleteAllZones() {
+    if (!window.confirm('¿Borrar TODAS las zonas? Esta acción no se puede deshacer.')) return
+    setDeletingZones(true)
+    try {
+      const { error } = await supabase.from('zones').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      if (error) throw error
+      toast.success('Todas las zonas fueron eliminadas')
+      load()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al borrar zonas')
+    } finally {
+      setDeletingZones(false)
+    }
+  }
+
+  async function handleDeleteAllAlerts() {
+    if (!window.confirm('¿Borrar TODAS las alertas (motion_events)? Esta acción no se puede deshacer.')) return
+    setDeletingAlerts(true)
+    try {
+      const { error } = await supabase.from('motion_events').delete().neq('id', 0)
+      if (error) throw error
+      toast.success('Todas las alertas fueron eliminadas')
+      load()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al borrar alertas')
+    } finally {
+      setDeletingAlerts(false)
+    }
+  }
+
+  async function handleDeleteAllRoutes() {
+    if (!window.confirm('¿Borrar TODAS las rutas e instalaciones cargadas? Esto borrará route_items y technician_routes. Esta acción no se puede deshacer.')) return
+    setDeletingRoutes(true)
+    try {
+      // route_items tiene FK a technician_routes — borrar primero los items
+      const { error: e1 } = await supabase.from('route_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('technician_routes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      if (e2) throw e2
+      toast.success('Todas las rutas e instalaciones fueron eliminadas')
+      load()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error al borrar rutas')
+    } finally {
+      setDeletingRoutes(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -154,6 +207,41 @@ export function StatsOverview() {
       <p className="text-text-muted text-xs">
         Datos actualizados al cargar la página. Usa el botón de actualizar para refrescar.
       </p>
+
+      {/* Zona de peligro — limpieza de pruebas */}
+      <div className="border border-danger/25 rounded-2xl overflow-hidden">
+        <div className="bg-danger/5 px-4 py-3 border-b border-danger/20 flex items-center gap-2">
+          <Trash2 className="w-4 h-4 text-danger" />
+          <p className="text-sm font-semibold text-danger">Limpieza de datos</p>
+          <span className="text-xs text-text-muted ml-1">— para uso en pruebas</span>
+        </div>
+        <div className="p-4 flex flex-wrap gap-3">
+          <button
+            onClick={handleDeleteAllZones}
+            disabled={deletingZones || deletingAlerts || deletingRoutes}
+            className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
+          >
+            {deletingZones ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+            Borrar todas las zonas
+          </button>
+          <button
+            onClick={handleDeleteAllAlerts}
+            disabled={deletingZones || deletingAlerts || deletingRoutes}
+            className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
+          >
+            {deletingAlerts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5" />}
+            Borrar todas las alertas
+          </button>
+          <button
+            onClick={handleDeleteAllRoutes}
+            disabled={deletingZones || deletingAlerts || deletingRoutes}
+            className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
+          >
+            {deletingRoutes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
+            Borrar rutas e instalaciones
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

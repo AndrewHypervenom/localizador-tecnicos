@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation } from 'lucide-react'
+import { X, UserPlus, CheckCircle, RefreshCw, QrCode, Building2, MapPin, FileText, Navigation, Check } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
@@ -154,17 +154,19 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
         className="bg-surface border border-border-soft rounded-2xl shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b border-border-soft sticky top-0 bg-surface rounded-t-2xl z-10">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-soft sticky top-0 bg-surface rounded-t-2xl z-10">
           <div className="flex items-center gap-2.5">
             {step === 'form'
               ? <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><UserPlus className="w-4 h-4 text-primary" /></div>
-              : <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><QrCode className="w-4 h-4 text-primary" /></div>
+              : <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center"><QrCode className="w-4 h-4 text-success" /></div>
             }
             <div>
               <p className="font-bold text-text-primary text-sm leading-none">
-                {step === 'form' ? 'Nuevo Técnico' : 'Código QR de Registro'}
+                {step === 'form' ? 'Nuevo técnico' : 'Código QR de registro'}
               </p>
-              {step === 'form' && <p className="text-xs text-text-muted mt-0.5">Completa los datos del técnico</p>}
+              <p className="text-xs text-text-muted mt-0.5">
+                {step === 'form' ? 'Completa los datos del técnico' : `Escanear desde la app · ${techName}`}
+              </p>
             </div>
           </div>
           <button
@@ -173,6 +175,25 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* Step indicator */}
+        <div className="flex items-center justify-center gap-4 px-6 py-2.5 border-b border-border-soft bg-base/30">
+          {([{ key: 'form', label: 'Datos' }, { key: 'qr', label: 'Código QR' }] as const).map(({ key, label }, i) => {
+            const isActive = step === key
+            const isDone   = key === 'form' && step === 'qr'
+            return (
+              <div key={key} className="flex items-center gap-2">
+                {i > 0 && <div className={cn('w-8 h-px transition-colors', step === 'qr' ? 'bg-primary/40' : 'bg-border-soft')} />}
+                <div className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors', isActive ? 'text-primary' : isDone ? 'text-success' : 'text-text-muted/50')}>
+                  <div className={cn('w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors', isActive ? 'bg-primary text-base' : isDone ? 'bg-success text-white' : 'border border-border text-text-muted')}>
+                    {isDone ? <Check className="w-2.5 h-2.5" /> : i + 1}
+                  </div>
+                  {label}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* ── Step 1: Form ── */}
@@ -314,19 +335,25 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
               </div>
             )}
 
-            <div className="pt-1">
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleClose}
+                className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
+              >
+                Cancelar
+              </button>
               <button
                 onClick={handleCreate}
                 disabled={loading}
                 className={cn(
-                  'w-full bg-primary hover:bg-primary-hover text-base font-semibold text-sm',
-                  'rounded-xl py-3 transition-colors flex items-center justify-center gap-2',
+                  'flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm',
+                  'rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2',
                   loading && 'opacity-60 cursor-not-allowed'
                 )}
               >
                 {loading
                   ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <><UserPlus className="w-4 h-4" />Crear técnico y generar QR</>
+                  : <><UserPlus className="w-4 h-4" />Crear y generar QR</>
                 }
               </button>
             </div>

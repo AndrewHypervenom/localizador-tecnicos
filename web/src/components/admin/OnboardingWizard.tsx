@@ -338,7 +338,7 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
                     <div>
                       <label className="block text-xs text-text-muted font-medium mb-1">Nombre del proyecto *</label>
                       <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                        placeholder="Instalación de fibra óptica zona norte" className={inp} autoFocus />
+                        placeholder="Instalación Zona Norte" className={inp} autoFocus />
                     </div>
                     <div>
                       <label className="block text-xs text-text-muted font-medium mb-1">Descripción</label>
@@ -380,7 +380,7 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
 function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, showForm, onToggleForm, form, setForm, clientCountry }: {
   techs: TechRow[]; loading: boolean; selectedIds: Set<string>; onToggle: (id: string) => void
   projectName: string; showForm: boolean; onToggleForm: () => void
-  form: { name: string; phone: string; city: string; shiftStart: string; shiftEnd: string }; setForm: (f: any) => void
+  form: { name: string; phone: string; country: string; city: string; shiftStart: string; shiftEnd: string }; setForm: (f: any) => void
   clientCountry?: string | null
 }) {
   const [search, setSearch] = useState('')
@@ -472,22 +472,40 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                       <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
                         placeholder="+504 9999-0001" className={inp} />
                     </div>
-                    {/* Ciudad — basada en el país del cliente */}
-                    {clientCountry && (CITIES_BY_COUNTRY[clientCountry]?.length ?? 0) > 0 && (
-                      <div className="col-span-2">
-                        <label className="block text-xs text-text-muted font-medium mb-1">Ciudad</label>
-                        <div className="relative">
-                          <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                          <select value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
-                            className={cn(inp, 'pl-8 appearance-none cursor-pointer')}>
-                            <option value="">Seleccionar ciudad</option>
-                            {(CITIES_BY_COUNTRY[clientCountry] ?? []).map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
-                          </select>
-                        </div>
+                    {/* País y ciudad del técnico */}
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-xs text-text-muted font-medium mb-1">País</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                        <select
+                          value={form.country}
+                          onChange={e => {
+                            const c = e.target.value
+                            const validCities = CITIES_BY_COUNTRY[c] ?? []
+                            setForm({ ...form, country: c, city: validCities.includes(form.city) ? form.city : '' })
+                          }}
+                          className={cn(inp, 'pl-8 appearance-none cursor-pointer')}
+                        >
+                          <option value="">Sin especificar</option>
+                          {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                       </div>
-                    )}
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-xs text-text-muted font-medium mb-1">Ciudad</label>
+                      <div className="relative">
+                        <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                        <select
+                          value={form.city}
+                          onChange={e => setForm({ ...form, city: e.target.value })}
+                          disabled={!form.country}
+                          className={cn(inp, 'pl-8 appearance-none cursor-pointer', !form.country && 'opacity-40 cursor-not-allowed')}
+                        >
+                          <option value="">{form.country ? 'Seleccionar ciudad' : 'Selecciona país primero'}</option>
+                          {(CITIES_BY_COUNTRY[form.country] ?? []).map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
                     {/* Horario */}
                     <div className="col-span-2">
                       <label className="block text-xs text-text-muted font-medium mb-1.5">Horario de trabajo</label>
@@ -624,7 +642,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
   // Step 3: technician
   const [selectedTechIds, setSelectedTechIds] = useState<Set<string>>(new Set())
   const [showTechForm, setShowTechForm]       = useState(false)
-  const [techForm, setTechForm]               = useState({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
+  const [techForm, setTechForm]               = useState({ name: '', phone: '', country: '', city: '', shiftStart: '', shiftEnd: '' })
 
   // Step 4: done
   const [createdTechName, setCreatedTechName] = useState<string | null>(null)
@@ -770,12 +788,13 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
           const { data: tech, error: techErr } = await supabase
             .from('technicians')
             .insert({
-              name: techForm.name.trim(),
-              phone: techForm.phone.trim() || null,
-              city: techForm.city || null,
-              shift: buildShift(techForm.shiftStart, techForm.shiftEnd),
               ...techMeta,
-              active: true,
+              name:    techForm.name.trim(),
+              phone:   techForm.phone.trim() || null,
+              country: techForm.country || techMeta.country,
+              city:    techForm.city    || null,
+              shift:   buildShift(techForm.shiftStart, techForm.shiftEnd),
+              active:  true,
             })
             .select('id, name').single()
           if (techErr) throw techErr
@@ -812,7 +831,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
 
   function handleAddAnother() {
     setSelectedTechIds(new Set())
-    setTechForm({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
+    setTechForm({ name: '', phone: '', country: '', city: '', shiftStart: '', shiftEnd: '' })
     setShowTechForm(false)
     setCreatedTechName(null)
     setQrToken(null)
@@ -831,7 +850,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
     setSelectedProjectId(initialProjectId ?? null)
     setShowClientForm(false); setClientForm({ name: '', country: '', notes: '' })
     setShowProjectForm(false); setProjectForm({ name: '', description: '', status: 'active' })
-    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '', city: '', shiftStart: '', shiftEnd: '' })
+    setSelectedTechIds(new Set()); setShowTechForm(false); setTechForm({ name: '', phone: '', country: '', city: '', shiftStart: '', shiftEnd: '' })
     setCreatedTechName(null); setQrToken(null); setAssignedCount(0)
   }
 
@@ -907,7 +926,12 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
                     return n
                   })}
                   projectName={selectedProject?.name ?? ''}
-                  showForm={showTechForm} onToggleForm={() => setShowTechForm(v => !v)}
+                  showForm={showTechForm} onToggleForm={() => {
+                    if (!showTechForm && !techForm.country && selectedClient?.country) {
+                      setTechForm(f => ({ ...f, country: selectedClient!.country! }))
+                    }
+                    setShowTechForm(v => !v)
+                  }}
                   form={techForm} setForm={setTechForm}
                   clientCountry={selectedClient?.country}
                 />
