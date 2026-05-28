@@ -406,6 +406,23 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
       <div className="flex-1 relative min-w-0">
         <TrackingMap className="h-full w-full" date={selectedDate} />
 
+        {/* Botón para limpiar técnico seleccionado y volver al mapa normal */}
+        <AnimatePresence>
+          {selectedTechnicianId && (
+            <motion.button
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => selectTechnician(null)}
+              className="absolute top-4 left-4 z-[500] flex items-center gap-2 bg-surface/95 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 shadow-xl text-xs text-text-secondary hover:text-danger hover:border-danger/40 hover:bg-danger/5 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Limpiar selección
+            </motion.button>
+          )}
+        </AnimatePresence>
+
         {/* Panel de detalle de zona seleccionada */}
         <AnimatePresence>
           {selectedZoneId && (() => {
