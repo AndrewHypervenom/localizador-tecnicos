@@ -1116,7 +1116,7 @@ export function Zones() {
                     </div>
                     <input
                       type="range"
-                      min={50} max={5000} step={50}
+                      min={100} max={5000} step={50}
                       value={geocodeRadius}
                       onChange={(e) => setGeocodeRadius(Number(e.target.value))}
                       className="w-full accent-primary"
