@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   RefreshCw, Search, X, Smartphone, WifiOff,
-  Phone, Building2, FolderOpen, UserX, UserCheck, MapPin, Plus, Edit2,
+  Phone, Building2, FolderOpen, UserX, UserCheck, MapPin, Plus, Edit2, Home,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -29,7 +29,7 @@ function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()
 }
 
-export function LeaderTechnicians() {
+export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: string) => void } = {}) {
   const [techs, setTechs]       = useState<Tech[]>([])
   const [loading, setLoading]   = useState(true)
   const [query, setQuery]       = useState('')
@@ -232,11 +232,20 @@ export function LeaderTechnicians() {
                         {t.device_id && t.status !== 'offline' && (
                           <Link
                             to={`/map?tech=${t.id}`}
-                            title="Ver en mapa"
+                            title="Ver en mapa en tiempo real"
                             className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
                           >
                             <MapPin className="w-3.5 h-3.5" />
                           </Link>
+                        )}
+                        {onViewOnMap && t.home_lat && t.home_lng && (
+                          <button
+                            onClick={() => onViewOnMap(t.id)}
+                            title="Ver casa en mapa"
+                            className="p-1.5 text-text-muted hover:text-success transition-colors rounded-lg hover:bg-success/10"
+                          >
+                            <Home className="w-3.5 h-3.5" />
+                          </button>
                         )}
                         <button
                           onClick={() => setEditTech(t)}
@@ -278,6 +287,15 @@ export function LeaderTechnicians() {
                       {t.client && <p className="text-text-muted/50 text-xs">{t.client}</p>}
                     </div>
                     <div className="flex items-center gap-1">
+                      {onViewOnMap && t.home_lat && t.home_lng && (
+                        <button
+                          onClick={() => onViewOnMap(t.id)}
+                          title="Ver casa en mapa"
+                          className="p-1.5 text-text-muted hover:text-success transition-colors rounded-lg hover:bg-success/10"
+                        >
+                          <Home className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setEditTech(t)}
                         title="Editar técnico"

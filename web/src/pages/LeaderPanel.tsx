@@ -39,6 +39,12 @@ export function LeaderPanel() {
     s => s.alerts.filter(a => !a.acknowledged).length +
          s.zoneAlerts.filter(a => !a.acknowledged).length
   )
+  const selectTechnician = useTrackingStore(s => s.selectTechnician)
+
+  function handleViewTechOnMap(techId: string) {
+    selectTechnician(techId)
+    setOpenPanel(null)
+  }
 
   useEffect(() => {
     async function check() {
@@ -179,7 +185,7 @@ export function LeaderPanel() {
                 <div className="p-4">
                   {openPanel === 'stats'       && <LeaderStats />}
                   {openPanel === 'routes'      && <RoutesView />}
-                  {openPanel === 'technicians' && <LeaderTechnicians />}
+                  {openPanel === 'technicians' && <LeaderTechnicians onViewOnMap={handleViewTechOnMap} />}
 
                   {openPanel === 'campaigns'   && <LeaderCampaigns />}
                   {openPanel === 'history'     && <LeaderHistory />}

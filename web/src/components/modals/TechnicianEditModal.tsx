@@ -5,11 +5,20 @@ import {
   FolderOpen, FileText, Navigation, Search, Home, Locate, Mail,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { MapContainer, TileLayer, Marker } from 'react-leaflet'
+import L from 'leaflet'
 import { supabase } from '@/lib/supabase'
 import { reverseGeocode, geocodeAddress, geocodeWithClaude } from '@/lib/geocoding'
 import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
 import { cn } from '@/lib/utils'
+
+const HOME_PREVIEW_ICON = L.divIcon({
+  html: `<div style="width:32px;height:32px;border-radius:50%;background:#10B98120;border:2px solid #10B981;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 12px rgba(0,0,0,0.55);">🏠</div>`,
+  className: '',
+  iconSize:   [32, 32],
+  iconAnchor: [16, 16],
+})
 
 // ── Tipo exportado ─────────────────────────────────────────────────────────────
 
@@ -459,10 +468,26 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               </button>
             </div>
             {homeLat && homeLng ? (
-              <p className="text-[11px] text-success mt-1.5 flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                Ubicado en el mapa · {homeLat.toFixed(4)}, {homeLng.toFixed(4)}
-              </p>
+              <>
+                <p className="text-[11px] text-success mt-1.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  Ubicado · {homeLat.toFixed(4)}, {homeLng.toFixed(4)}
+                </p>
+                <div style={{ height: 160, borderRadius: 12, overflow: 'hidden', marginTop: 8, border: '1px solid #10B98140' }}>
+                  <MapContainer
+                    key={`${homeLat.toFixed(5)}-${homeLng.toFixed(5)}`}
+                    center={[homeLat, homeLng]}
+                    zoom={16}
+                    scrollWheelZoom={false}
+                    zoomControl={false}
+                    attributionControl={false}
+                    style={{ height: '100%', width: '100%' }}
+                  >
+                    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                    <Marker position={[homeLat, homeLng]} icon={HOME_PREVIEW_ICON} />
+                  </MapContainer>
+                </div>
+              </>
             ) : homeAddress ? (
               <p className="text-[11px] text-text-muted mt-1.5">
                 Presioná el botón buscar para geolocalizar la dirección
