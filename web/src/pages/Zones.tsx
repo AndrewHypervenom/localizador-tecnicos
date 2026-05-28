@@ -615,11 +615,11 @@ export function Zones() {
       // 1. Link de Google Maps → extraer coordenadas directamente
       const gmCoords = extractGoogleMapsCoords(raw)
       if (gmCoords) {
-        setGeocodeResult({ lat: gmCoords.lat, lng: gmCoords.lng, displayName: `📍 ${gmCoords.lat.toFixed(6)}, ${gmCoords.lng.toFixed(6)}` })
-        setFitCoords([
-          [gmCoords.lat - 0.003, gmCoords.lng - 0.003],
-          [gmCoords.lat + 0.003, gmCoords.lng + 0.003],
-        ])
+        const result: GeocodingResult = { lat: gmCoords.lat, lng: gmCoords.lng, displayName: `📍 ${gmCoords.lat.toFixed(6)}, ${gmCoords.lng.toFixed(6)}` }
+        setGeocodeResult(result)
+        const circle = circlePolygon(gmCoords.lat, gmCoords.lng, geocodeRadius / 1000)
+        setDrawnCoords(circle)
+        setFitCoords(circle)
         return
       }
 
@@ -630,10 +630,10 @@ export function Zones() {
       if (!result) result = await geocodeAddress(raw)
       if (!result) { toast.error('No se encontró la dirección'); return }
       setGeocodeResult(result)
-      setFitCoords([
-        [result.lat - 0.045, result.lng - 0.045],
-        [result.lat + 0.045, result.lng + 0.045],
-      ])
+      // Generar círculo automáticamente al encontrar la dirección
+      const circle = circlePolygon(result.lat, result.lng, geocodeRadius / 1000)
+      setDrawnCoords(circle)
+      setFitCoords(circle)
     } catch {
       toast.error('Error al buscar la dirección')
     } finally {
@@ -1396,7 +1396,10 @@ export function Zones() {
               onChange={setEditCoords}
             />
           )}
-          {mode === 'creating' && cityBoundary && (
+          {mode === 'creating' && drawnCoords && (
+            <CityBoundaryPreview coords={drawnCoords} color={newZoneForm.color} />
+          )}
+          {mode === 'creating' && cityBoundary && !drawnCoords && (
             <CityBoundaryPreview coords={cityBoundary.coords} color={newZoneForm.color} />
           )}
         </MapContainer>
