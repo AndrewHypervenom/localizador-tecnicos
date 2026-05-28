@@ -48,6 +48,18 @@ const FAB_ACTIONS: { id: PanelView | 'zones'; icon: React.ElementType; label: st
   { id: 'zones',       icon: Layers,       label: 'Zonas'       },
 ]
 
+const fabItemVariants = {
+  hidden: { opacity: 0, scale: 0.85, y: 8 },
+  visible: (i: number) => ({
+    opacity: 1, scale: 1, y: 0,
+    transition: { delay: i * 0.04, duration: 0.15, ease: 'easeOut' as const },
+  }),
+  exit: (i: number) => ({
+    opacity: 0, scale: 0.85, y: 8,
+    transition: { delay: (FAB_ACTIONS.length - 1 - i) * 0.03, duration: 0.12, ease: 'easeIn' as const },
+  }),
+}
+
 interface RouteRow {
   id: string
   technician_name: string
@@ -467,40 +479,46 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
         </div>
 
         {/* FAB — Speed Dial (bottom right) */}
-        <div className="absolute bottom-6 right-4 z-[500] flex flex-col-reverse items-end gap-2">
-          <AnimatePresence>
-            {fabOpen && FAB_ACTIONS.map((action, i) => {
-              const Icon = action.icon
-              const showBadge = action.id === 'alerts' && unreadAlertsCount > 0
-              return (
-                <motion.button
-                  key={action.id}
-                  initial={{ opacity: 0, scale: 0.85, y: 8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.85, y: 8 }}
-                  transition={{ delay: i * 0.035, duration: 0.15 }}
-                  onClick={() => {
-                    setFabOpen(false)
-                    if (action.id === 'zones') { navigate('/zones'); return }
-                    onOpenPanel(action.id as PanelView)
-                  }}
-                  className="flex items-center gap-2.5 bg-surface/95 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 shadow-xl hover:bg-surface transition-colors group cursor-pointer"
-                >
-                  <span className="text-text-muted text-xs font-medium group-hover:text-text-primary whitespace-nowrap">
-                    {action.label}
-                  </span>
-                  <div className="relative flex-shrink-0">
-                    <Icon className="w-4 h-4 text-text-muted group-hover:text-primary transition-colors" />
-                    {showBadge && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[9px] font-bold min-w-[14px] h-3.5 rounded-full flex items-center justify-center px-0.5 animate-pulse">
-                        {unreadAlertsCount > 9 ? '9+' : unreadAlertsCount}
-                      </span>
-                    )}
-                  </div>
-                </motion.button>
-              )
-            })}
-          </AnimatePresence>
+        <div className="absolute bottom-6 right-4 z-[500]">
+          {/* Items — posicionados sobre el botón, no afectan su layout */}
+          <div className="absolute bottom-14 right-0 flex flex-col items-end gap-2">
+            <AnimatePresence>
+              {fabOpen && FAB_ACTIONS.map((action, i) => {
+                const Icon = action.icon
+                const showBadge = action.id === 'alerts' && unreadAlertsCount > 0
+                return (
+                  <motion.button
+                    key={action.id}
+                    custom={i}
+                    variants={fabItemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    onClick={() => {
+                      setFabOpen(false)
+                      if (action.id === 'zones') { navigate('/zones'); return }
+                      onOpenPanel(action.id as PanelView)
+                    }}
+                    className="flex items-center gap-2.5 bg-surface/95 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 shadow-xl hover:bg-surface transition-colors group cursor-pointer"
+                  >
+                    <span className="text-text-muted text-xs font-medium group-hover:text-text-primary whitespace-nowrap">
+                      {action.label}
+                    </span>
+                    <div className="relative flex-shrink-0">
+                      <Icon className="w-4 h-4 text-text-muted group-hover:text-primary transition-colors" />
+                      {showBadge && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-danger text-white text-[9px] font-bold min-w-[14px] h-3.5 rounded-full flex items-center justify-center px-0.5 animate-pulse">
+                          {unreadAlertsCount > 9 ? '9+' : unreadAlertsCount}
+                        </span>
+                      )}
+                    </div>
+                  </motion.button>
+                )
+              })}
+            </AnimatePresence>
+          </div>
+
+          {/* Botón principal — siempre en la misma posición, nunca se mueve */}
           <button
             onClick={() => setFabOpen(v => !v)}
             className={cn(
