@@ -489,6 +489,23 @@ function CityBoundaryPreview({ coords, color }: CityBoundaryPreviewProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Extrae coordenadas de un link de Google Maps
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
+  // Coordenadas exactas del pin: !3d<lat>!4d<lng>
+  const pinMatch = input.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
+  if (pinMatch) return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) }
+  // Centro del viewport: /@<lat>,<lng>,<zoom>
+  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),/)
+  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
+  // Parámetro ll=lat,lng (URLs cortas)
+  const llMatch = input.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
+  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
+  return null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -593,11 +610,24 @@ export function Zones() {
     setGeocodeLoading(true)
     setGeocodeResult(null)
     try {
-      // Primero intenta Claude + Google Maps (backend); si falla, usa Nominatim
+      const raw = geocodeQuery.trim()
+
+      // 1. Link de Google Maps → extraer coordenadas directamente
+      const gmCoords = extractGoogleMapsCoords(raw)
+      if (gmCoords) {
+        setGeocodeResult({ lat: gmCoords.lat, lng: gmCoords.lng, displayName: `📍 ${gmCoords.lat.toFixed(6)}, ${gmCoords.lng.toFixed(6)}` })
+        setFitCoords([
+          [gmCoords.lat - 0.003, gmCoords.lng - 0.003],
+          [gmCoords.lat + 0.003, gmCoords.lng + 0.003],
+        ])
+        return
+      }
+
+      // 2. Texto de dirección → Claude + Google Maps (backend), fallback Nominatim
       let result: GeocodingResult | null = null
-      const claudeRes = await geocodeWithClaude(geocodeQuery.trim(), '')
+      const claudeRes = await geocodeWithClaude(raw, '')
       result = claudeRes.result
-      if (!result) result = await geocodeAddress(geocodeQuery.trim())
+      if (!result) result = await geocodeAddress(raw)
       if (!result) { toast.error('No se encontró la dirección'); return }
       setGeocodeResult(result)
       setFitCoords([
@@ -1051,14 +1081,14 @@ export function Zones() {
             {/* Geocoding */}
             <div className="mt-4 space-y-2">
               <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
-                Buscar por dirección
+                Buscar por dirección o link de Google Maps
               </label>
               <div className="flex gap-2">
                 <input
                   value={geocodeQuery}
                   onChange={(e) => setGeocodeQuery(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !geocodeLoading) handleGeocode() }}
-                  placeholder="Ej: Av. Insurgentes 1234, CDMX"
+                  placeholder="Dirección o pega un link de Google Maps"
                   className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 />
                 <button
