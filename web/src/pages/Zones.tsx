@@ -531,6 +531,7 @@ export function Zones() {
   const [fitCoords,      setFitCoords]      = useState<[number, number][] | null>(null)
   const drawRef = useRef<DrawHandle>(null)
 
+  const [isSuperAdmin,   setIsSuperAdmin]   = useState(false)
   const [defaultCountry, setDefaultCountry] = useState('Colombia')
 
   const [companies,      setCompanies]      = useState<{ id: string; name: string }[]>([])
@@ -567,12 +568,15 @@ export function Zones() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const userId = session?.user?.id ?? ''
       const role   = session?.user?.app_metadata?.role as string | undefined
+      setIsSuperAdmin(role === 'superadmin')
       const query  = supabase.from('companies').select('id, name').order('name')
       const scoped = role === 'superadmin' ? query : query.eq('created_by', userId)
       scoped.then(({ data }) => {
         const list = data ?? []
         setCompanies(list)
-        if (list.length === 1) setZoneCompanyId(list[0].id)
+        // Líderes siempre tienen su empresa pre-seleccionada — no pueden dejarla vacía
+        if (role !== 'superadmin' && list.length > 0) setZoneCompanyId(list[0].id)
+        else if (list.length === 1) setZoneCompanyId(list[0].id)
       })
     })
   }, [])
@@ -1098,7 +1102,7 @@ export function Zones() {
                 onChange={e => setZoneCompanyId(e.target.value)}
                 className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               >
-                <option value="">Todas las empresas</option>
+                {isSuperAdmin && <option value="">Todas las empresas</option>}
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
 
@@ -1108,14 +1112,14 @@ export function Zones() {
                   onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Toda la empresa (sin campaña específica)</option>
+                  <option value="">Toda la empresa (todas sus campañas)</option>
                   {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}
 
               <p className="text-xs text-text-muted/70 italic px-0.5">
                 {!zoneCompanyId
-                  ? '⚠️ Visible para todos los usuarios del sistema'
+                  ? '⚠️ Selecciona una empresa para continuar'
                   : !zoneCampaignId
                     ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
                     : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
@@ -1368,7 +1372,7 @@ export function Zones() {
                 onChange={e => setZoneCompanyId(e.target.value)}
                 className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               >
-                <option value="">Todas las empresas</option>
+                {isSuperAdmin && <option value="">Todas las empresas</option>}
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
 
@@ -1378,14 +1382,14 @@ export function Zones() {
                   onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Toda la empresa (sin campaña específica)</option>
+                  <option value="">Toda la empresa (todas sus campañas)</option>
                   {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}
 
               <p className="text-xs text-text-muted/70 italic px-0.5">
                 {!zoneCompanyId
-                  ? '⚠️ Visible para todos los usuarios del sistema'
+                  ? '⚠️ Selecciona una empresa para continuar'
                   : !zoneCampaignId
                     ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
                     : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
