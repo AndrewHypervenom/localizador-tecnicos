@@ -639,12 +639,27 @@ export function Zones() {
         return
       }
 
-      // 2. Texto de dirección → Claude + Google Maps (backend), fallback Nominatim
+      // 2. Texto de dirección → buscar restringido al país de la campaña
+      // Forzar país en la consulta para sesgar resultados
+      const queryWithCountry = `${raw}, ${defaultCountry}`
       let result: GeocodingResult | null = null
       const claudeRes = await geocodeWithClaude(raw, '')
       result = claudeRes.result
-      if (!result) result = await geocodeAddress(raw)
-      if (!result) { toast.error('No se encontró la dirección'); return }
+      // Si Claude no devuelve resultado, usar Nominatim con país incluido
+      if (!result) result = await geocodeAddress(queryWithCountry)
+
+      if (!result) {
+        toast.error(`No se encontró "${raw}" en ${defaultCountry}. Verifica que sea una dirección de ${defaultCountry}.`)
+        return
+      }
+
+      // Validar que el resultado pertenece al país esperado
+      const inCountry = result.displayName.toLowerCase().includes(defaultCountry.toLowerCase())
+      if (!inCountry) {
+        toast.error(`Esta dirección no corresponde a ${defaultCountry}. Solo puedes crear zonas en el país de tu campaña.`)
+        return
+      }
+
       setGeocodeResult(result)
       const circle = circlePolygon(result.lat, result.lng, radiusKm)
       setDrawnCoords(circle)
