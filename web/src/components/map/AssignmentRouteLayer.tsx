@@ -78,19 +78,43 @@ function buildPopup(a: TechnicianAssignment): string {
 function buildHomePopup(
   name: string, lat: number, lng: number,
   address?: string | null, city?: string | null, country?: string | null,
+  phone?: string | null,
 ): string {
   const isUrl = (s: string) => s.startsWith('http://') || s.startsWith('https://')
   const showAddress = address && !isUrl(address)
-  const mapsUrl = `https://maps.google.com/?q=${lat},${lng}`
-  return `<div style="font-family:system-ui,sans-serif;padding:6px 4px;min-width:190px;">
-    <div style="font-weight:700;font-size:13px;color:#f1f5f9;padding-bottom:5px;margin-bottom:5px;border-bottom:1px solid #1e293b;">
-      Casa de ${name}
+  const mapsUrl     = `https://maps.google.com/?q=${lat},${lng}`
+  const initials    = name.split(/\s+/).slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase()
+
+  const row = (label: string, value: string) =>
+    `<div style="display:flex;gap:6px;margin-bottom:4px;">
+      <span style="font-size:10px;color:#475569;font-weight:600;min-width:56px;padding-top:1px;">${label}</span>
+      <span style="font-size:11px;color:#cbd5e1;flex:1;">${value}</span>
+    </div>`
+
+  return `<div style="font-family:system-ui,sans-serif;min-width:220px;overflow:hidden;">
+    <div style="background:#1e293b;padding:10px 12px 9px;display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:50%;background:#7c3aed22;border:2px solid #7c3aed88;
+        display:flex;align-items:center;justify-content:center;
+        font-weight:800;font-size:13px;color:#a78bfa;flex-shrink:0;">
+        ${initials}
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:13px;color:#f1f5f9;line-height:1.2;">${name}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px;letter-spacing:0.03em;">Dirección de casa</div>
+      </div>
     </div>
-    ${showAddress ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">${address}</div>` : ''}
-    ${city ? `<div style="font-size:11px;color:#64748b;margin-bottom:6px;">${city}${country ? `, ${country}` : ''}</div>` : ''}
-    <a href="${mapsUrl}" target="_blank" rel="noopener" style="font-size:11px;color:#60a5fa;text-decoration:none;font-weight:600;">
-      Ver en Google Maps &rarr;
-    </a>
+    <div style="padding:9px 12px 10px;background:#0f172a;border-top:1px solid #1e293b;">
+      ${showAddress ? row('Dirección', address!) : ''}
+      ${city        ? row('Ciudad',    city + (country ? `, ${country}` : '')) : ''}
+      ${phone       ? row('Teléfono',  phone) : ''}
+      <a href="${mapsUrl}" target="_blank" rel="noopener"
+        style="display:block;text-align:center;margin-top:8px;padding:5px 10px;
+          background:#1e40af22;border:1px solid #1e40af55;border-radius:6px;
+          font-size:11px;color:#60a5fa;text-decoration:none;font-weight:600;
+          transition:background 0.15s;">
+        Ver en Google Maps
+      </a>
+    </div>
   </div>`
 }
 
@@ -154,7 +178,7 @@ export function AssignmentRouteLayer() {
       homeCircleRef.current = circle
 
       const hm = L.marker([homeLat, homeLng], { icon: createHomeIcon(), zIndexOffset: 200 })
-      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', homeLat, homeLng, tech?.home_address, techExtra?.city, techExtra?.country))
+      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', homeLat, homeLng, tech?.home_address, techExtra?.city, techExtra?.country, tech?.phone), { maxWidth: 280 })
       hm.addTo(map)
       homeRef.current = hm
     }
