@@ -24,6 +24,8 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   const { setTechnicians, replaceTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
   const prevStatusesRef = useRef<Record<string, TechnicianStatus>>({})
   const filterRef = useRef(filterByIds)
+  // true tras un corte de realtime: dispara un catch-up al reconectar
+  const wasDisconnectedRef = useRef(false)
 
   useEffect(() => {
     filterRef.current = filterByIds
@@ -116,10 +118,20 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
 
     loadInitialState()
     loadInitialAlerts()
-    const pollInterval = setInterval(loadInitialState, 30_000)
+    // No pollear mientras la pestaña esté oculta (ahorra red/CPU en segundo plano)
+    const pollInterval = setInterval(() => { if (!document.hidden) loadInitialState() }, 30_000)
+
+    // Al volver a la pestaña, refrescar de inmediato en vez de esperar al próximo tick
+    const onVisible = () => {
+      if (document.hidden) return
+      loadInitialState()
+      useTrackingStore.getState().refreshStatuses()
+    }
+    document.addEventListener('visibilitychange', onVisible)
 
     // Recalcular estados basados en tiempo transcurrido (detecta cuando la app deja de enviar)
     const statusRefreshInterval = setInterval(() => {
+      if (document.hidden) return
       const store = useTrackingStore.getState()
 
       // Capturar estados anteriores antes de refrescar
@@ -178,9 +190,18 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
         }
       )
       .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED')    setRealtimeStatus('connected')
-        if (status === 'CHANNEL_ERROR') { setRealtimeStatus('error'); console.error('[Realtime] location_events:', err) }
-        if (status === 'CLOSED')        setRealtimeStatus('disconnected')
+        if (status === 'SUBSCRIBED') {
+          setRealtimeStatus('connected')
+          // Catch-up: tras reconectar (supabase-js re-une el canal solo), recuperar
+          // posiciones y alertas que pudieron emitirse durante el corte.
+          if (wasDisconnectedRef.current) {
+            wasDisconnectedRef.current = false
+            loadInitialState()
+            loadInitialAlerts()
+          }
+        }
+        if (status === 'CHANNEL_ERROR') { setRealtimeStatus('error'); wasDisconnectedRef.current = true; console.error('[Realtime] location_events:', err) }
+        if (status === 'CLOSED' || status === 'TIMED_OUT') { setRealtimeStatus('disconnected'); wasDisconnectedRef.current = true }
       })
 
     // Suscripción a alertas de movimiento brusco
@@ -194,16 +215,11 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           if (!row) return
 
           // Guard: ignorar técnicos que no están en nuestro store (fuera de scope)
-          if (!useTrackingStore.getState().technicians[row.technician_id]) return
+          const tech = useTrackingStore.getState().technicians[row.technician_id]
+          if (!tech) return
 
-          // Obtener nombre del técnico
-          const { data: tech } = await supabase
-            .from('technicians')
-            .select('name')
-            .eq('id', row.technician_id)
-            .single()
-
-          const techName = tech?.name ?? 'Técnico desconocido'
+          // El nombre ya está en el store: evita un query por cada alerta (N+1)
+          const techName = tech.name ?? 'Técnico desconocido'
           const [lng, lat] = row.location ? extractLatLng(row.location) : [undefined, undefined]
 
           const alert = {
@@ -223,21 +239,28 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           // Toast de notificación
           const icons: Record<string, string> = {
             accident:    '🚨',
+            sos:         '🆘',
             hard_brake:  '⚠️',
             rapid_accel: '⚡',
             harsh_turn:  '↩️',
+            offline:     '📡',
+            battery_low: '🔋',
           }
           const labels: Record<string, string> = {
             accident:    'ACCIDENTE DETECTADO',
+            sos:         'SOS — EMERGENCIA',
             hard_brake:  'Frenada brusca',
             rapid_accel: 'Aceleración rápida',
             harsh_turn:  'Giro brusco',
+            offline:     'Técnico sin señal',
+            battery_low: 'Batería baja',
           }
 
           const icon  = icons[row.event_type]  ?? '⚠️'
           const label = labels[row.event_type] ?? 'Evento de conducción'
 
-          if (row.event_type === 'accident') {
+          const isCritical = row.event_type === 'accident' || row.event_type === 'sos'
+          if (isCritical) {
             toast.error(`${icon} ${label}`, {
               description: techName,
               duration: 0,
@@ -256,18 +279,21 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
     return () => {
       clearInterval(pollInterval)
       clearInterval(statusRefreshInterval)
+      document.removeEventListener('visibilitychange', onVisible)
       supabase.removeChannel(locationChannel)
       supabase.removeChannel(alertChannel)
     }
   }, [setTechnicians, updateTechnicianPosition, addAlert])
 
-  // When filterByIds transitions from null to a real array, trigger a reload
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // When filterByIds transitions from null to a real array, trigger a reload.
+  // Clave estable derivada de los ids para no re-ejecutar en cada render.
+  const filterKey = Array.isArray(filterByIds) ? filterByIds.join(',') : String(filterByIds)
   useEffect(() => {
     if (Array.isArray(filterByIds) && loadFnRef.current) {
       loadFnRef.current()
     }
-  }, [JSON.stringify(filterByIds)])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey])
 }
 
 // Handles WKT ("POINT(lng lat)") and EWKB hex from Supabase Realtime

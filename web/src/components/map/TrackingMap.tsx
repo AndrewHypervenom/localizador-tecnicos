@@ -68,10 +68,15 @@ function MapSizeInvalidator() {
   const map = useMap()
   useEffect(() => {
     const container = map.getContainer()
-    const observer = new ResizeObserver(() => map.invalidateSize())
+    // Coalescer ráfagas de resize (e.g. sidebar animado) en un solo invalidateSize por frame
+    let raf = 0
+    const observer = new ResizeObserver(() => {
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = 0; map.invalidateSize() })
+    })
     observer.observe(container)
     map.invalidateSize()
-    return () => observer.disconnect()
+    return () => { if (raf) cancelAnimationFrame(raf); observer.disconnect() }
   }, [map])
   return null
 }

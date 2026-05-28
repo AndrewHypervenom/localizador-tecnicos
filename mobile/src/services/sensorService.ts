@@ -1,5 +1,6 @@
 import { Accelerometer } from 'expo-sensors';
-import { supabase } from '../lib/supabase';
+import * as Location from 'expo-location';
+import { ensureAuth, supabase } from '../lib/supabase';
 import { enqueueMotion, type MotionRow } from './offlineQueue';
 
 // Thresholds (mirrors the Kotlin SensorMonitorService)
@@ -88,6 +89,35 @@ export function detectMotionFromGPS(speedMs: number, bearingDeg: number) {
 }
 
 // ── Internal ─────────────────────────────────────────────────────────────────
+
+// ── SOS / pánico manual ────────────────────────────────────────────────────
+// Alerta crítica disparada por el técnico. Salta el cooldown y el throttle:
+// se intenta enviar de inmediato y, si no hay red, queda en cola.
+export async function reportSosEvent(technicianId: string): Promise<'sent' | 'queued'> {
+  let location: string | null = null;
+  try {
+    const pos = await Location.getLastKnownPositionAsync();
+    if (pos) location = `POINT(${pos.coords.longitude} ${pos.coords.latitude})`;
+  } catch { /* sin ubicación: igual se envía el SOS */ }
+
+  const row: MotionRow = {
+    technician_id: technicianId,
+    ts:            new Date().toISOString(),
+    event_type:    'sos',
+    severity:      100,
+    location,
+  };
+
+  try {
+    await ensureAuth();
+    const { error } = await supabase.from('motion_events').insert(row);
+    if (error) throw new Error(error.message);
+    return 'sent';
+  } catch {
+    await enqueueMotion(row);
+    return 'queued';
+  }
+}
 
 async function reportMotionEvent(type: string, severity: number) {
   const now    = Date.now();

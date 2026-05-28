@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Image,
   RefreshControl,
   SafeAreaView,
@@ -21,6 +22,9 @@ import {
   startTracking,
   stopTracking,
 } from '../services/locationService';
+import { ensureBatteryOptimizationExempt } from '../services/batteryOptimization';
+import { reportSosEvent } from '../services/sensorService';
+import { registerWatchdog } from '../services/watchdog';
 import {
   flushLocationQueue,
   flushMotionQueue,
@@ -67,6 +71,25 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [loadDiagnostics]);
 
+  // Watchdog en primer plano: si había sesión activa pero el SO mató el
+  // servicio de ubicación, reiniciarlo al volver a abrir la app.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active') return;
+      try {
+        const techId = await loadTechnicianId();
+        if (!techId) return;
+        if (!(await isTracking())) {
+          await startTracking(techId);
+          setTracking(true);
+        }
+      } catch (e: any) {
+        console.error('[Watchdog AppState]', e?.message);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Inicialización: auto-arranca si había sesión previa y permisos ya concedidos
   useEffect(() => {
     if (!deviceId) return;
@@ -91,6 +114,7 @@ export default function HomeScreen() {
 
           if (tech) {
             await startTracking(tech.id);
+            await registerWatchdog();
             setTechName(tech.name);
             setTracking(true);
             setLoading(false);
@@ -155,8 +179,11 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       await startTracking(tech.id);
+      await registerWatchdog();
       setTechName(tech.name);
       setTracking(true);
+      // Pedir exención de optimización de batería para sostener >=4 h continuas.
+      await ensureBatteryOptimizationExempt();
     } catch (e: any) {
       Alert.alert('Error al iniciar rastreo', e?.message ?? 'No se pudo iniciar el servicio GPS. Reinicia la app e intenta de nuevo.');
     } finally {
@@ -178,6 +205,42 @@ export default function HomeScreen() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  function handleSos() {
+    if (!deviceId) return;
+    Alert.alert(
+      'Enviar SOS',
+      '¿Enviar una alerta de emergencia a tu líder ahora?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Enviar SOS',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data: tech } = await supabase
+                .from('technicians')
+                .select('id')
+                .eq('device_id', deviceId)
+                .maybeSingle();
+              if (!tech) { Alert.alert('Error', 'Este dispositivo no está registrado.'); return; }
+
+              const status = await reportSosEvent(tech.id);
+              await loadDiagnostics();
+              Alert.alert(
+                'SOS',
+                status === 'sent'
+                  ? 'Alerta enviada a tu líder.'
+                  : 'Sin conexión: el SOS se enviará automáticamente al reconectar.',
+              );
+            } catch (e: any) {
+              Alert.alert('Error', e?.message ?? 'No se pudo enviar el SOS.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   const onRefresh = useCallback(async () => {
@@ -265,6 +328,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Botón SOS — alerta de emergencia al líder */}
+        {techName && (
+          <TouchableOpacity style={[styles.button, styles.btnSos]} onPress={handleSos}>
+            <Text style={styles.btnText}>🆘 ENVIAR SOS</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Botón principal */}
         <TouchableOpacity
           style={[styles.button, tracking ? styles.btnStop : styles.btnStart]}
@@ -321,6 +391,7 @@ const styles = StyleSheet.create({
   button:         { width: '100%', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
   btnStart:       { backgroundColor: '#00B82B' },
   btnStop:        { backgroundColor: '#dc2626' },
+  btnSos:         { backgroundColor: '#b91c1c', borderWidth: 1, borderColor: '#fecaca' },
   btnSync:        { backgroundColor: '#7B2FF7' },
   btnText:        { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
   hint:           { fontSize: 11, color: '#252540', marginTop: 8 },

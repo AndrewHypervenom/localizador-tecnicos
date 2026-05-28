@@ -26,13 +26,17 @@
         "FOREGROUND_SERVICE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
     },
     "ios": {
       "bundleIdentifier": "com.empresa.localizador",
       "infoPlist": {
-        "UIBackgroundModes": ["location", "fetch"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
         "NSLocationWhenInUseUsageDescription": "Se necesita tu ubicación para el rastreo del técnico.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Se necesita acceso continuo a la ubicación para el rastreo en segundo plano.",
         "NSLocationAlwaysUsageDescription": "Se necesita acceso continuo a la ubicación para el rastreo en segundo plano."
@@ -52,7 +56,8 @@
         {
           "cameraPermission": "Se necesita la cámara para escanear el código QR de registro."
         }
-      ]
+      ],
+      "expo-background-task"
     ]
   }
 }

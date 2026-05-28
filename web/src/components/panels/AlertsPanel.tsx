@@ -2,10 +2,11 @@ import { useState, forwardRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTrackingStore, MotionAlert, ZoneAlert } from '@/store/trackingStore'
 import {
-  AlertTriangle, Zap, CornerDownLeft, RotateCcw,
+  AlertTriangle, Zap, CornerDownLeft, RotateCcw, Siren, WifiOff, BatteryLow,
   CheckCheck, Eye, BellOff, LogIn, LogOut, Layers, CalendarDays, Clock, CalendarX, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { EnablePushButton } from '@/components/EnablePushButton'
 import { formatDistanceToNow, startOfDay, isEqual, isBefore, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
@@ -14,9 +15,12 @@ import { persistZoneAlertAck } from '@/hooks/useZoneEvents'
 // ── Alertas de movimiento ──────────────────────────────────────────
 const MOTION_CONFIG: Record<string, { icon: any; label: string; color: string; bg: string }> = {
   accident:    { icon: AlertTriangle,  label: 'Accidente',           color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  sos:         { icon: Siren,          label: 'SOS — Emergencia',    color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
   hard_brake:  { icon: CornerDownLeft, label: 'Frenada brusca',      color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
   rapid_accel: { icon: Zap,            label: 'Aceleración rápida',  color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
   harsh_turn:  { icon: RotateCcw,      label: 'Giro brusco',         color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
+  offline:     { icon: WifiOff,        label: 'Técnico sin señal',   color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  battery_low: { icon: BatteryLow,     label: 'Batería baja',        color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
 }
 
 const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ alert }, ref) => {
@@ -206,28 +210,31 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
               </span>
             )}
           </h2>
-          {unackedCount > 0 && (
-            <button
-              onClick={async () => {
-                const motionIds = alerts.filter((a) => !a.acknowledged).map((a) => a.id)
-                const zoneIds   = zoneAlerts.filter((a) => !a.acknowledged).map((a) => a.id)
-                acknowledgeAllAlerts()
-                if (motionIds.length) {
-                  const { error } = await supabase.from('motion_events').update({ acknowledged: true }).in('id', motionIds)
-                  if (error) console.error('[AlertsPanel] Error al marcar todas motion_events:', error)
-                }
-                if (zoneIds.length) {
-                  const { error } = await supabase.from('zone_events').update({ acknowledged: true }).in('id', zoneIds)
-                  if (error) console.error('[AlertsPanel] Error al marcar todas zone_events:', error)
-                }
-              }}
-              title="Marcar todas como vistas"
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-success transition-colors px-1.5 py-1 rounded-lg hover:bg-success/10"
-            >
-              <CheckCheck className="w-3.5 h-3.5" />
-              Todas vistas
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            <EnablePushButton />
+            {unackedCount > 0 && (
+              <button
+                onClick={async () => {
+                  const motionIds = alerts.filter((a) => !a.acknowledged).map((a) => a.id)
+                  const zoneIds   = zoneAlerts.filter((a) => !a.acknowledged).map((a) => a.id)
+                  acknowledgeAllAlerts()
+                  if (motionIds.length) {
+                    const { error } = await supabase.from('motion_events').update({ acknowledged: true }).in('id', motionIds)
+                    if (error) console.error('[AlertsPanel] Error al marcar todas motion_events:', error)
+                  }
+                  if (zoneIds.length) {
+                    const { error } = await supabase.from('zone_events').update({ acknowledged: true }).in('id', zoneIds)
+                    if (error) console.error('[AlertsPanel] Error al marcar todas zone_events:', error)
+                  }
+                }}
+                title="Marcar todas como vistas"
+                className="flex items-center gap-1 text-xs text-text-muted hover:text-success transition-colors px-1.5 py-1 rounded-lg hover:bg-success/10"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                Todas vistas
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Mini stats */}

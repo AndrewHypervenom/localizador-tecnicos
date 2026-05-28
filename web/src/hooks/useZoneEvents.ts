@@ -13,8 +13,9 @@ export async function persistZoneAlertAck(alertId: string) {
 
 export function useZoneEvents() {
   // Refs para acceder a datos frescos SIN recrear la suscripción
-  const techRef      = useRef<Record<string, TechnicianState>>({})
-  const zonesRef     = useRef<Zone[]>([])
+  const techRef           = useRef<Record<string, TechnicianState>>({})
+  const zonesRef          = useRef<Zone[]>([])
+  const wasDisconnectedRef = useRef(false)
 
   const technicians  = useTrackingStore((s) => s.technicians)
   const addZoneAlert = useTrackingStore((s) => s.addZoneAlert)
@@ -97,9 +98,16 @@ export function useZoneEvents() {
         }
       )
       .subscribe((status) => {
+        if (status === 'SUBSCRIBED' && wasDisconnectedRef.current) {
+          // Catch-up: recuperar eventos de zona perdidos durante el corte
+          wasDisconnectedRef.current = false
+          loadInitialZoneAlerts()
+        }
         if (status === 'CHANNEL_ERROR') {
+          wasDisconnectedRef.current = true
           console.error('[ZoneEvents] Error en canal Realtime — verifica que zone_events esté en supabase_realtime publication')
         }
+        if (status === 'CLOSED' || status === 'TIMED_OUT') wasDisconnectedRef.current = true
       })
 
     return () => { supabase.removeChannel(channel) }
