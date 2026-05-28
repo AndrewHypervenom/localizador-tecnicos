@@ -41,9 +41,8 @@ function rowToZone(row: any): Zone | null {
  * Sin `date` (página admin): carga las zonas activas de la empresa del usuario.
  *
  * Con `date` ('yyyy-MM-dd'):
- *   1. Verifica si hay rutas en technician_routes para ese día.
- *   2. Si NO hay rutas → setZones([])  — mapa limpio.
- *   3. Si SÍ hay rutas → muestra solo las zonas cuyo route_date coincide.
+ *   - Zonas permanentes (route_date IS NULL) → siempre visibles.
+ *   - Zonas de ruta (route_date = date)      → solo cuando hay rutas ese día.
  *
  * Aislamiento multi-tenant: solo superadmin ve todas las zonas; el resto
  * ve únicamente las zonas cuyo company_id pertenece a sus empresas.
@@ -86,25 +85,19 @@ export function useZones(date?: string) {
       return
     }
 
-    // ── Con fecha: tres consultas en paralelo ────────────────────────────
-    const [zonesRes, idsRes, routesRes] = await Promise.all([
+    // ── Con fecha: dos consultas en paralelo ─────────────────────────────
+    const [zonesRes, routesRes] = await Promise.all([
       applyScope(supabase.from('zones_geojson').select('*').eq('is_active', true)),
-      supabase.from('zones').select('id').eq('route_date', filterDate).eq('is_active', true),
       supabase.from('technician_routes').select('id').eq('route_date', filterDate).limit(1),
     ])
 
     if (zonesRes.error) { console.error('[Zones]', zonesRes.error); return }
 
-    // Sin rutas para este día → mapa sin zonas
-    if ((routesRes.data ?? []).length === 0) {
-      setZones([])
-      return
-    }
+    const hasRoutes = (routesRes.data ?? []).length > 0
 
-    // Con rutas → mostrar solo las zonas de la fecha exacta
-    const matchIds = new Set((idsRes.data ?? []).map((r: any) => r.id))
+    // Permanentes (sin fecha) → siempre; de ruta → solo si hay rutas ese día
     const zones = (zonesRes.data ?? [])
-      .filter((r: any) => matchIds.has(r.id))
+      .filter((r: any) => !r.route_date || (hasRoutes && r.route_date === filterDate))
       .map((r: any) => rowToZone(r))
       .filter(Boolean) as Zone[]
 
