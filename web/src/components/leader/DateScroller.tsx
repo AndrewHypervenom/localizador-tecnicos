@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useMemo, useRef } from 'react'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import {
   format, addDays, subDays, startOfWeek, parseISO,
-  isToday, isSameDay,
+  isToday,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,18 @@ interface Props {
 }
 
 export function DateScroller({ selected, onChange, weekStart, onWeekChange, markedDates = [] }: Props) {
-  const markedSet = useMemo(() => new Set(markedDates), [markedDates])
+  const markedSet   = useMemo(() => new Set(markedDates), [markedDates])
+  const dateInputRef = useRef<HTMLInputElement>(null)
+
+  function openCalendar() {
+    const input = dateInputRef.current
+    if (!input) return
+    if (typeof (input as any).showPicker === 'function') {
+      ;(input as any).showPicker()
+    } else {
+      input.focus()
+    }
+  }
 
   const weekDays = useMemo(() => {
     const monday = parseISO(weekStart)
@@ -46,7 +57,28 @@ export function DateScroller({ selected, onChange, weekStart, onWeekChange, mark
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-text-primary text-sm font-semibold capitalize">{monthLabel}</span>
+
+        {/* Month label — click to open calendar picker */}
+        <button
+          onClick={openCalendar}
+          title="Ir a una fecha"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-surface-raised transition-colors group"
+        >
+          <CalendarDays className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />
+          <span className="text-text-primary text-sm font-semibold capitalize">{monthLabel}</span>
+        </button>
+
+        {/* Hidden native date input — triggered programmatically */}
+        <input
+          ref={dateInputRef}
+          type="date"
+          value={selected}
+          onChange={e => { if (e.target.value) onChange(e.target.value) }}
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+
         <button
           onClick={nextWeek}
           className="p-1.5 rounded-lg hover:bg-surface-raised transition-colors text-text-muted hover:text-text-primary"

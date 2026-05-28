@@ -164,6 +164,7 @@ export function LeaderHistory() {
   const [routePoints, setRoutePoints]   = useState<RoutePoint[]>([])
   const [elevData, setElevData]         = useState<any[]>([])
   const [loading, setLoading]           = useState(false)
+  const dateInputRef = useRef<HTMLInputElement>(null)
 
   const todayStr = format(new Date(), 'yyyy-MM-dd')
 
@@ -284,15 +285,21 @@ export function LeaderHistory() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-            <input type="date" value={customDate} max={todayStr}
+            <button
+              onClick={() => (dateInputRef.current as any)?.showPicker?.() ?? dateInputRef.current?.focus()}
+              title="Seleccionar fecha"
+              className="text-text-muted hover:text-primary transition-colors flex-shrink-0"
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+            </button>
+            <input ref={dateInputRef} type="date" value={customDate} max={todayStr}
               onChange={e => {
                 setCustomDate(e.target.value)
                 if (e.target.value) setDateFilter('custom')
                 else setDateFilter('today')
               }}
               className={cn(
-                'flex-1 bg-surface-raised border rounded-lg px-2 py-1 text-xs text-text-primary',
+                'flex-1 bg-surface-raised border rounded-lg px-2 py-1 text-xs text-text-primary cursor-pointer',
                 'focus:outline-none focus:ring-1 focus:ring-primary/50 transition-colors',
                 dateFilter === 'custom' ? 'border-primary/40 bg-primary/5' : 'border-border'
               )} />
