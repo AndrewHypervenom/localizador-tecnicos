@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Edit2, X, Loader2, Save, MapPin, Building2,
@@ -29,6 +29,7 @@ export interface TechnicianEditable {
   home_address: string | null
   home_lat:     number | null
   home_lng:     number | null
+  company_id:   string | null
 }
 
 // ── Helpers UI ─────────────────────────────────────────────────────────────────
@@ -65,8 +66,6 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 }) {
   const [name,    setName]    = useState(tech.name)
   const [phone,   setPhone]   = useState(tech.phone   ?? '')
-  const [client,  setClient]  = useState(tech.client  ?? '')
-  const [project, setProject] = useState(tech.project ?? '')
   const [country, setCountry] = useState(tech.country ?? '')
   const [city,    setCity]    = useState(tech.city    ?? '')
   const [notes,   setNotes]   = useState(tech.notes   ?? '')
@@ -84,7 +83,52 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   const [homeLng,       setHomeLng]       = useState<number | null>(tech.home_lng ?? null)
   const [geocodingHome, setGeocodingHome] = useState(false)
 
-  const cityOptions = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+  // Org dropdowns
+  const [companies,    setCompanies]    = useState<{ id: string; name: string }[]>([])
+  const [allCampaigns, setAllCampaigns] = useState<{ id: string; name: string; company_id: string }[]>([])
+  const [loadingOrgs,  setLoadingOrgs]  = useState(true)
+  const [selectedCompanyId,  setSelectedCompanyId]  = useState(tech.company_id ?? '')
+  const [selectedCampaignId, setSelectedCampaignId] = useState('')
+
+  const cityOptions       = country ? (CITIES_BY_COUNTRY[country] ?? []) : []
+  const filteredCampaigns = allCampaigns.filter(c => c.company_id === selectedCompanyId)
+
+  // Load companies + campaigns, then pre-select based on existing data
+  useEffect(() => {
+    setLoadingOrgs(true)
+    Promise.all([
+      supabase.from('companies').select('id, name').order('name'),
+      supabase.from('campaigns').select('id, name, company_id').eq('is_active', true).order('name'),
+    ]).then(([{ data: cos }, { data: cps }]) => {
+      const companyList  = cos ?? []
+      const campaignList = cps ?? []
+      setCompanies(companyList)
+      setAllCampaigns(campaignList)
+
+      // Pre-select company: prefer company_id, fall back to matching client name
+      let compId = tech.company_id ?? ''
+      if (!compId && tech.client) {
+        const match = companyList.find(c => c.name === tech.client)
+        if (match) compId = match.id
+      }
+      setSelectedCompanyId(compId)
+
+      // Pre-select campaign by matching project name within that company
+      if (compId && tech.project) {
+        const match = campaignList.find(
+          c => c.company_id === compId && c.name === tech.project
+        )
+        if (match) setSelectedCampaignId(match.id)
+      }
+
+      setLoadingOrgs(false)
+    })
+  }, [])
+
+  function handleCompanyChange(id: string) {
+    setSelectedCompanyId(id)
+    setSelectedCampaignId('')
+  }
 
   function handleCountryChange(newCountry: string) {
     setCountry(newCountry)
@@ -131,12 +175,12 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   async function handleGeocodeHome() {
     if (!homeAddress.trim() || geocodingHome) return
     setGeocodingHome(true)
+    const selectedCompany = companies.find(c => c.id === selectedCompanyId)
     try {
-      // Usar Claude+Google si hay ciudad configurada, Nominatim como fallback
       let lat: number | null = null
       let lng: number | null = null
       if (city) {
-        const res = await geocodeWithClaude(homeAddress.trim(), city, client || null)
+        const res = await geocodeWithClaude(homeAddress.trim(), city, selectedCompany?.name ?? null)
         if (res.result) { lat = res.result.lat; lng = res.result.lng }
       }
       if (!lat || !lng) {
@@ -156,18 +200,20 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   }
 
   async function handleSave() {
-    if (!name.trim()) { setError('El nombre es obligatorio'); return }
+    if (!name.trim())         { setError('El nombre es obligatorio'); return }
+    if (!selectedCompanyId)   { setError('Debes seleccionar una empresa'); return }
+    if (!selectedCampaignId)  { setError('Debes seleccionar una campaña'); return }
     setSaving(true)
     setError(null)
     try {
       let finalLat = homeLat
       let finalLng = homeLng
 
-      // Auto-geocodificar si hay dirección pero sin coordenadas
       if (homeAddress.trim() && (!finalLat || !finalLng)) {
         try {
+          const selectedCompany = companies.find(c => c.id === selectedCompanyId)
           if (city) {
-            const res = await geocodeWithClaude(homeAddress.trim(), city, client || null)
+            const res = await geocodeWithClaude(homeAddress.trim(), city, selectedCompany?.name ?? null)
             if (res.result) { finalLat = res.result.lat; finalLng = res.result.lng }
           }
           if (!finalLat || !finalLng) {
@@ -179,11 +225,15 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         } catch { /* continúa sin coordenadas */ }
       }
 
+      const selectedCompany  = companies.find(c => c.id === selectedCompanyId)
+      const selectedCampaign = filteredCampaigns.find(c => c.id === selectedCampaignId)
+
       await onSave(tech.id, {
         name:         name.trim(),
         phone:        phone.trim()   || null,
-        client:       client.trim()  || null,
-        project:      project.trim() || null,
+        client:       selectedCompany?.name  ?? null,
+        project:      selectedCampaign?.name ?? null,
+        company_id:   selectedCompanyId      || null,
         country:      country        || null,
         city:         city           || null,
         shift:        buildShift(shiftStart, shiftEnd) ?? null,
@@ -250,7 +300,6 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                 />
               </div>
               <div>
-                {/* País con detección por GPS */}
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs text-text-muted font-medium">País</label>
                   {tech.device_id && (
@@ -310,28 +359,50 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
           {/* ── Organización ── */}
           <div>
             <SectionLabel color="bg-accent" label="Organización" />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <FieldLabel label="Cliente / Empresa" />
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                  <input
-                    type="text" value={client} onChange={e => setClient(e.target.value)}
-                    placeholder="Empresa ABC" className={cn(inputCls, 'pl-8')}
-                  />
+            {loadingOrgs ? (
+              <div className="flex items-center gap-2 text-xs text-text-muted py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Cargando empresas y campañas…
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <FieldLabel label="Empresa" required />
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                    <select
+                      value={selectedCompanyId}
+                      onChange={e => handleCompanyChange(e.target.value)}
+                      className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
+                    >
+                      <option value="">Seleccionar empresa</option>
+                      {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel label="Campaña" required />
+                  <div className="relative">
+                    <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                    <select
+                      value={selectedCampaignId}
+                      onChange={e => setSelectedCampaignId(e.target.value)}
+                      disabled={!selectedCompanyId}
+                      className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
+                    >
+                      <option value="">
+                        {!selectedCompanyId
+                          ? 'Seleccionar empresa primero'
+                          : filteredCampaigns.length === 0
+                            ? 'Sin campañas activas'
+                            : 'Seleccionar campaña'}
+                      </option>
+                      {filteredCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div>
-                <FieldLabel label="Proyecto" />
-                <div className="relative">
-                  <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-                  <input
-                    type="text" value={project} onChange={e => setProject(e.target.value)}
-                    placeholder="Instalación Zona Norte" className={cn(inputCls, 'pl-8')}
-                  />
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* ── Notas ── */}
@@ -399,7 +470,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || loadingOrgs}
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

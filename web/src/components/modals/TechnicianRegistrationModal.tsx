@@ -108,7 +108,9 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   }
 
   async function handleCreate() {
-    if (!name.trim()) { setError('El nombre es obligatorio'); return }
+    if (!name.trim())        { setError('El nombre es obligatorio'); return }
+    if (!selectedCompanyId)  { setError('Debes seleccionar una empresa'); return }
+    if (!selectedCampaignId) { setError('Debes seleccionar una campaña'); return }
     setLoading(true)
     setError(null)
     try {
