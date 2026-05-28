@@ -71,7 +71,7 @@ export function Admin() {
           </div>
 
           {/* Navegación de tabs */}
-          <nav className="hidden md:flex items-center gap-1 ml-4">
+          <nav className="hidden md:flex items-center gap-1 ml-4 overflow-x-auto scrollbar-none">
             {TABS.map(tab => {
               const Icon = tab.icon
               const hasBadge = tab.id === 'technicians' && unlinkedCount > 0
@@ -80,7 +80,7 @@ export function Admin() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors relative',
+                    'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors relative whitespace-nowrap flex-shrink-0',
                     activeTab === tab.id
                       ? 'bg-primary/10 text-primary'
                       : 'text-text-muted hover:text-text-primary hover:bg-surface-raised',
@@ -125,7 +125,7 @@ export function Admin() {
         </div>
 
         {/* Tabs móvil */}
-        <div className="md:hidden flex border-t border-border-soft">
+        <div className="md:hidden flex overflow-x-auto border-t border-border-soft">
           {TABS.map(tab => {
             const Icon = tab.icon
             const hasBadge = tab.id === 'technicians' && unlinkedCount > 0
@@ -134,7 +134,7 @@ export function Admin() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex-1 flex flex-col items-center gap-1 py-2 text-xs transition-colors relative',
+                  'flex-shrink-0 min-w-[62px] flex flex-col items-center gap-1 py-2 px-2 text-xs transition-colors relative whitespace-nowrap',
                   activeTab === tab.id
                     ? 'text-primary border-b-2 border-primary'
                     : 'text-text-muted hover:text-text-primary',

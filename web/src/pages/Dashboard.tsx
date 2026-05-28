@@ -451,22 +451,22 @@ export function Dashboard() {
             <span className="text-xs text-primary font-semibold">PositivoS+</span>
           </div>
 
-          <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="flex items-center gap-1.5 pointer-events-auto flex-shrink-0">
             {/* Navegación principal agrupada */}
             <div className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-1.5 py-1.5 flex items-center shadow-xl">
               <Link
                 to="/history"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors whitespace-nowrap"
               >
                 <History className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Historial</span>
+                <span className="hidden lg:inline">Historial</span>
               </Link>
               <Link
                 to="/reports"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors whitespace-nowrap"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Reportes</span>
+                <span className="hidden lg:inline">Reportes</span>
               </Link>
               <ZonesMenu
                 showZones={showZones}
