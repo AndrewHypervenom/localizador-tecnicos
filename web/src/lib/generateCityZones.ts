@@ -66,6 +66,15 @@ function toWkt(coords: [number, number][]): string {
   return `SRID=4326;POLYGON((${pts.join(', ')}))`
 }
 
+// ─── Obtener company_id del usuario actual ────────────────────────────────────
+async function getUserCompanyId(): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const userId = sessionData?.session?.user?.id
+  if (!userId) return null
+  const { data } = await supabase.from('companies').select('id').eq('created_by', userId).limit(1)
+  return (data ?? [])[0]?.id ?? null
+}
+
 // ─── Borrar TODAS las zonas de la base de datos ───────────────────────────────
 // Intenta hard-delete primero; si RLS lo bloquea (count = 0), usa soft-delete
 // como respaldo para que no vuelvan a aparecer en el hook (que filtra is_active).
@@ -137,7 +146,8 @@ export async function generateCityZones(radiusKm = 6): Promise<GenerateResult> {
   const skipped: string[] = []
 
   const { data: sessionData } = await supabase.auth.getSession()
-  const userId = sessionData?.session?.user?.id
+  const userId    = sessionData?.session?.user?.id
+  const companyId = await getUserCompanyId()
 
   let colorIdx = 0
   for (const { city, country, hasCoords } of preview) {
@@ -164,6 +174,7 @@ export async function generateCityZones(radiusKm = 6): Promise<GenerateResult> {
       polygon,
       is_active:   true,
       created_by:  userId ?? null,
+      company_id:  companyId,
     })
 
     if (error) {
@@ -232,7 +243,8 @@ export async function generateRouteZones(
   if (items.length === 0) return { created: 0, skipped: 0, total: 0 }
 
   const { data: sessionData } = await supabase.auth.getSession()
-  const userId = sessionData?.session?.user?.id
+  const userId    = sessionData?.session?.user?.id
+  const companyId = await getUserCompanyId()
 
   // ── Geocodificar TODO en paralelo (1 llamada Claude + Google Maps paralelo) ──
   onProgress?.(0, items.length)
@@ -277,6 +289,7 @@ export async function generateRouteZones(
       polygon,
       is_active:   true,
       created_by:  userId ?? null,
+      company_id:  companyId,
       route_date:  routeDate ?? null,
     })
 

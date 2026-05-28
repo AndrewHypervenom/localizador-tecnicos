@@ -18,7 +18,7 @@ import {
   Zone, ZoneType, ZONE_TYPE_LABELS, ZONE_TYPE_COLORS, ZONE_PALETTE,
 } from '@/types/zones'
 import { deleteAllZones } from '@/lib/generateCityZones'
-import { geocodeAddress, circlePolygon, fetchCityBoundary, CityBoundaryResult } from '@/lib/geocoding'
+import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult } from '@/lib/geocoding'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -514,13 +514,15 @@ export function Zones() {
   const [fitCoords,      setFitCoords]      = useState<[number, number][] | null>(null)
   const drawRef = useRef<DrawHandle>(null)
 
+  const [defaultCountry, setDefaultCountry] = useState('Colombia')
+
   const [companies, setCompanies]         = useState<{ id: string; name: string }[]>([])
   const [zoneCompanyId, setZoneCompanyId] = useState<string>('')
 
   const [geocodeQuery,   setGeocodeQuery]   = useState('')
-  const [geocodeResult,  setGeocodeResult]  = useState<{ lat: number; lng: number; displayName: string } | null>(null)
+  const [geocodeResult,  setGeocodeResult]  = useState<GeocodingResult | null>(null)
   const [geocodeLoading, setGeocodeLoading] = useState(false)
-  const [geocodeRadius,  setGeocodeRadius]  = useState(5)
+  const [geocodeRadius,  setGeocodeRadius]  = useState(500)
 
   const [citySearch,         setCitySearch]         = useState('')
   const [cityLoading,        setCityLoading]        = useState(false)
@@ -529,20 +531,31 @@ export function Zones() {
   const [knownCities,        setKnownCities]        = useState<string[]>([])
 
   useEffect(() => {
-    supabase.from('technicians').select('city').eq('active', true)
+    supabase.from('technicians').select('city, country').eq('active', true)
       .then(({ data }) => {
-        const cities = [...new Set((data ?? []).map((t: any) => t.city).filter(Boolean))] as string[]
+        const rows   = data ?? []
+        const cities = [...new Set(rows.map((t: any) => t.city).filter(Boolean))] as string[]
         setKnownCities(cities.sort())
+        // Detectar país más frecuente para usar en búsqueda de ciudades
+        const counts: Record<string, number> = {}
+        rows.forEach((t: any) => { if (t.country) counts[t.country] = (counts[t.country] || 0) + 1 })
+        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+        if (top) setDefaultCountry(top)
       })
   }, [])
 
   useEffect(() => {
-    supabase.from('companies').select('id, name').order('name')
-      .then(({ data }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const userId = session?.user?.id ?? ''
+      const role   = session?.user?.app_metadata?.role as string | undefined
+      const query  = supabase.from('companies').select('id, name').order('name')
+      const scoped = role === 'superadmin' ? query : query.eq('created_by', userId)
+      scoped.then(({ data }) => {
         const list = data ?? []
         setCompanies(list)
         if (list.length === 1) setZoneCompanyId(list[0].id)
       })
+    })
   }, [])
 
   const defaultCenter: L.LatLngExpression = [4.7110, -74.0721] // Bogotá, Colombia
@@ -580,7 +593,11 @@ export function Zones() {
     setGeocodeLoading(true)
     setGeocodeResult(null)
     try {
-      const result = await geocodeAddress(geocodeQuery.trim())
+      // Primero intenta Claude + Google Maps (backend); si falla, usa Nominatim
+      let result: GeocodingResult | null = null
+      const claudeRes = await geocodeWithClaude(geocodeQuery.trim(), '')
+      result = claudeRes.result
+      if (!result) result = await geocodeAddress(geocodeQuery.trim())
       if (!result) { toast.error('No se encontró la dirección'); return }
       setGeocodeResult(result)
       setFitCoords([
@@ -596,7 +613,7 @@ export function Zones() {
 
   function handleGenerateFromAddress() {
     if (!geocodeResult) return
-    const coords = circlePolygon(geocodeResult.lat, geocodeResult.lng, geocodeRadius)
+    const coords = circlePolygon(geocodeResult.lat, geocodeResult.lng, geocodeRadius / 1000) // metros → km
     setDrawnCoords(coords)
     setFitCoords(coords)
   }
@@ -608,7 +625,7 @@ export function Zones() {
     setCityError(null)
     setCityBoundary(null)
     try {
-      const result = await fetchCityBoundary(query)
+      const result = await fetchCityBoundary(query, defaultCountry)
       if (!result) {
         setCityError('No se encontraron límites para esa ciudad. Intenta con el nombre oficial.')
         return
@@ -1065,11 +1082,11 @@ export function Zones() {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs text-text-muted">Radio de zona</span>
-                      <span className="text-xs font-mono text-text-primary">{geocodeRadius} km</span>
+                      <span className="text-xs font-mono text-text-primary">{geocodeRadius} m</span>
                     </div>
                     <input
                       type="range"
-                      min={1} max={50} step={1}
+                      min={50} max={5000} step={50}
                       value={geocodeRadius}
                       onChange={(e) => setGeocodeRadius(Number(e.target.value))}
                       className="w-full accent-primary"
