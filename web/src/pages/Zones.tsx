@@ -539,7 +539,7 @@ export function Zones() {
   const [geocodeQuery,   setGeocodeQuery]   = useState('')
   const [geocodeResult,  setGeocodeResult]  = useState<GeocodingResult | null>(null)
   const [geocodeLoading, setGeocodeLoading] = useState(false)
-  const [geocodeRadius,  setGeocodeRadius]  = useState(500)
+  const [geocodeRadius,  setGeocodeRadius]  = useState(500) // metros, mínimo 150
 
   const [citySearch,         setCitySearch]         = useState('')
   const [cityLoading,        setCityLoading]        = useState(false)
@@ -1116,7 +1116,7 @@ export function Zones() {
                     </div>
                     <input
                       type="range"
-                      min={100} max={5000} step={50}
+                      min={150} max={5000} step={50}
                       value={geocodeRadius}
                       onChange={(e) => setGeocodeRadius(Number(e.target.value))}
                       className="w-full accent-primary"
