@@ -86,6 +86,18 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
     }).addTo(map)
   }, [playhead, points, map])
 
+  // Al desmontar (cambio de viaje) limpiamos el marcador y detenemos cualquier
+  // reproducción en curso para que no quede sonando del viaje anterior.
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (markerRef.current) {
+        map.removeLayer(markerRef.current)
+        markerRef.current = null
+      }
+    }
+  }, [map])
+
   const segments: { points: [number, number][]; color: string }[] = []
   for (let i = 0; i < Math.min(playhead + 1, points.length - 1); i++) {
     const p = points[i]
@@ -237,6 +249,8 @@ export function LeaderHistory() {
 
   const loadTripDetail = async (trip: Trip) => {
     setSelectedTrip(trip)
+    setRoutePoints([])
+    setElevData([])
     setLoading(true)
     try {
       const to = trip.ended_at ?? new Date().toISOString()
@@ -253,7 +267,7 @@ export function LeaderHistory() {
   }
 
   return (
-    <div className="flex rounded-2xl overflow-hidden border border-border-soft bg-surface" style={{ height: 'calc(100vh - 180px)' }}>
+    <div className="flex h-full rounded-2xl overflow-hidden border border-border-soft bg-surface">
       {/* Panel izquierdo */}
       <div className="w-72 flex-shrink-0 flex flex-col border-r border-border-soft">
         <div className="p-4 space-y-3 border-b border-border-soft">
@@ -441,7 +455,7 @@ export function LeaderHistory() {
                   style={{ height: '100%', width: '100%' }}
                   zoomControl={false} attributionControl={false}>
                   <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-                  {routePoints.length > 0 && <RoutePlayback points={routePoints} />}
+                  {routePoints.length > 0 && <RoutePlayback key={selectedTrip.id} points={routePoints} />}
                 </MapContainer>
               </div>
               <div className="w-64 flex-shrink-0 flex flex-col border-l border-border-soft bg-surface overflow-y-auto p-4 space-y-4">
