@@ -30,6 +30,7 @@ const STATIONARY_SPEED_MS  = 0.7;
 const MIN_MOVE_M           = 15;       // distancia mínima para subir estando lento
 const STATIONARY_UPLOAD_MS = 30_000;   // heartbeat estando detenido
 const STATIONARY_AFTER_MS  = 120_000;  // tiempo detenido antes de bajar a tier STATIONARY
+const ACCURACY_MAX_M       = 50;       // descartar fixes con radio de error mayor (causan "saltos")
 const BATTERY_TTL_MS       = 60_000;   // refrescar batería como mucho cada 60 s
 
 // ── Estado a nivel de módulo (sobrevive entre invocaciones en el mismo hilo JS) ─
@@ -106,6 +107,11 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     } catch (e: any) {
       await storeLastError(e?.message ?? 'Error desconocido');
     }
+
+    // ── Descartar fixes imprecisos: son la causa de los "saltos" en el mapa ──
+    // (un radio de error grande puede caer lejísimos del punto real). El backlog
+    // ya se drenó arriba, así que ignorar este punto no detiene la sincronización.
+    if (accuracy != null && accuracy > ACCURACY_MAX_M) return;
 
     // ── Throttle: si está detenido y ya envió hace poco, no subir el punto nuevo ──
     if (!(await shouldUpload(latitude, longitude, speedMs, now))) return;

@@ -218,6 +218,7 @@ router.get('/technicians/:id/track', async (req: Request, res: Response) => {
        FROM location_events
        WHERE technician_id = $1
          AND ts BETWEEN $2 AND $3
+         AND (accuracy IS NULL OR accuracy < 30)
        GROUP BY to_timestamp(floor(extract(epoch from ts) / 30) * 30)
        ORDER BY ts ASC`,
       [id, fromDate, toDate],

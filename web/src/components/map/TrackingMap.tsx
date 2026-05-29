@@ -160,6 +160,40 @@ function MarkersLayer() {
 // Devuelve solo los puntos de la sesión activa más reciente.
 // Si hay un hueco > 5 min entre puntos consecutivos, descarta todo lo anterior.
 const SESSION_GAP_S = 300
+// ── Descarte de "saltos" GPS ──────────────────────────────────────────────────
+// Un fix basura puede caer lejísimos y la polilínea lo une con una recta larga
+// (efecto de teletransporte). Descartamos el punto cuando implica una velocidad
+// imposible respecto al anterior válido. Umbral alto (150 km/h) para no tocar
+// movimiento real, ya sea a pie o en vehículo.
+const MAX_PLAUSIBLE_KMH = 150
+const MIN_SPIKE_JUMP_M  = 150  // ignora micro-ruido; solo evalúa saltos grandes
+
+function distM(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6_371_000
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(s))
+}
+
+function dropSpikes(pts: RoutePoint[]): RoutePoint[] {
+  if (pts.length < 2) return pts
+  const out: RoutePoint[] = [pts[0]]
+  for (let i = 1; i < pts.length; i++) {
+    const prev = out[out.length - 1]
+    const p    = pts[i]
+    const dM   = distM(prev.lat, prev.lng, p.lat, p.lng)
+    const dt   = (new Date(p.ts).getTime() - new Date(prev.ts).getTime()) / 1000
+    if (dt > 0 && dM > MIN_SPIKE_JUMP_M) {
+      const kmh = (dM / 1000) / (dt / 3600)
+      if (kmh > MAX_PLAUSIBLE_KMH) continue   // punto imposible → descartar
+    }
+    out.push(p)
+  }
+  return out
+}
+
 function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
   if (pts.length < 2) return pts
   let start = 0
@@ -201,8 +235,9 @@ function LiveTrackPlayer({ date }: { date: string }) {
           { params: { date } }
         )
         if (cancelled) return
-        // Solo filtrar sesión activa cuando es hoy (datos en vivo)
-        const pts = isToday ? filterCurrentSession(res.data) : res.data
+        // Solo filtrar sesión activa cuando es hoy (datos en vivo); en todos los
+        // casos descartamos saltos GPS antes de dibujar el recorrido.
+        const pts = dropSpikes(isToday ? filterCurrentSession(res.data) : res.data)
         setPoints(pts)
         if (!silent || atEndRef.current) {
           const end = Math.max(pts.length - 1, 0)
