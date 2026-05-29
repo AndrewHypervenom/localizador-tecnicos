@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { MapContainer, TileLayer, Marker } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '@/lib/supabase'
-import { reverseGeocode, geocodeAddress, geocodeWithClaude } from '@/lib/geocoding'
+import { reverseGeocode, geocodeAddress, geocodeWithClaude, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
 import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
 import { cn } from '@/lib/utils'
@@ -19,16 +19,6 @@ const HOME_PREVIEW_ICON = L.divIcon({
   iconSize:   [32, 32],
   iconAnchor: [16, 16],
 })
-
-function extractGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
-  const pinMatch = input.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
-  if (pinMatch) return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) }
-  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),/)
-  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
-  const llMatch = input.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
-  return null
-}
 
 // ── Tipo exportado ─────────────────────────────────────────────────────────────
 
@@ -217,12 +207,20 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
     setGeocodingHome(true)
     const selectedCompany = companies.find(c => c.id === selectedCompanyId)
     try {
-      // Link de Google Maps → extraer coordenadas directamente
-      const gmCoords = extractGoogleMapsCoords(homeAddress.trim())
+      // Link de Google Maps (largo o corto maps.app.goo.gl) → extraer coordenadas
+      const raw = homeAddress.trim()
+      const isShort = isShortMapsLink(raw)
+      if (isShort) toast.loading('Resolviendo link de Google Maps…', { id: 'gm-resolve' })
+      const gmCoords = await resolveMapsLink(raw)
+      if (isShort) toast.dismiss('gm-resolve')
       if (gmCoords) {
         setHomeLat(gmCoords.lat)
         setHomeLng(gmCoords.lng)
         toast.success('Coordenadas extraídas del link de Google Maps')
+        return
+      }
+      if (isShort) {
+        toast.error('No se pudo resolver el link corto de Google Maps. Intenta con el link largo (el que muestra la dirección en la barra).')
         return
       }
 

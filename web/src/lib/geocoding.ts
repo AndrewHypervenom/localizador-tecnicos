@@ -104,6 +104,45 @@ export async function geocodeWithClaude(
   }
 }
 
+/** Detecta si el texto es un enlace acortado de Google Maps que requiere expandirse en el backend. */
+export function isShortMapsLink(input: string): boolean {
+  return /\b(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|maps\.google\.[a-z.]+\/\?cid=)/i.test(input)
+}
+
+/** Extrae coordenadas de un link de Google Maps que ya las contiene (link largo). */
+export function extractMapsCoordsFromText(input: string): { lat: number; lng: number } | null {
+  const pinMatch = input.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
+  if (pinMatch) return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) }
+  const atMatch = input.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
+  const llMatch = input.match(/[?&](?:ll|q|query)=(-?\d+\.\d+),\+?(-?\d+\.\d+)/)
+  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
+  return null
+}
+
+/** Resuelve coordenadas de cualquier link de Google Maps (largo o corto maps.app.goo.gl).
+ *  Para links largos extrae localmente; para cortos llama al backend que sigue el redirect. */
+export async function resolveMapsLink(input: string): Promise<{ lat: number; lng: number } | null> {
+  const local = extractMapsCoordsFromText(input)
+  if (local) return local
+  if (!isShortMapsLink(input)) return null
+  try {
+    const res = await fetch(`${API_URL}/api/geocoding/expand-maps`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ url: input.trim() }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+      return { lat: data.lat, lng: data.lng }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export interface CityBoundaryResult {
   coords:      [number, number][]
   name:        string

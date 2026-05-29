@@ -18,7 +18,7 @@ import {
   Zone, ZoneType, ZONE_TYPE_LABELS, ZONE_TYPE_COLORS, ZONE_PALETTE,
 } from '@/types/zones'
 import { deleteAllZones } from '@/lib/generateCityZones'
-import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult } from '@/lib/geocoding'
+import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -489,23 +489,6 @@ function CityBoundaryPreview({ coords, color }: CityBoundaryPreviewProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Extrae coordenadas de un link de Google Maps
-// ─────────────────────────────────────────────────────────────────────────────
-
-function extractGoogleMapsCoords(input: string): { lat: number; lng: number } | null {
-  // Coordenadas exactas del pin: !3d<lat>!4d<lng>
-  const pinMatch = input.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
-  if (pinMatch) return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) }
-  // Centro del viewport: /@<lat>,<lng>,<zoom>
-  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),/)
-  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) }
-  // Parámetro ll=lat,lng (URLs cortas)
-  const llMatch = input.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/)
-  if (llMatch) return { lat: parseFloat(llMatch[1]), lng: parseFloat(llMatch[2]) }
-  return null
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -628,14 +611,21 @@ export function Zones() {
 
       const radiusKm = Math.max(geocodeRadius, 150) / 1000  // nunca menos de 150 m
 
-      // 1. Link de Google Maps → extraer coordenadas directamente
-      const gmCoords = extractGoogleMapsCoords(raw)
+      // 1. Link de Google Maps (largo o corto maps.app.goo.gl) → extraer coordenadas
+      const isShort = isShortMapsLink(raw)
+      if (isShort) toast.loading('Resolviendo link de Google Maps…', { id: 'gm-resolve' })
+      const gmCoords = await resolveMapsLink(raw)
+      if (isShort) toast.dismiss('gm-resolve')
       if (gmCoords) {
         const result: GeocodingResult = { lat: gmCoords.lat, lng: gmCoords.lng, displayName: `📍 ${gmCoords.lat.toFixed(6)}, ${gmCoords.lng.toFixed(6)}` }
         setGeocodeResult(result)
         const circle = circlePolygon(gmCoords.lat, gmCoords.lng, radiusKm)
         setDrawnCoords(circle)
         setFitCoords(circle)
+        return
+      }
+      if (isShort) {
+        toast.error('No se pudo resolver el link corto de Google Maps. Intenta con el link largo (el que muestra la dirección en la barra).')
         return
       }
 

@@ -29,6 +29,103 @@ async function geocodeGoogle(query: string): Promise<{ lat: number; lng: number;
   }
 }
 
+// Extrae coordenadas de cualquier URL de Google Maps (ya expandida).
+function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null {
+  let decoded = url
+  try { decoded = decodeURIComponent(url) } catch { /* deja la url tal cual */ }
+  // Pin exacto: !3d<lat>!4d<lng>
+  let m = decoded.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/)
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+  // Centro del viewport: @<lat>,<lng>
+  m = decoded.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+  // Parámetros ll=, q=, query=, center=  con lat,lng
+  m = decoded.match(/[?&](?:ll|q|query|center|destination|daddr)=(-?\d+\.\d+),\+?(-?\d+\.\d+)/)
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+  // Patrón embebido en el cuerpo HTML: [null,null,LAT,LNG]
+  m = decoded.match(/\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/)
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) }
+  return null
+}
+
+// Sigue los redirects de un enlace corto (maps.app.goo.gl, goo.gl/maps, g.co)
+// y devuelve la URL final completa con coordenadas.
+async function expandShortUrl(url: string, maxHops = 6): Promise<string> {
+  let current = url
+  for (let i = 0; i < maxHops; i++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 6000)
+    try {
+      const res = await fetch(current, {
+        method:   'GET',
+        redirect: 'manual',
+        signal:   controller.signal,
+        headers:  { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' },
+      })
+      clearTimeout(timeout)
+      const loc = res.headers.get('location')
+      if (res.status >= 300 && res.status < 400 && loc) {
+        current = loc.startsWith('http') ? loc : new URL(loc, current).toString()
+        if (extractCoordsFromUrl(current)) return current
+        continue
+      }
+      return current
+    } catch {
+      clearTimeout(timeout)
+      return current
+    }
+  }
+  return current
+}
+
+// ── POST /api/geocoding/expand-maps ───────────────────────────────────────────
+// Expande un link de Google Maps (corto o largo) y devuelve { lat, lng }.
+router.post('/expand-maps', async (req: Request, res: Response) => {
+  const { url } = req.body as { url?: string }
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url requerida' })
+
+  // 1. ¿Ya trae coordenadas en la propia URL? (link largo pegado tal cual)
+  const direct = extractCoordsFromUrl(url)
+  if (direct) {
+    console.log(`[geocoding/expand-maps] coords directas: (${direct.lat}, ${direct.lng})`)
+    return res.json(direct)
+  }
+
+  // 2. Expandir siguiendo redirects (link corto) y reintentar extracción de la URL final
+  const expanded = await expandShortUrl(url.trim())
+  const fromUrl = extractCoordsFromUrl(expanded)
+  if (fromUrl) {
+    console.log(`[geocoding/expand-maps] coords de URL expandida: (${fromUrl.lat}, ${fromUrl.lng})`)
+    return res.json(fromUrl)
+  }
+
+  // 3. Último recurso: descargar el cuerpo de la página final y buscar coords embebidas
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 7000)
+    const page = await fetch(expanded, {
+      redirect: 'follow',
+      signal:   controller.signal,
+      headers:  { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' },
+    })
+    clearTimeout(timeout)
+    const body = await page.text()
+    const fromBody = extractCoordsFromUrl(body) ?? (() => {
+      const m = body.match(/@(-?\d+\.\d{4,}),(-?\d+\.\d{4,})/)
+      return m ? { lat: parseFloat(m[1]), lng: parseFloat(m[2]) } : null
+    })()
+    if (fromBody) {
+      console.log(`[geocoding/expand-maps] coords del cuerpo HTML: (${fromBody.lat}, ${fromBody.lng})`)
+      return res.json(fromBody)
+    }
+  } catch (err) {
+    console.error('[geocoding/expand-maps] error leyendo cuerpo:', err)
+  }
+
+  console.warn(`[geocoding/expand-maps] no se pudieron extraer coords de: ${url}`)
+  return res.status(404).json({ error: 'No se pudieron extraer coordenadas del link' })
+})
+
 // ── POST /api/geocoding/batch ─────────────────────────────────────────────────
 // Geocodifica un array de direcciones en paralelo usando:
 //   1. Claude (una sola llamada para normalizar todas)
