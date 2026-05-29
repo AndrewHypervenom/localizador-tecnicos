@@ -206,8 +206,11 @@ function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
 
 // Reproductor del recorrido completo del día para el técnico seleccionado
 function LiveTrackPlayer({ date }: { date: string }) {
-  const { selectedTechnicianId } = useTrackingStore()
+  const { selectedTechnicianId, technicians } = useTrackingStore()
   const map = useMap()
+  // Posición en vivo (realtime) del técnico seleccionado: se mueve en cada
+  // punto que llega (~3 s), sin esperar al re-fetch del recorrido.
+  const liveTech = selectedTechnicianId ? technicians[selectedTechnicianId] : null
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [playhead, setPlayhead] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -258,7 +261,7 @@ function LiveTrackPlayer({ date }: { date: string }) {
     loadTrack()
     // Solo hacer polling en tiempo real cuando es el día actual
     if (!isToday) return () => { cancelled = true }
-    const interval = setInterval(() => loadTrack(true), 30_000)
+    const interval = setInterval(() => loadTrack(true), 10_000)
     return () => { cancelled = true; clearInterval(interval) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTechnicianId, date])
@@ -277,13 +280,21 @@ function LiveTrackPlayer({ date }: { date: string }) {
   }, [playing, points.length])
 
   useEffect(() => {
-    const p = points[playhead]
-    if (!p) return
+    // En vivo (hoy y sin arrastrar la barra) seguimos la posición de realtime,
+    // que llega cada ~3 s; así el punto deja de "saltar" cada 30 s. Al revisar
+    // historial o arrastrar el scrubber usamos el punto del recorrido.
+    const live = isToday && atEndRef.current && liveTech?.lat != null && liveTech?.lng != null
+    const pos: [number, number] | null = live
+      ? [liveTech!.lat as number, liveTech!.lng as number]
+      : points[playhead]
+        ? [points[playhead].lat, points[playhead].lng]
+        : null
+    if (!pos) return
     if (markerRef.current) map.removeLayer(markerRef.current)
-    markerRef.current = L.circleMarker([p.lat, p.lng], {
+    markerRef.current = L.circleMarker(pos, {
       radius: 8, fillColor: '#00D632', color: '#fff', fillOpacity: 1, weight: 2,
     }).addTo(map)
-  }, [playhead, points, map])
+  }, [playhead, points, map, isToday, liveTech?.lat, liveTech?.lng])
 
   if (!selectedTechnicianId || points.length === 0) return null
 

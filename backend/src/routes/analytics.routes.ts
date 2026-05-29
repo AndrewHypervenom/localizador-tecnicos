@@ -204,7 +204,7 @@ router.get('/technicians/:id/track', async (req: Request, res: Response) => {
       speed_kmh: number; altitude: number; bearing: number; speed_band: string
     }>(
       `SELECT
-         to_timestamp(floor(extract(epoch from ts) / 30) * 30)::text AS ts,
+         to_timestamp(floor(extract(epoch from ts) / 10) * 10)::text AS ts,
          ROUND(AVG(ST_Y(location::geometry))::numeric, 6)::float  AS lat,
          ROUND(AVG(ST_X(location::geometry))::numeric, 6)::float  AS lng,
          ROUND(AVG(speed * 3.6)::numeric, 1)::float               AS speed_kmh,
@@ -219,7 +219,7 @@ router.get('/technicians/:id/track', async (req: Request, res: Response) => {
        WHERE technician_id = $1
          AND ts BETWEEN $2 AND $3
          AND (accuracy IS NULL OR accuracy < 30)
-       GROUP BY to_timestamp(floor(extract(epoch from ts) / 30) * 30)
+       GROUP BY to_timestamp(floor(extract(epoch from ts) / 10) * 10)
        ORDER BY ts ASC`,
       [id, fromDate, toDate],
     )
