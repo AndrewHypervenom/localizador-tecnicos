@@ -48,6 +48,9 @@ export function SpeedChart({ data, className }: SpeedChartProps) {
 
   const maxSpeed = Math.max(...data.map((d) => d.speed_kmh))
   const avgSpeed = data.reduce((s, d) => s + d.speed_kmh, 0) / data.length
+  // A pie las velocidades son bajas; con 0 decimales un promedio de 3.4 km/h
+  // se mostraría como "0". Usamos 1 decimal por debajo de 10 km/h.
+  const fmtSpeed = (v: number) => (v < 10 ? v.toFixed(1) : v.toFixed(0))
 
   return (
     <div className={className}>
@@ -55,11 +58,11 @@ export function SpeedChart({ data, className }: SpeedChartProps) {
       <div className="flex gap-4 mb-3 text-xs">
         <div>
           <span className="text-text-muted">Máx </span>
-          <span className="font-mono text-danger">{maxSpeed.toFixed(0)} km/h</span>
+          <span className="font-mono text-danger">{fmtSpeed(maxSpeed)} km/h</span>
         </div>
         <div>
           <span className="text-text-muted">Prom </span>
-          <span className="font-mono text-warning">{avgSpeed.toFixed(0)} km/h</span>
+          <span className="font-mono text-warning">{fmtSpeed(avgSpeed)} km/h</span>
         </div>
         <div>
           <span className="text-text-muted">Puntos </span>

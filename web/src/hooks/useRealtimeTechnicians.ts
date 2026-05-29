@@ -5,15 +5,37 @@ import type { TechnicianState, TechnicianStatus } from '@/store/trackingStore'
 import { toast } from 'sonner'
 
 let audioCtx: AudioContext | null = null
-function playAccidentAlert() {
+
+/** Crea/reanuda el AudioContext. Los navegadores lo dejan "suspended" hasta
+ *  que haya un gesto del usuario; por eso lo reanudamos aquí y en el unlock. */
+function ensureAudio(): AudioContext | null {
   try {
-    if (!audioCtx) audioCtx = new AudioContext()
-    const osc = audioCtx.createOscillator()
-    osc.connect(audioCtx.destination)
+    if (!audioCtx) audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
+    return audioCtx
+  } catch {
+    return null
+  }
+}
+
+function playAccidentAlert() {
+  const ctx = ensureAudio()
+  if (!ctx) return
+  // Tres pitidos cortos con envolvente para que sea claramente audible.
+  const start = ctx.currentTime
+  for (let i = 0; i < 3; i++) {
+    const osc  = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
     osc.frequency.value = 880
-    osc.start()
-    osc.stop(audioCtx.currentTime + 0.3)
-  } catch {}
+    const t = start + i * 0.35
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3)
+    osc.start(t)
+    osc.stop(t + 0.31)
+  }
 }
 
 // filterByIds:
@@ -26,10 +48,25 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   const filterRef = useRef(filterByIds)
   // true tras un corte de realtime: dispara un catch-up al reconectar
   const wasDisconnectedRef = useRef(false)
+  // Técnicos ya avisados como inactivos: evita repetir el toast en cada tick
+  // mientras siguen inactivos (la causa del "envía más alertas de la cuenta").
+  const inactiveWarnedRef = useRef<Record<string, boolean>>({})
 
   useEffect(() => {
     filterRef.current = filterByIds
   })
+
+  // Desbloquear el audio en el primer gesto del usuario: los navegadores
+  // mantienen el AudioContext suspendido hasta entonces y por eso "no sonaba".
+  useEffect(() => {
+    const unlock = () => ensureAudio()
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [])
 
   const loadFnRef = useRef<() => Promise<void>>()
 
@@ -134,22 +171,21 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       if (document.hidden) return
       const store = useTrackingStore.getState()
 
-      // Capturar estados anteriores antes de refrescar
-      const before: Record<string, TechnicianStatus> = {}
-      Object.values(store.technicians).forEach((t) => { before[t.id] = t.status })
-
       store.refreshStatuses()
 
-      // Detectar transiciones activo → inactivo y notificar
+      // Detectar transiciones activo → inactivo y notificar UNA sola vez por
+      // episodio. El estado puede oscilar idle↔stopped entre heartbeats; sin
+      // este guard se disparaba un toast en cada oscilación.
       const afterTechs = useTrackingStore.getState().technicians
       Object.values(afterTechs).forEach((tech) => {
-        const prev = before[tech.id] ?? prevStatusesRef.current[tech.id]
-        if (!prev) return
+        const isActive   = tech.status === 'moving' || tech.status === 'idle'
+        const isInactive = tech.status === 'stopped' || tech.status === 'offline'
 
-        const wasActive   = prev === 'moving' || prev === 'idle'
-        const isInactive  = tech.status === 'stopped' || tech.status === 'offline'
+        // Volvió a estar activo: rearmar el aviso para el próximo corte real.
+        if (isActive) inactiveWarnedRef.current[tech.id] = false
 
-        if (wasActive && isInactive) {
+        if (isInactive && !inactiveWarnedRef.current[tech.id]) {
+          inactiveWarnedRef.current[tech.id] = true
           toast.warning(`${tech.name} dejó de enviar ubicación`, {
             description: tech.status === 'offline'
               ? 'Sin señal por más de 10 minutos'

@@ -57,8 +57,8 @@ async function bumpBackoff(): Promise<void> {
   await AsyncStorage.setItem(NEXT_RETRY_KEY, JSON.stringify({ at, step }));
 }
 
-/** Limpia el backoff tras un envío exitoso. */
-async function clearBackoff(): Promise<void> {
+/** Limpia el backoff tras un envío exitoso (o al forzar sincronización manual). */
+export async function clearBackoff(): Promise<void> {
   await AsyncStorage.removeItem(NEXT_RETRY_KEY);
 }
 
@@ -145,13 +145,17 @@ export async function enqueueLocation(row: LocationRow) {
  * únicamente lo confirmado por el servidor. Se detiene al primer error
  * dejando el resto intacto. Respeta conectividad y backoff.
  */
-export async function flushLocationQueue() {
+export async function flushLocationQueue(force = false) {
   const raw = await AsyncStorage.getItem(LOC_QUEUE_KEY);
   if (!raw) return;
   let queue: LocationRow[] = JSON.parse(raw);
   if (!queue.length) return;
-  if (!(await canRetryNow())) return;
-  if (!(await isOnline())) return;
+  // El flush manual (force) ignora backoff y verificación de red: el usuario
+  // pidió enviar AHORA. El automático respeta ambos para no malgastar batería.
+  if (!force) {
+    if (!(await canRetryNow())) return;
+    if (!(await isOnline())) return;
+  }
 
   while (queue.length) {
     const batch = queue.slice(0, FLUSH_BATCH); // más antiguos primero
@@ -190,12 +194,12 @@ export async function enqueueMotion(row: MotionRow) {
 }
 
 /** Drena la cola de eventos de conducción en orden FIFO por lotes. */
-export async function flushMotionQueue() {
+export async function flushMotionQueue(force = false) {
   const raw = await AsyncStorage.getItem(MOTION_QUEUE_KEY);
   if (!raw) return;
   let queue: MotionRow[] = JSON.parse(raw);
   if (!queue.length) return;
-  if (!(await isOnline())) return;
+  if (!force && !(await isOnline())) return;
 
   while (queue.length) {
     const batch = queue.slice(0, FLUSH_BATCH);

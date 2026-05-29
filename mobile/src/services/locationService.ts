@@ -17,9 +17,12 @@ const TIER_OPTIONS: Record<TrackingTier, Location.LocationTaskOptions> = {
     distanceInterval: 0,
   },
   STATIONARY: {
-    accuracy:         Location.Accuracy.Balanced,
-    timeInterval:     20_000,
-    distanceInterval: 10,
+    // Mantener High: Balanced usa ubicación de red/fusionada que reporta
+    // speed=0 y posiciones imprecisas, rompiendo la velocidad al reanudar.
+    // El ahorro real de batería viene del intervalo, no de bajar la precisión.
+    accuracy:         Location.Accuracy.High,
+    timeInterval:     10_000,
+    distanceInterval: 0,
   },
 };
 

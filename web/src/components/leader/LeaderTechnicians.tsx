@@ -234,6 +234,15 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                             <QrCode className="w-3 h-3" /> Sin app
                           </button>
                         )}
+                        {t.device_id && (
+                          <button
+                            onClick={() => setQrTech({ id: t.id, name: t.name })}
+                            title="Regenerar QR de vinculación (re-vincular dispositivo)"
+                            className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {t.device_id && t.status !== 'offline' && onViewOnMap && (
                           <button
                             onClick={() => onViewOnMap(t.id)}

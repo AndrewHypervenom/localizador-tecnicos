@@ -133,6 +133,11 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
   )
 }
 
+// A pie las velocidades son bajas; con 0 decimales un promedio de 3.4 km/h
+// se mostraría como "0". Usamos 1 decimal por debajo de 10 km/h.
+const fmtSpeed = (v: number | null | undefined) =>
+  v == null ? '—' : v < 10 ? v.toFixed(1) : v.toFixed(0)
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -371,7 +376,7 @@ export function LeaderHistory() {
                     <Route className="w-3 h-3" /> {trip.distance_km?.toFixed(1) ?? '—'} km
                   </span>
                   <span className="flex items-center gap-0.5">
-                    <Gauge className="w-3 h-3" /> {trip.max_speed_kmh?.toFixed(0) ?? '—'} km/h
+                    <Gauge className="w-3 h-3" /> {fmtSpeed(trip.max_speed_kmh)} km/h
                   </span>
                   <span className="flex items-center gap-0.5">
                     <Clock className="w-3 h-3" /> {durationLabel}
@@ -411,8 +416,8 @@ export function LeaderHistory() {
               {(() => {
                 const inProgress = selectedTrip.status !== 'completed'
                 const distKm  = inProgress && liveRouteStats ? liveRouteStats.totalKm.toFixed(2) : (selectedTrip.distance_km?.toFixed(2) ?? '—')
-                const maxSpd  = inProgress && liveRouteStats ? liveRouteStats.maxSpeed.toFixed(0) : (selectedTrip.max_speed_kmh?.toFixed(0) ?? '—')
-                const avgSpd  = inProgress && liveRouteStats ? liveRouteStats.avgSpeed.toFixed(0) : (selectedTrip.avg_speed_kmh?.toFixed(0) ?? '—')
+                const maxSpd  = inProgress && liveRouteStats ? fmtSpeed(liveRouteStats.maxSpeed) : fmtSpeed(selectedTrip.max_speed_kmh)
+                const avgSpd  = inProgress && liveRouteStats ? fmtSpeed(liveRouteStats.avgSpeed) : fmtSpeed(selectedTrip.avg_speed_kmh)
                 const durLabel = selectedTrip.duration_min != null
                   ? `${selectedTrip.duration_min} min`
                   : `${Math.round((Date.now() - new Date(selectedTrip.started_at).getTime()) / 60_000)} min`

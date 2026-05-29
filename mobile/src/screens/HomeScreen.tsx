@@ -32,6 +32,7 @@ import {
   getLastSent,
   getQueueCount,
   clearLastError,
+  clearBackoff,
   loadTechnicianId,
 } from '../services/offlineQueue';
 
@@ -195,11 +196,24 @@ export default function HomeScreen() {
     setSyncing(true);
     try {
       await ensureAuth();
-      await flushLocationQueue();
-      await flushMotionQueue();
-      await clearLastError();
-      await loadDiagnostics();
-      Alert.alert('Sincronizado', 'Datos enviados correctamente.');
+      await clearBackoff();                 // ignorar la ventana de espera: envío inmediato
+      await flushLocationQueue(true);       // force = true: salta backoff y check de red
+      await flushMotionQueue(true);
+
+      const remaining = await getQueueCount();
+      if (remaining === 0) {
+        await clearLastError();
+        await loadDiagnostics();
+        Alert.alert('Sincronizado', 'Datos enviados correctamente.');
+      } else {
+        // Quedó cola: mostrar el motivo real (lo guardó flushLocationQueue).
+        await loadDiagnostics();
+        const err = await getLastError();
+        Alert.alert(
+          'Sincronización incompleta',
+          err?.msg ?? `Quedan ${remaining} eventos en cola. Revisa la conexión e inténtalo de nuevo.`,
+        );
+      }
     } catch (e: any) {
       Alert.alert('Error de sincronización', e?.message ?? 'No se pudo conectar con el servidor.');
     } finally {

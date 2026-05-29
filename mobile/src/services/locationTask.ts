@@ -22,7 +22,11 @@ import { detectMotionFromGPS, setTechIdForSensor } from './sensorService';
 export const LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 
 // ── Parámetros del throttle adaptativo ────────────────────────────────────────
-const STATIONARY_SPEED_MS  = 1.4;      // <~5 km/h se considera detenido
+// Umbral de "detenido". Antes 1.4 m/s (≈5 km/h) confundía a quien camina
+// (≈1.1–1.5 m/s) con alguien parado, lo que silenciaba el rastreo y la velocidad.
+// 0.7 m/s (≈2.5 km/h) solo trata como detenido a quien está realmente quieto,
+// dejando que caminar cuente como movimiento (sirve tanto a pie como en vehículo).
+const STATIONARY_SPEED_MS  = 0.7;
 const MIN_MOVE_M           = 15;       // distancia mínima para subir estando lento
 const STATIONARY_UPLOAD_MS = 30_000;   // heartbeat estando detenido
 const STATIONARY_AFTER_MS  = 120_000;  // tiempo detenido antes de bajar a tier STATIONARY
@@ -77,7 +81,11 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
 
     const loc = data.locations[data.locations.length - 1];
     const { latitude, longitude, altitude, accuracy, speed, heading } = loc.coords;
-    const speedMs = speed ?? 0;
+    // iOS/Android reportan speed = -1 (o null) cuando el fix no tiene velocidad
+    // fiable. Lo normalizamos a null para que no contamine los promedios (un -1
+    // arrastraría AVG(speed) hacia abajo y falsearía la "Vel. prom").
+    const validSpeed = speed != null && speed >= 0 ? speed : null;
+    const speedMs = validSpeed ?? 0;
     const now = Date.now();
 
     detectMotionFromGPS(speedMs, heading ?? 0);
@@ -106,7 +114,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       technician_id: technicianId,
       ts:            new Date(loc.timestamp).toISOString(),
       location:      `POINT(${longitude} ${latitude})`,
-      speed:         speed ?? null,
+      speed:         validSpeed,
       altitude:      altitude ?? null,
       bearing:       heading ?? null,
       accuracy:      accuracy ?? null,
