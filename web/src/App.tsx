@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { getRoleFromSession } from '@/lib/roles'
+import { useTrackingStore } from '@/store/trackingStore'
+import { useZonesStore } from '@/store/zonesStore'
 import { Dashboard } from '@/pages/Dashboard'
 import { History } from '@/pages/History'
 import { Login } from '@/pages/Login'
@@ -94,6 +96,10 @@ export default function App() {
     // Limpiar sesión inválida automáticamente (token expirado o revocado)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' && !session) {
+        // Limpiar el estado en memoria para que el siguiente líder no vea
+        // técnicos/zonas/alertas del anterior (el store es un singleton).
+        useTrackingStore.getState().reset()
+        useZonesStore.getState().setZones([])
         // Limpiar cualquier token residual del localStorage
         Object.keys(localStorage).forEach(k => {
           if (k.startsWith('sb-')) localStorage.removeItem(k)

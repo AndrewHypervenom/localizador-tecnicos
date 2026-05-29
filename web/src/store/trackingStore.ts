@@ -83,6 +83,8 @@ interface TrackingStore {
   setRealtimeStatus: (status: TrackingStore['realtimeStatus']) => void
   markRealtimeEvent: () => void
   refreshStatuses: () => void
+  /** Limpia todos los datos (al cerrar sesión / cambiar de líder). */
+  reset: () => void
 }
 
 interface LocationPayload {
@@ -117,6 +119,15 @@ export const useTrackingStore = create<TrackingStore>()(
     showHeatmap: false,
     realtimeStatus: 'connecting',
     lastRealtimeEvent: null,
+
+    reset: () =>
+      set((state) => {
+        state.technicians = {}
+        state.alerts = []
+        state.zoneAlerts = []
+        state.selectedTechnicianId = null
+        state.lastRealtimeEvent = null
+      }),
 
     setTechnicians: (techs) =>
       set((state) => {

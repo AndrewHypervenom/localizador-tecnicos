@@ -80,7 +80,9 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       let homeQuery   = supabase.from('technicians').select('id, home_lat, home_lng, home_address, home_radius')
 
       if (ids !== undefined) {
-        if (ids.length === 0) { setTechnicians([]); return }
+        // Líder sin técnicos: vaciar de verdad (replace), no fusionar — si no,
+        // quedan los técnicos del líder anterior al cambiar de sesión.
+        if (ids.length === 0) { replaceTechnicians([]); return }
         statusQuery = (statusQuery as any).in('id', ids)
         homeQuery   = (homeQuery   as any).in('id', ids)
       }
@@ -192,13 +194,18 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       // este guard se disparaba un toast en cada oscilación.
       const afterTechs = useTrackingStore.getState().technicians
       Object.values(afterTechs).forEach((tech) => {
+        const prev       = prevStatusesRef.current[tech.id]
+        const wasActive  = prev === 'moving' || prev === 'idle'
         const isActive   = tech.status === 'moving' || tech.status === 'idle'
         const isInactive = tech.status === 'stopped' || tech.status === 'offline'
 
         // Volvió a estar activo: rearmar el aviso para el próximo corte real.
         if (isActive) inactiveWarnedRef.current[tech.id] = false
 
-        if (isInactive && !inactiveWarnedRef.current[tech.id]) {
+        // Avisar SOLO en una transición real activo→inactivo de un técnico con
+        // app vinculada. Evita falsos avisos de técnicos recién creados o sin
+        // dispositivo, que nunca estuvieron enviando ubicación.
+        if (tech.deviceId && wasActive && isInactive && !inactiveWarnedRef.current[tech.id]) {
           inactiveWarnedRef.current[tech.id] = true
           toast.warning(`${tech.name} dejó de enviar ubicación`, {
             description: tech.status === 'offline'
