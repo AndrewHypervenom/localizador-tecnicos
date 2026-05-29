@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import {
   Plus, Trash2, RefreshCw, Building2, FolderOpen,
   ChevronRight, ChevronDown, Loader2, Check, X, Pencil,
-  ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -316,14 +315,6 @@ export function LeaderCampaigns() {
     toast.success('Campaña actualizada')
   }
 
-  async function toggleCampaign(companyId: string, cp: Campaign) {
-    const { error } = await supabase.from('campaigns').update({ is_active: !cp.is_active }).eq('id', cp.id)
-    if (error) { toast.error(error.message); return }
-    setCompanies(prev => prev.map(c => c.id !== companyId ? c : {
-      ...c, campaigns: c.campaigns.map(x => x.id === cp.id ? { ...x, is_active: !x.is_active } : x),
-    }))
-  }
-
   async function deleteCampaign(companyId: string, id: string) {
     const { error } = await supabase.from('campaigns').delete().eq('id', id)
     if (error) { toast.error(error.message); return }
@@ -474,12 +465,6 @@ export function LeaderCampaigns() {
                                   )}>
                                     {cp.is_active ? 'Activa' : 'Inactiva'}
                                   </span>
-                                  <button type="button" onClick={() => toggleCampaign(co.id, cp)}
-                                    className="p-1 text-text-muted hover:text-primary transition-colors rounded" title="Activar/Desactivar">
-                                    {cp.is_active
-                                      ? <ToggleRight className="w-4 h-4 text-success" />
-                                      : <ToggleLeft className="w-4 h-4" />}
-                                  </button>
                                   <button type="button" onClick={() => setEditingCampaign(cp.id)}
                                     className="p-1 text-text-muted hover:text-primary transition-colors rounded" title="Renombrar">
                                     <Pencil className="w-3 h-3" />

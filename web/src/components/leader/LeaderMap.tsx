@@ -17,7 +17,7 @@ import { DateScroller, getWeekStart } from './DateScroller'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { toast } from 'sonner'
 import {
-  generateCityZones, previewCityZones, deleteAllZones, type CityPreview,
+  deleteAllZones,
   generateRouteZones, previewRouteZones, type RouteZoneResult,
 } from '@/lib/generateCityZones'
 import { TechnicianList } from '@/components/panels/TechnicianList'
@@ -105,10 +105,6 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   const [fabOpen, setFabOpen] = useState(false)
   const [clearingZones, setClearingZones] = useState(false)
   const [genOpen,    setGenOpen]    = useState(false)
-  const [genMode,    setGenMode]    = useState<'city' | 'route'>('route')
-  const [genPreview, setGenPreview] = useState<CityPreview[] | null>(null)
-  const [genLoading, setGenLoading] = useState(false)
-  const [genResult,  setGenResult]  = useState<{ created: string[]; skipped: string[]; deleted: number } | null>(null)
 
   const [routePreviewCnt, setRoutePreviewCnt] = useState<number | null>(null)
   const [routeLoading,    setRouteLoading]    = useState(false)
@@ -175,15 +171,10 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   }
 
   function openGenerateModal() {
-    setGenResult(null)
-    setGenPreview(null)
     setRouteResult(null)
     setRouteProgress(null)
     setRoutePreviewCnt(null)
     setGenOpen(true)
-    previewCityZones()
-      .then(setGenPreview)
-      .catch((err) => toast.error(err.message ?? 'Error al cargar vista previa'))
     previewRouteZones()
       .then(setRoutePreviewCnt)
       .catch(() => {})
@@ -204,24 +195,6 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
       toast.error(err.message ?? 'Error al generar zonas')
     } finally {
       setRouteLoading(false)
-    }
-  }
-
-  async function handleGenerateZones() {
-    setGenLoading(true)
-    try {
-      const result = await generateCityZones(6)
-      setGenResult(result)
-      if (result.created.length > 0) {
-        toast.success(`${result.created.length} zona${result.created.length !== 1 ? 's' : ''} generada${result.created.length !== 1 ? 's' : ''}`)
-      } else {
-        toast.warning('No se encontraron ciudades con técnicos asignados')
-      }
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al generar zonas')
-      setGenOpen(false)
-    } finally {
-      setGenLoading(false)
     }
   }
 
@@ -600,7 +573,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onClick={(e) => { if (!genLoading && !routeLoading && e.target === e.currentTarget) setGenOpen(false) }}
+            onClick={(e) => { if (!routeLoading && e.target === e.currentTarget) setGenOpen(false) }}
           >
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} />
             <motion.div
@@ -619,51 +592,15 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                   <p className="font-bold text-text-primary text-sm">Generar zonas en el mapa</p>
                   <p className="text-text-muted text-xs mt-0.5">Ubica automáticamente las zonas de trabajo</p>
                 </div>
-                {!genLoading && !routeLoading && (
+                {!routeLoading && (
                   <button onClick={() => setGenOpen(false)} className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-lg hover:bg-surface-raised">
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
 
-              {/* Tabs */}
-              {!genResult && !routeResult && (
-                <div className="flex gap-1 p-1 bg-base rounded-xl mb-4">
-                  <button
-                    onClick={() => setGenMode('route')}
-                    disabled={routeLoading || genLoading}
-                    className={cn(
-                      'flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5',
-                      genMode === 'route'
-                        ? 'bg-violet-600 text-white shadow'
-                        : 'text-text-muted hover:text-text-primary'
-                    )}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    Por rutas cargadas
-                    {routePreviewCnt !== null && <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px]">{routePreviewCnt}</span>}
-                  </button>
-                  <button
-                    onClick={() => setGenMode('city')}
-                    disabled={routeLoading || genLoading}
-                    className={cn(
-                      'flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5',
-                      genMode === 'city'
-                        ? 'bg-violet-600 text-white shadow'
-                        : 'text-text-muted hover:text-text-primary'
-                    )}
-                  >
-                    <MapPinned className="w-3.5 h-3.5" />
-                    Por ciudad
-                    {genPreview && <span className="bg-white/20 rounded-full px-1.5 py-0.5 text-[10px]">{genPreview.filter(c => c.hasCoords).length}</span>}
-                  </button>
-                </div>
-              )}
-
-              {/* ── Tab: RUTAS ── */}
-              {genMode === 'route' && !genResult && (
-                <>
-                  {routeResult ? (
+              {/* Generar zonas por rutas cargadas */}
+              {routeResult ? (
                     <div className="space-y-3">
                       <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
@@ -740,103 +677,6 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                       </div>
                     </>
                   )}
-                </>
-              )}
-
-              {/* ── Tab: CIUDADES ── */}
-              {genMode === 'city' && !routeResult && (
-                <>
-                  {genResult ? (
-                    <div className="space-y-3">
-                      <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-start gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-semibold text-success text-sm">
-                            {genResult.created.length} zona{genResult.created.length !== 1 ? 's' : ''} creada{genResult.created.length !== 1 ? 's' : ''} correctamente
-                          </p>
-                          {genResult.deleted > 0 && (
-                            <p className="text-text-muted text-xs mt-0.5">{genResult.deleted} zonas anteriores eliminadas</p>
-                          )}
-                          {genResult.created.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {genResult.created.map(c => (
-                                <span key={c} className="text-[11px] bg-success/10 text-success border border-success/20 rounded-lg px-2 py-0.5">{c}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {genResult.skipped.length > 0 && (
-                        <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-start gap-2.5">
-                          <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-                          <p className="text-xs text-text-muted">
-                            <strong className="text-warning">Sin coordenadas:</strong> {genResult.skipped.join(', ')}
-                          </p>
-                        </div>
-                      )}
-                      <button onClick={() => setGenOpen(false)}
-                        className="w-full py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                        Cerrar
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-4">
-                        {!genPreview ? (
-                          <div className="flex items-center justify-center gap-2 py-8 text-text-muted text-xs">
-                            <Loader2 className="w-4 h-4 animate-spin" />Consultando técnicos…
-                          </div>
-                        ) : genPreview.length === 0 ? (
-                          <div className="text-center py-8">
-                            <p className="text-text-muted text-sm">Ningún técnico tiene ciudad asignada.</p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-text-muted uppercase tracking-wider font-medium mb-2">Zonas que se crearán</p>
-                            <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                              {genPreview.map((c) => (
-                                <div key={c.city} className={cn(
-                                  'flex items-center gap-2.5 px-3 py-2 rounded-xl border text-xs',
-                                  c.hasCoords ? 'bg-base border-border-soft text-text-secondary' : 'bg-warning/5 border-warning/30 text-text-muted'
-                                )}>
-                                  <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', c.hasCoords ? 'bg-success' : 'bg-warning')} />
-                                  <span className="font-medium">{c.city}</span>
-                                  {c.country && <span className="text-text-muted">· {c.country}</span>}
-                                  {!c.hasCoords && <span className="ml-auto text-warning text-[10px]">sin coords</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      {genPreview && genPreview.length > 0 && (
-                        <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-start gap-2.5 mb-4">
-                          <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-                          <p className="text-xs text-text-secondary leading-relaxed">
-                            Se <strong className="text-text-primary">borrarán todas las zonas existentes</strong> y se crearán zonas de 6 km por ciudad.
-                          </p>
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <button onClick={() => setGenOpen(false)} disabled={genLoading}
-                          className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors disabled:opacity-50">
-                          Cancelar
-                        </button>
-                        <button
-                          onClick={handleGenerateZones}
-                          disabled={genLoading || !genPreview || genPreview.filter(c => c.hasCoords).length === 0}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
-                        >
-                          {genLoading
-                            ? <><Loader2 className="w-4 h-4 animate-spin" />Generando…</>
-                            : <><MapPinned className="w-4 h-4" />Generar {genPreview && `(${genPreview.filter(c => c.hasCoords).length})`}</>
-                          }
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
             </motion.div>
           </motion.div>
         )}
