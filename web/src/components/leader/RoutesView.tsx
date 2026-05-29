@@ -9,6 +9,7 @@ import { format, addDays, parseISO, isToday, isTomorrow, isYesterday } from 'dat
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { DateScroller, getWeekStart } from './DateScroller'
+import { getLeaderScope } from '@/lib/leaderContext'
 
 interface RouteItem {
   id: string
@@ -55,39 +56,50 @@ export function RoutesView() {
   const [campaigns, setCampaigns]       = useState<Campaign[]>([])
   const [filterCampaign, setFilterCampaign] = useState('')
 
-  // Load companies/campaigns once
+  // Load companies/campaigns once (scoped to the leader's companies)
   useEffect(() => {
-    Promise.all([
-      supabase.from('companies').select('id, name').order('name'),
-      supabase.from('campaigns').select('id, name, company_id').order('name'),
-    ]).then(([{ data: cos }, { data: cps }]) => {
-      setCompanies(cos ?? [])
-      setCampaigns(cps ?? [])
+    getLeaderScope().then(({ companyIds }) => {
+      if (companyIds.length === 0) { setCompanies([]); setCampaigns([]); return }
+      Promise.all([
+        supabase.from('companies').select('id, name').in('id', companyIds).order('name'),
+        supabase.from('campaigns').select('id, name, company_id').in('company_id', companyIds).order('name'),
+      ]).then(([{ data: cos }, { data: cps }]) => {
+        setCompanies(cos ?? [])
+        setCampaigns(cps ?? [])
+      })
     })
   }, [])
 
-  // Load marked dates for the visible week
+  // Load marked dates for the visible week (only the leader's technicians)
   useEffect(() => {
     const monday = parseISO(weekStart)
     const weekDates = Array.from({ length: 7 }, (_, i) => format(addDays(monday, i), 'yyyy-MM-dd'))
-    supabase
-      .from('technician_routes')
-      .select('route_date')
-      .in('route_date', weekDates)
-      .then(({ data }) => {
-        const unique = [...new Set(data?.map(r => r.route_date) ?? [])]
-        setMarkedDates(unique)
-      })
+    getLeaderScope().then(({ allTechnicianIds }) => {
+      if (allTechnicianIds.length === 0) { setMarkedDates([]); return }
+      supabase
+        .from('technician_routes')
+        .select('route_date')
+        .in('route_date', weekDates)
+        .in('technician_id', allTechnicianIds)
+        .then(({ data }) => {
+          const unique = [...new Set(data?.map(r => r.route_date) ?? [])]
+          setMarkedDates(unique)
+        })
+    })
   }, [weekStart])
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
+      const { allTechnicianIds } = await getLeaderScope()
+      if (allTechnicianIds.length === 0) { setRoutes([]); setLoading(false); return }
+
       let q = supabase
         .from('technician_routes')
         .select(`id, technician_name, technician_cedula, technician_id, campaign_id,
           route_items(id, franja, ciudad, cliente, direccion, producto, hora_inicial, ot_mer, estado_ot, order_index, status)`)
         .eq('route_date', selectedDate)
+        .in('technician_id', allTechnicianIds)
         .order('technician_name')
 
       if (filterCampaign) q = q.eq('campaign_id', filterCampaign)

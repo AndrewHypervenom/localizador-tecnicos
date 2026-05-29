@@ -85,13 +85,15 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   const [selectedDate, setSelectedDate] = useState(today)
 
   const [scopeIds, setScopeIds] = useState<string[] | null>(null)
+  // Todos los técnicos del líder (incl. inactivos) para acotar las rutas.
+  const [allScopeIds, setAllScopeIds] = useState<string[] | null>(null)
   useEffect(() => {
-    getLeaderScope().then(s => setScopeIds(s.technicianIds))
+    getLeaderScope().then(s => { setScopeIds(s.technicianIds); setAllScopeIds(s.allTechnicianIds) })
   }, [])
 
   useRealtimeTechnicians(scopeIds)
   useZones(selectedDate)
-  useZoneEvents()
+  useZoneEvents(scopeIds)
 
   const { selectedTechnicianId, realtimeStatus, selectTechnician } = useTrackingStore()
   const { zones, showZones, toggleShowZones, selectedZoneId, selectZone } = useZonesStore()
@@ -111,20 +113,25 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   const [routeProgress,   setRouteProgress]   = useState<{ done: number; total: number } | null>(null)
   const [routeResult,     setRouteResult]     = useState<RouteZoneResult | null>(null)
 
-  // Load marked dates for the week
+  // Load marked dates for the week (only the leader's technicians)
   useEffect(() => {
+    if (allScopeIds === null) return
+    if (allScopeIds.length === 0) { setMarkedDates([]); return }
     const monday = parseISO(weekStart)
     const weekDates = Array.from({ length: 7 }, (_, i) => format(addDays(monday, i), 'yyyy-MM-dd'))
     supabase
       .from('technician_routes')
       .select('route_date')
       .in('route_date', weekDates)
+      .in('technician_id', allScopeIds)
       .then(({ data }) => {
         setMarkedDates([...new Set(data?.map(r => r.route_date) ?? [])])
       })
-  }, [weekStart])
+  }, [weekStart, allScopeIds])
 
   const loadRoutes = useCallback(async () => {
+    if (allScopeIds === null) return
+    if (allScopeIds.length === 0) { setRoutes([]); return }
     setLoading(true)
     try {
       const { data } = await supabase
@@ -132,6 +139,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
         .select(`id, technician_name, technician_id, campaign_id,
           route_items(franja, status)`)
         .eq('route_date', selectedDate)
+        .in('technician_id', allScopeIds)
         .order('technician_name')
 
       const techIds = (data ?? []).map(r => r.technician_id).filter(Boolean) as string[]
@@ -161,7 +169,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, allScopeIds])
 
   useEffect(() => { loadRoutes() }, [loadRoutes])
 
@@ -308,7 +316,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                 <TechnicianDetail />
               </div>
             ) : (
-              <TechnicianList className="flex-1 overflow-hidden" />
+              <TechnicianList className="flex-1 overflow-hidden" variant="leader" />
             )
           ) : (
             <div className="flex-1 overflow-y-auto">

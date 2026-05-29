@@ -130,9 +130,10 @@ export function AssignmentRouteLayer() {
 
   const [techExtra, setTechExtra] = useState<{ city?: string; country?: string } | null>(null)
 
-  const tech    = selectedTechnicianId ? technicians[selectedTechnicianId] : null
-  const homeLat = tech?.home_lat ?? null
-  const homeLng = tech?.home_lng ?? null
+  const tech       = selectedTechnicianId ? technicians[selectedTechnicianId] : null
+  const homeLat    = tech?.home_lat ?? null
+  const homeLng    = tech?.home_lng ?? null
+  const homeRadius = tech?.home_radius ?? 100
 
   // Carga home + ciudad desde Supabase al seleccionar un técnico
   useEffect(() => {
@@ -140,7 +141,7 @@ export function AssignmentRouteLayer() {
     if (!selectedTechnicianId) return
     supabase
       .from('technicians')
-      .select('home_lat, home_lng, home_address, city, country')
+      .select('home_lat, home_lng, home_address, home_radius, city, country')
       .eq('id', selectedTechnicianId)
       .single()
       .then(({ data }) => {
@@ -149,6 +150,7 @@ export function AssignmentRouteLayer() {
           home_lat:     data.home_lat     ?? null,
           home_lng:     data.home_lng     ?? null,
           home_address: data.home_address ?? null,
+          home_radius:  data.home_radius  ?? null,
         })
         setTechExtra({ city: data.city ?? undefined, country: data.country ?? undefined })
       })
@@ -166,7 +168,7 @@ export function AssignmentRouteLayer() {
 
     if (homeLat && homeLng) {
       const circle = L.circle([homeLat, homeLng], {
-        radius:      300,
+        radius:      homeRadius,
         color:       '#10B981',
         fillColor:   '#10B981',
         fillOpacity: 0.18,
@@ -213,7 +215,7 @@ export function AssignmentRouteLayer() {
       line.addTo(map)
       polylinesRef.current.push(line)
     }
-  }, [selectedTechnicianId, assignments, homeLat, homeLng, technicians, map, techExtra])
+  }, [selectedTechnicianId, assignments, homeLat, homeLng, homeRadius, technicians, map, techExtra])
 
   return null
 }

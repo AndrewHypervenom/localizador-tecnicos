@@ -65,7 +65,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
       const [techsRes, statusRes] = await Promise.all([
         supabase
           .from('technicians')
-          .select('id, name, phone, email, client, project, country, city, shift, notes, device_id, company_id, active, created_at, home_address, home_lat, home_lng')
+          .select('id, name, phone, email, client, project, country, city, shift, notes, device_id, company_id, active, created_at, home_address, home_lat, home_lng, home_radius')
           .order('created_at', { ascending: false }),
         supabase
           .from('technician_current_status')

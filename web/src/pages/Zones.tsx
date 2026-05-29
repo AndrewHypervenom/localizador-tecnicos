@@ -18,6 +18,7 @@ import {
   Zone, ZoneType, ZONE_TYPE_LABELS, ZONE_TYPE_COLORS, ZONE_PALETTE,
 } from '@/types/zones'
 import { deleteAllZones } from '@/lib/generateCityZones'
+import { getLeaderScope } from '@/lib/leaderContext'
 import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -534,17 +535,27 @@ export function Zones() {
   const [knownCities,        setKnownCities]        = useState<string[]>([])
 
   useEffect(() => {
-    supabase.from('technicians').select('city, country').eq('active', true)
-      .then(({ data }) => {
-        const rows   = data ?? []
-        const cities = [...new Set(rows.map((t: any) => t.city).filter(Boolean))] as string[]
-        setKnownCities(cities.sort())
-        // Detectar país más frecuente para usar en búsqueda de ciudades
-        const counts: Record<string, number> = {}
-        rows.forEach((t: any) => { if (t.country) counts[t.country] = (counts[t.country] || 0) + 1 })
-        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
-        if (top) setDefaultCountry(top)
-      })
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const role = session?.user?.app_metadata?.role as string | undefined
+
+      let q = supabase.from('technicians').select('city, country').eq('active', true)
+      if (role !== 'superadmin') {
+        const { companyIds } = await getLeaderScope()
+        if (companyIds.length === 0) { setKnownCities([]); return }
+        q = (q as any).in('company_id', companyIds)
+      }
+
+      const { data } = await q
+      const rows   = data ?? []
+      const cities = [...new Set(rows.map((t: any) => t.city).filter(Boolean))] as string[]
+      setKnownCities(cities.sort())
+      // Detectar país más frecuente para usar en búsqueda de ciudades
+      const counts: Record<string, number> = {}
+      rows.forEach((t: any) => { if (t.country) counts[t.country] = (counts[t.country] || 0) + 1 })
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0]
+      if (top) setDefaultCountry(top)
+    })()
   }, [])
 
   useEffect(() => {

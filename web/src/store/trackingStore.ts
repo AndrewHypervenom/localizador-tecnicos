@@ -33,6 +33,7 @@ export interface TechnicianState {
   home_lat?:     number
   home_lng?:     number
   home_address?: string
+  home_radius?:  number   // metros — radio del círculo alrededor de la casa
 }
 
 export interface MotionAlert {
@@ -71,7 +72,7 @@ interface TrackingStore {
   setTechnicians: (techs: TechnicianState[]) => void
   replaceTechnicians: (techs: TechnicianState[]) => void
   updateTechnicianPosition: (payload: LocationPayload) => void
-  updateTechnicianMeta: (id: string, patch: { name?: string; phone?: string; home_lat?: number | null; home_lng?: number | null; home_address?: string | null }) => void
+  updateTechnicianMeta: (id: string, patch: { name?: string; phone?: string; home_lat?: number | null; home_lng?: number | null; home_address?: string | null; home_radius?: number | null }) => void
   addAlert: (alert: MotionAlert) => void
   acknowledgeAlert: (alertId: string) => void
   acknowledgeAllAlerts: () => void
@@ -129,6 +130,7 @@ export const useTrackingStore = create<TrackingStore>()(
             home_lat:     t.home_lat,
             home_lng:     t.home_lng,
             home_address: t.home_address,
+            home_radius:  t.home_radius,
           }
         })
       }),
@@ -146,6 +148,7 @@ export const useTrackingStore = create<TrackingStore>()(
             home_lat:     t.home_lat,
             home_lng:     t.home_lng,
             home_address: t.home_address,
+            home_radius:  t.home_radius,
           }
         })
       }),
@@ -159,6 +162,7 @@ export const useTrackingStore = create<TrackingStore>()(
         if (patch.home_lat     !== undefined) t.home_lat     = patch.home_lat ?? undefined
         if (patch.home_lng     !== undefined) t.home_lng     = patch.home_lng ?? undefined
         if (patch.home_address !== undefined) t.home_address = patch.home_address ?? undefined
+        if (patch.home_radius  !== undefined) t.home_radius  = patch.home_radius ?? undefined
       }),
 
     updateTechnicianPosition: (payload) =>

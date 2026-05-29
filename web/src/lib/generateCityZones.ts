@@ -2,6 +2,18 @@ import { supabase } from './supabase'
 import { CITY_COORDS } from './geo'
 import { ZONE_PALETTE } from '@/types/zones'
 import { geocodeAddress, geocodeBatch } from './geocoding'
+import { getLeaderScope } from './leaderContext'
+
+// Devuelve los id de technician_routes que pertenecen al líder actual
+// (técnicos de sus empresas). Opcionalmente acotado a una fecha.
+async function getLeaderRouteIds(routeDate?: string): Promise<string[]> {
+  const { allTechnicianIds } = await getLeaderScope()
+  if (allTechnicianIds.length === 0) return []
+  let q = supabase.from('technician_routes').select('id').in('technician_id', allTechnicianIds)
+  if (routeDate) q = q.eq('route_date', routeDate)
+  const { data } = await q
+  return (data ?? []).map((r: any) => r.id)
+}
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
@@ -79,11 +91,15 @@ async function getUserCompanyId(): Promise<string | null> {
 // Intenta hard-delete primero; si RLS lo bloquea (count = 0), usa soft-delete
 // como respaldo para que no vuelvan a aparecer en el hook (que filtra is_active).
 export async function deleteAllZones(): Promise<number> {
+  // Solo borra las zonas de las empresas del líder actual, nunca las de otros.
+  const { companyIds } = await getLeaderScope()
+  if (companyIds.length === 0) return 0
+
   // 1. Hard-delete
   const { count: hardCount, error: hardErr } = await supabase
     .from('zones')
     .delete({ count: 'exact' })
-    .gte('created_at', '1970-01-01T00:00:00Z')
+    .in('company_id', companyIds)
 
   if (hardErr) throw new Error(hardErr.message)
 
@@ -92,6 +108,7 @@ export async function deleteAllZones(): Promise<number> {
     .from('zones')
     .update({ is_active: false })
     .eq('is_active', true)
+    .in('company_id', companyIds)
 
   if (softErr) console.warn('[deleteAllZones] soft-delete fallback error:', softErr.message)
 
@@ -106,9 +123,13 @@ export interface CityPreview {
 }
 
 export async function previewCityZones(): Promise<CityPreview[]> {
+  const { companyIds } = await getLeaderScope()
+  if (companyIds.length === 0) return []
+
   const { data, error } = await supabase
     .from('technicians')
     .select('city, country')
+    .in('company_id', companyIds)
 
   if (error) throw new Error(error.message)
 
@@ -133,14 +154,19 @@ export interface GenerateResult {
 }
 
 export async function generateCityZones(radiusKm = 6): Promise<GenerateResult> {
+  const { companyIds } = await getLeaderScope()
   const preview = await previewCityZones()
 
-  const { count: deletedCount, error: delErr } = await supabase
-    .from('zones')
-    .delete({ count: 'exact' })
-    .gte('created_at', '1970-01-01T00:00:00Z')
-
-  if (delErr) throw new Error(delErr.message)
+  // Borrar solo las zonas de las empresas del líder antes de regenerar.
+  let deletedCount = 0
+  if (companyIds.length > 0) {
+    const { count, error: delErr } = await supabase
+      .from('zones')
+      .delete({ count: 'exact' })
+      .in('company_id', companyIds)
+    if (delErr) throw new Error(delErr.message)
+    deletedCount = count ?? 0
+  }
 
   const created: string[] = []
   const skipped: string[] = []
@@ -198,9 +224,13 @@ export interface RouteZoneResult {
 
 /** Devuelve cuántas direcciones únicas hay en route_items */
 export async function previewRouteZones(): Promise<number> {
+  const routeIds = await getLeaderRouteIds()
+  if (routeIds.length === 0) return 0
+
   const { data, error } = await supabase
     .from('route_items')
     .select('direccion, ciudad')
+    .in('route_id', routeIds)
     .not('direccion', 'is', null)
 
   if (error) throw new Error(error.message)
@@ -221,9 +251,13 @@ export async function generateRouteZones(
   onProgress?: (done: number, total: number) => void,
   routeDate?: string
 ): Promise<RouteZoneResult> {
+  const routeIds = await getLeaderRouteIds()
+  if (routeIds.length === 0) return { created: 0, skipped: 0, total: 0 }
+
   const { data, error } = await supabase
     .from('route_items')
     .select('direccion, ciudad, cliente')
+    .in('route_id', routeIds)
     .not('direccion', 'is', null)
 
   if (error) throw new Error(error.message)

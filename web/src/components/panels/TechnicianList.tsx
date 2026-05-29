@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
+import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 
 const STATUS_LABELS: Record<TechnicianStatus, string> = {
   moving:   'En movimiento',
@@ -149,9 +150,12 @@ function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
 
 interface TechnicianListProps {
   className?: string
+  // 'admin'  → asistente clientes/proyectos (OnboardingWizard, ve todo)
+  // 'leader' → alta de técnico acotada a las empresas del líder
+  variant?: 'admin' | 'leader'
 }
 
-export function TechnicianList({ className }: TechnicianListProps) {
+export function TechnicianList({ className, variant = 'admin' }: TechnicianListProps) {
   const { technicians } = useTrackingStore()
   const techList = Object.values(technicians)
 
@@ -234,11 +238,18 @@ export function TechnicianList({ className }: TechnicianListProps) {
         </div>
       </div>
 
-      <OnboardingWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
-        onComplete={() => {}}
-      />
+      {variant === 'leader' ? (
+        <TechnicianRegistrationModal
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+        />
+      ) : (
+        <OnboardingWizard
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          onComplete={() => {}}
+        />
+      )}
       {qrModalOpen && selectedForQr && (
         <QrCodeModal tech={selectedForQr} onClose={() => setQrModalOpen(false)} />
       )}

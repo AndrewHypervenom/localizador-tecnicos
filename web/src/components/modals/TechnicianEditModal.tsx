@@ -5,7 +5,7 @@ import {
   FolderOpen, FileText, Navigation, Search, Home, Locate, Mail,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MapContainer, TileLayer, Marker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import { supabase } from '@/lib/supabase'
 import { reverseGeocode, geocodeAddress, geocodeWithClaude, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
@@ -38,9 +38,12 @@ export interface TechnicianEditable {
   home_address: string | null
   home_lat:     number | null
   home_lng:     number | null
+  home_radius:  number | null
   company_id:   string | null
   email:        string | null
 }
+
+const DEFAULT_HOME_RADIUS = 100
 
 // ── Helpers UI ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +95,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   const [homeAddress,   setHomeAddress]   = useState(tech.home_address ?? '')
   const [homeLat,       setHomeLat]       = useState<number | null>(tech.home_lat ?? null)
   const [homeLng,       setHomeLng]       = useState<number | null>(tech.home_lng ?? null)
+  const [homeRadius,    setHomeRadius]    = useState<number>(tech.home_radius ?? DEFAULT_HOME_RADIUS)
   const [geocodingHome, setGeocodingHome] = useState(false)
 
   // Org dropdowns
@@ -295,6 +299,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         home_address: (() => { const a = homeAddress.trim(); return (a && !a.startsWith('http')) ? a : null })(),
         home_lat:     finalLat,
         home_lng:     finalLng,
+        home_radius:  homeRadius,
       })
       onClose()
     } catch (err: any) {
@@ -529,8 +534,34 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                     style={{ height: '100%', width: '100%' }}
                   >
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                    <Circle
+                      center={[homeLat, homeLng]}
+                      radius={homeRadius}
+                      pathOptions={{ color: '#10B981', fillColor: '#10B981', fillOpacity: 0.18, weight: 2, opacity: 0.8, dashArray: '6, 4' }}
+                    />
                     <Marker position={[homeLat, homeLng]} icon={HOME_PREVIEW_ICON} />
                   </MapContainer>
+                </div>
+
+                {/* Tamaño del círculo de la casa */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-text-muted font-medium">Tamaño del círculo</label>
+                    <span className="text-[11px] font-mono font-semibold text-success">{homeRadius} m</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={30}
+                    max={500}
+                    step={10}
+                    value={homeRadius}
+                    onChange={e => setHomeRadius(Number(e.target.value))}
+                    className="w-full accent-success cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-text-muted/60 mt-0.5">
+                    <span>30 m</span>
+                    <span>500 m</span>
+                  </div>
                 </div>
               </>
             ) : homeAddress ? (

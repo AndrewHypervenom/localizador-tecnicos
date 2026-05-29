@@ -69,6 +69,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   }, [])
 
   const loadFnRef = useRef<() => Promise<void>>()
+  const alertsFnRef = useRef<() => Promise<void>>()
 
   useEffect(() => {
     async function loadInitialState() {
@@ -76,7 +77,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       if (ids === null) return
 
       let statusQuery = supabase.from('technician_current_status').select('*')
-      let homeQuery   = supabase.from('technicians').select('id, home_lat, home_lng, home_address')
+      let homeQuery   = supabase.from('technicians').select('id, home_lat, home_lng, home_address, home_radius')
 
       if (ids !== undefined) {
         if (ids.length === 0) { setTechnicians([]); return }
@@ -113,6 +114,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           home_lat:     home?.home_lat     ?? undefined,
           home_lng:     home?.home_lng     ?? undefined,
           home_address: home?.home_address ?? undefined,
+          home_radius:  home?.home_radius  ?? undefined,
         }
       })
 
@@ -125,11 +127,22 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
 
     // Carga inicial de alertas históricas (últimos 30 días)
     async function loadInitialAlerts() {
+      const ids = filterRef.current
+      // null → scope del líder aún sin resolver; no cargar todavía.
+      if (ids === null) return
+      // [] → líder sin técnicos: no hay alertas que mostrar.
+      if (ids !== undefined && ids.length === 0) return
+
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      const { data, error } = await supabase
+      let alertsQuery = supabase
         .from('motion_events')
         .select('*, technicians(name)')
         .gte('ts', since)
+
+      // Modo líder: solo alertas de sus técnicos. Modo admin (undefined): todas.
+      if (ids !== undefined) alertsQuery = (alertsQuery as any).in('technician_id', ids)
+
+      const { data, error } = await alertsQuery
         .order('ts', { ascending: false })
         .limit(100)
 
@@ -152,6 +165,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
     }
 
     loadFnRef.current = loadInitialState
+    alertsFnRef.current = loadInitialAlerts
 
     loadInitialState()
     loadInitialAlerts()
@@ -325,8 +339,9 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   // Clave estable derivada de los ids para no re-ejecutar en cada render.
   const filterKey = Array.isArray(filterByIds) ? filterByIds.join(',') : String(filterByIds)
   useEffect(() => {
-    if (Array.isArray(filterByIds) && loadFnRef.current) {
-      loadFnRef.current()
+    if (Array.isArray(filterByIds)) {
+      loadFnRef.current?.()
+      alertsFnRef.current?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterKey])

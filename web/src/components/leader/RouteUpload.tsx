@@ -12,6 +12,7 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { COUNTRIES, CITIES_BY_COUNTRY } from '@/lib/geo'
+import { getLeaderScope } from '@/lib/leaderContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -420,9 +421,11 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadCampaigns() {
+    const { companyIds } = await getLeaderScope()
+    if (companyIds.length === 0) { setCompanies([]); setCampaigns([]); return }
     const [{ data: cos }, { data: cps }] = await Promise.all([
-      supabase.from('companies').select('id, name').order('name'),
-      supabase.from('campaigns').select('id, name, company_id, is_active').order('name'),
+      supabase.from('companies').select('id, name').in('id', companyIds).order('name'),
+      supabase.from('campaigns').select('id, name, company_id, is_active').in('company_id', companyIds).order('name'),
     ])
     setCompanies(cos ?? [])
     setCampaigns(cps ?? [])
@@ -466,7 +469,10 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
         groupMap.get(key)!.push(row)
       }
 
-      const { data: allTechs } = await supabase.from('technicians').select('id, name').eq('active', true)
+      const { companyIds } = await getLeaderScope()
+      const { data: allTechs } = companyIds.length === 0
+        ? { data: [] as { id: string; name: string }[] }
+        : await supabase.from('technicians').select('id, name').eq('active', true).in('company_id', companyIds)
       const nameToId = new Map<string, string>()
       for (const t of allTechs ?? []) nameToId.set(t.name.trim().toUpperCase(), t.id)
 
@@ -503,8 +509,17 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
 
-      const { data: existing } = await supabase.from('technician_routes').select('id').eq('route_date', routeDate)
-      if (existing?.length) await supabase.from('technician_routes').delete().in('id', existing.map(e => e.id))
+      // Solo borrar las rutas de ESTE líder en esa fecha (técnicos de sus
+      // empresas), nunca las de otros líderes.
+      const { allTechnicianIds } = await getLeaderScope()
+      if (allTechnicianIds.length > 0) {
+        const { data: existing } = await supabase
+          .from('technician_routes')
+          .select('id')
+          .eq('route_date', routeDate)
+          .in('technician_id', allTechnicianIds)
+        if (existing?.length) await supabase.from('technician_routes').delete().in('id', existing.map(e => e.id))
+      }
 
       for (let i = 0; i < groups.length; i++) {
         const g = groups[i]

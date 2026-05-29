@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { getLeaderScope } from '@/lib/leaderContext'
 
 interface Campaign {
   id: string; name: string; description: string | null
@@ -266,9 +267,16 @@ export function LeaderCampaigns() {
   async function load() {
     setLoading(true)
     try {
+      const { companyIds } = await getLeaderScope()
+      if (companyIds.length === 0) {
+        setCompanies([])
+        setLoading(false)
+        return
+      }
+
       const [{ data: cos }, { data: cps }] = await Promise.all([
-        supabase.from('companies').select('id, name, created_at').order('created_at'),
-        supabase.from('campaigns').select('id, name, description, start_date, end_date, is_active, created_at, company_id').order('created_at'),
+        supabase.from('companies').select('id, name, created_at').in('id', companyIds).order('created_at'),
+        supabase.from('campaigns').select('id, name, description, start_date, end_date, is_active, created_at, company_id').in('company_id', companyIds).order('created_at'),
       ])
       setCompanies((cos ?? []).map(c => ({
         ...c,

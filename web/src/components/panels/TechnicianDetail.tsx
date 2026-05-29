@@ -492,7 +492,7 @@ export function TechnicianDetail() {
     setLoadingEdit(true)
     const { data } = await supabase
       .from('technicians')
-      .select('id, name, phone, client, project, country, city, shift, notes, device_id, active, created_at, home_address, home_lat, home_lng')
+      .select('id, name, phone, client, project, country, city, shift, notes, device_id, active, created_at, home_address, home_lat, home_lng, home_radius')
       .eq('id', tech.id)
       .single()
     setEditData(data as TechnicianEditable)
@@ -509,7 +509,20 @@ export function TechnicianDetail() {
       home_lat:     patch.home_lat,
       home_lng:     patch.home_lng,
       home_address: patch.home_address,
+      home_radius:  patch.home_radius,
     })
+  }
+
+  // Radio del círculo de la casa — ajuste rápido desde la vista de líder
+  const radiusSaveRef = useRef<ReturnType<typeof setTimeout>>()
+  function handleRadiusChange(value: number) {
+    if (!tech) return
+    updateTechnicianMeta(tech.id, { home_radius: value })   // resize instantáneo del círculo
+    clearTimeout(radiusSaveRef.current)
+    radiusSaveRef.current = setTimeout(() => {
+      supabase.from('technicians').update({ home_radius: value }).eq('id', tech.id)
+        .then(({ error }) => { if (error) toast.error('No se pudo guardar el tamaño del círculo') })
+    }, 500)
   }
 
   const [tripInfo, setTripInfo]     = useState<{ start: Date; end: Date | null } | null>(null)
@@ -724,6 +737,29 @@ export function TechnicianDetail() {
               {showHeatmap ? '🔥 Ocultar heatmap de velocidad' : '🔥 Mostrar heatmap de velocidad'}
             </button>
           </div>
+
+          {/* Tamaño del círculo de la casa */}
+          {tech.home_lat != null && tech.home_lng != null && (
+            <div className="px-4 pb-3">
+              <div className="bg-surface-raised border border-border rounded-xl px-3 py-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+                    <Home className="w-3.5 h-3.5 text-success" /> Círculo de la casa
+                  </span>
+                  <span className="text-[11px] font-mono font-semibold text-success">{tech.home_radius ?? 100} m</span>
+                </div>
+                <input
+                  type="range"
+                  min={30}
+                  max={500}
+                  step={10}
+                  value={tech.home_radius ?? 100}
+                  onChange={e => handleRadiusChange(Number(e.target.value))}
+                  className="w-full accent-success cursor-pointer"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Gráfico de elevación */}
           <div className="px-4 pb-4">

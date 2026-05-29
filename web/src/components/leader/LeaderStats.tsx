@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { getLeaderScope } from '@/lib/leaderContext'
 
 interface TechRouteRow {
   id: string
@@ -49,10 +50,14 @@ export function LeaderStats() {
     setLoading(true)
     setError(null)
     try {
+      const { allTechnicianIds } = await getLeaderScope()
+      if (allTechnicianIds.length === 0) { setRoutes([]); setLoading(false); return }
+
       const { data: routesData, error: routesError } = await supabase
         .from('technician_routes')
         .select(`id, technician_name, technician_cedula, technician_id, route_items(franja, status)`)
         .eq('route_date', today)
+        .in('technician_id', allTechnicianIds)
         .order('technician_name')
 
       if (routesError) throw routesError

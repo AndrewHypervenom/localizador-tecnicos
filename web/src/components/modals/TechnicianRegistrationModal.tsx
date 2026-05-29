@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
+import { getLeaderScope } from '@/lib/leaderContext'
 
 interface Props {
   open: boolean
@@ -83,18 +84,33 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     }
   }
 
-  // Load companies + campaigns when modal opens
+  // Load companies + campaigns when modal opens.
+  // Superadmin ve todas; el líder solo las empresas que creó.
   useEffect(() => {
     if (!open) return
     setLoadingOrgs(true)
-    Promise.all([
-      supabase.from('companies').select('id, name').order('name'),
-      supabase.from('campaigns').select('id, name, company_id').eq('is_active', true).order('name'),
-    ]).then(([{ data: cos }, { data: cps }]) => {
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const role = session?.user?.app_metadata?.role as string | undefined
+
+      let companyQuery = supabase.from('companies').select('id, name').order('name')
+      let campaignQuery = supabase.from('campaigns').select('id, name, company_id').eq('is_active', true).order('name')
+
+      if (role !== 'superadmin') {
+        const { companyIds } = await getLeaderScope()
+        if (companyIds.length === 0) {
+          setCompanies([]); setAllCampaigns([]); setLoadingOrgs(false)
+          return
+        }
+        companyQuery = (companyQuery as any).in('id', companyIds)
+        campaignQuery = (campaignQuery as any).in('company_id', companyIds)
+      }
+
+      const [{ data: cos }, { data: cps }] = await Promise.all([companyQuery, campaignQuery])
       setCompanies(cos ?? [])
       setAllCampaigns(cps ?? [])
       setLoadingOrgs(false)
-    })
+    })()
   }, [open])
 
   useEffect(() => {
