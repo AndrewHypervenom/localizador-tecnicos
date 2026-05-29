@@ -128,7 +128,7 @@ export function LeaderStats() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard icon={Users} label="Técnicos con ruta hoy" value={routes.length} color="bg-primary/10 text-primary" />
         <StatCard icon={Wifi} label="Técnicos en campo" value={onlineTechs} color="bg-success/10 text-success" sub={`de ${routes.length} programados`} />
         <StatCard icon={Sun} label="Instalaciones AM" value={totalAM} color="bg-warning/10 text-warning" />
