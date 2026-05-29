@@ -182,7 +182,7 @@ export function LeaderPanel() {
                 </h2>
               </div>
               {openPanel === 'history' ? (
-                <div className="flex-1 overflow-hidden p-4">
+                <div className="flex-1 overflow-y-auto lg:overflow-hidden p-2 sm:p-4">
                   <LeaderHistory />
                 </div>
               ) : (

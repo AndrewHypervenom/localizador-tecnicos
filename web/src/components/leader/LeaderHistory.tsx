@@ -114,7 +114,7 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
       {segments.map((seg, i) => (
         <Polyline key={i} positions={seg.points} pathOptions={{ color: seg.color, weight: 4, opacity: 0.9 }} />
       ))}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-surface/95 backdrop-blur-sm border border-border-soft rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] max-w-[calc(100%-1rem)] bg-surface/95 backdrop-blur-sm border border-border-soft rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 shadow-xl flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <button onClick={() => { setPlayhead(0); setPlaying(false) }}
           className="p-1.5 rounded-lg hover:bg-surface-raised text-text-secondary hover:text-text-primary transition-colors">
           <SkipBack className="w-4 h-4" />
@@ -128,7 +128,7 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
         </span>
         <input type="range" min={0} max={points.length - 1} value={playhead}
           onChange={e => { setPlaying(false); setPlayhead(Number(e.target.value)) }}
-          className="w-32 accent-primary" />
+          className="w-24 sm:w-32 accent-primary" />
         <div className="flex items-center gap-1 border-l border-border-soft pl-3">
           {SPEEDS.map(s => (
             <button key={s} onClick={() => setSpeed(s)}
@@ -267,9 +267,9 @@ export function LeaderHistory() {
   }
 
   return (
-    <div className="flex h-full rounded-2xl overflow-hidden border border-border-soft bg-surface">
+    <div className="flex flex-col lg:flex-row lg:h-full rounded-2xl overflow-hidden border border-border-soft bg-surface">
       {/* Panel izquierdo */}
-      <div className="w-72 flex-shrink-0 flex flex-col border-r border-border-soft">
+      <div className="w-full lg:w-72 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border-soft">
         <div className="p-4 space-y-3 border-b border-border-soft">
           <div>
             <label className="block text-xs text-text-muted mb-1">Técnico</label>
@@ -346,7 +346,7 @@ export function LeaderHistory() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-72 lg:max-h-none">
           {trips.map(trip => {
             const inProgress = trip.status !== 'completed'
             const durationLabel = trip.duration_min != null
@@ -413,7 +413,7 @@ export function LeaderHistory() {
       </div>
 
       {/* Panel derecho */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col lg:overflow-hidden relative min-h-0">
         {selectedTrip && (
           <>
             <div className="p-4 border-b border-border-soft bg-surface">
@@ -436,7 +436,7 @@ export function LeaderHistory() {
                   ? `${selectedTrip.duration_min} min`
                   : `${Math.round((Date.now() - new Date(selectedTrip.started_at).getTime()) / 60_000)} min`
                 return (
-                  <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                     <StatBadge icon={Route}          value={distKm + ' km'}   label="Distancia"     color="text-primary" />
                     <StatBadge icon={Clock}          value={durLabel}          label="Duración"      color="text-text-secondary" />
                     <StatBadge icon={TrendingUp}     value={maxSpd + ' km/h'} label="Vel. máx"      color="text-danger" />
@@ -449,8 +449,8 @@ export function LeaderHistory() {
                 )
               })()}
             </div>
-            <div className="flex-1 flex overflow-hidden">
-              <div className="flex-1 relative">
+            <div className="flex-1 flex flex-col xl:flex-row lg:overflow-hidden min-h-0">
+              <div className="flex-1 relative h-[55vh] lg:h-auto min-h-[300px]">
                 <MapContainer center={[14.0723, -87.2061]} zoom={12}
                   style={{ height: '100%', width: '100%' }}
                   zoomControl={false} attributionControl={false}>
@@ -458,7 +458,7 @@ export function LeaderHistory() {
                   {routePoints.length > 0 && <RoutePlayback key={selectedTrip.id} points={routePoints} />}
                 </MapContainer>
               </div>
-              <div className="w-64 flex-shrink-0 flex flex-col border-l border-border-soft bg-surface overflow-y-auto p-4 space-y-4">
+              <div className="w-full xl:w-64 flex-shrink-0 flex flex-col border-t xl:border-t-0 xl:border-l border-border-soft bg-surface lg:overflow-y-auto p-4 space-y-4">
                 <div>
                   <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Elevación</h4>
                   <ElevationChart data={elevData} />
