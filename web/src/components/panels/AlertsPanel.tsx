@@ -1,9 +1,10 @@
-import { useState, forwardRef } from 'react'
+import { useState, useMemo, forwardRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTrackingStore, MotionAlert, ZoneAlert } from '@/store/trackingStore'
 import {
   AlertTriangle, Zap, CornerDownLeft, RotateCcw, Siren, WifiOff, BatteryLow,
   CheckCheck, Eye, BellOff, LogIn, LogOut, Layers, CalendarDays, Clock, CalendarX, X,
+  User, Filter,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EnablePushButton } from '@/components/EnablePushButton'
@@ -159,6 +160,7 @@ type UnifiedAlert =
   | { kind: 'zone';   data: ZoneAlert;   ts: string }
 
 type DateFilter = 'today' | 'expired' | 'custom'
+type KindFilter = 'all' | 'motion' | 'zone'
 
 interface AlertsPanelProps {
   className?: string
@@ -168,8 +170,21 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
   const { alerts, zoneAlerts, acknowledgeAllAlerts } = useTrackingStore()
   const [dateFilter, setDateFilter] = useState<DateFilter>('today')
   const [customDate, setCustomDate] = useState<string>('')
+  const [techFilter, setTechFilter] = useState<string>('all')   // 'all' | technicianId
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
 
   const today = startOfDay(new Date())
+
+  // Técnicos que aparecen en las alertas. Como las alertas ya llegan acotadas a
+  // la empresa del líder (carga con .in('technician_id', ids) y guard en realtime),
+  // este listado contiene SOLO los técnicos que le corresponden al líder.
+  const technicianOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    alerts.forEach((a)     => { if (!map.has(a.technicianId)) map.set(a.technicianId, a.technicianName) })
+    zoneAlerts.forEach((a) => { if (!map.has(a.technicianId)) map.set(a.technicianId, a.technicianName) })
+    return Array.from(map, ([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  }, [alerts, zoneAlerts])
 
   const matchesDateFilter = (ts: string): boolean => {
     const alertDay = startOfDay(new Date(ts))
@@ -179,14 +194,18 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
     return isEqual(alertDay, today)
   }
 
-  // Combinar, filtrar por fecha y ordenar por tiempo descendente
+  // Combinar, filtrar por fecha / técnico / tipo y ordenar por tiempo descendente
   const unified: UnifiedAlert[] = [
     ...alerts.map((a)     => ({ kind: 'motion' as const, data: a, ts: a.ts })),
     ...zoneAlerts.map((a) => ({ kind: 'zone'   as const, data: a, ts: a.ts })),
   ]
     .filter((item) => matchesDateFilter(item.ts))
+    .filter((item) => kindFilter === 'all' || item.kind === kindFilter)
+    .filter((item) => techFilter === 'all' || item.data.technicianId === techFilter)
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, 50)
+
+  const hasActiveFilter = techFilter !== 'all' || kindFilter !== 'all'
 
   const unackedCount =
     alerts.filter((a) => !a.acknowledged).length +
@@ -311,23 +330,75 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
           )}
         </div>
 
+        {/* Filtro por técnico (solo técnicos de la empresa del líder) */}
+        <div className="flex items-center gap-1.5 mt-2">
+          <User className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+          <select
+            value={techFilter}
+            onChange={(e) => setTechFilter(e.target.value)}
+            className={cn(
+              'flex-1 bg-surface border rounded-lg px-2 py-1 text-xs text-text-primary',
+              'focus:outline-none focus:ring-1 focus:ring-primary/50 transition-colors',
+              techFilter !== 'all'
+                ? 'border-primary/40 bg-primary/5'
+                : 'border-border-soft'
+            )}
+          >
+            <option value="all">Todos los técnicos</option>
+            {technicianOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filtro por tipo de alerta */}
+        <div className="flex items-center gap-1.5 mt-2">
+          <Filter className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+          {([
+            { key: 'all' as const,    label: 'Todas' },
+            { key: 'motion' as const, label: 'Conducción' },
+            { key: 'zone' as const,   label: 'Zonas' },
+          ]).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setKindFilter(opt.key)}
+              className={cn(
+                'flex-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors',
+                kindFilter === opt.key
+                  ? 'bg-primary/15 text-primary border border-primary/30'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface border border-transparent'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Etiqueta del filtro activo */}
-        {true && (
-          <div className="mt-1.5 text-xs text-text-muted flex items-center gap-1">
-            <span>Mostrando:</span>
-            <span className={cn(
-              'font-medium',
-              dateFilter === 'today'   && 'text-primary',
-              dateFilter === 'expired' && 'text-warning',
-              dateFilter === 'custom'  && 'text-text-secondary',
-            )}>
-              {dateFilter === 'today'   && `hoy (${todayLabel})`}
-              {dateFilter === 'expired' && 'días anteriores'}
-              {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
-            </span>
-            <span className="ml-auto text-text-muted">{unified.length} alertas</span>
-          </div>
-        )}
+        <div className="mt-1.5 text-xs text-text-muted flex items-center gap-1">
+          <span>Mostrando:</span>
+          <span className={cn(
+            'font-medium',
+            dateFilter === 'today'   && 'text-primary',
+            dateFilter === 'expired' && 'text-warning',
+            dateFilter === 'custom'  && 'text-text-secondary',
+          )}>
+            {dateFilter === 'today'   && `hoy (${todayLabel})`}
+            {dateFilter === 'expired' && 'días anteriores'}
+            {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
+          </span>
+          {hasActiveFilter && (
+            <button
+              onClick={() => { setTechFilter('all'); setKindFilter('all') }}
+              className="flex items-center gap-0.5 text-primary hover:text-primary/80 transition-colors"
+              title="Limpiar filtros"
+            >
+              <X className="w-3 h-3" />
+              filtros
+            </button>
+          )}
+          <span className="ml-auto text-text-muted">{unified.length} alertas</span>
+        </div>
       </div>
 
       {/* Lista */}
@@ -336,9 +407,13 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
           <div className="flex flex-col items-center justify-center h-32 text-text-muted">
             <BellOff className="w-8 h-8 mb-2 opacity-30" />
             <span className="text-sm">
-              {dateFilter === 'today'   && 'Sin alertas hoy'}
-              {dateFilter === 'expired' && 'Sin alertas vencidas'}
-              {dateFilter === 'custom'  && 'Sin alertas en este día'}
+              {hasActiveFilter
+                ? 'Sin alertas con estos filtros'
+                : <>
+                    {dateFilter === 'today'   && 'Sin alertas hoy'}
+                    {dateFilter === 'expired' && 'Sin alertas vencidas'}
+                    {dateFilter === 'custom'  && 'Sin alertas en este día'}
+                  </>}
             </span>
           </div>
         ) : (
