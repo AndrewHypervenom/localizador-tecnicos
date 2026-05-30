@@ -208,7 +208,7 @@ router.get('/companies', async (_req: Request, res: Response) => {
   try {
     const { data: companies, error } = await supabase
       .from('companies')
-      .select('id, name, created_by, created_at')
+      .select('id, name, created_by, created_at, work_start_hour, work_end_hour, work_skip_weekends, work_tz')
       .order('created_at', { ascending: false })
     if (error) throw error
 
@@ -228,6 +228,10 @@ router.get('/companies', async (_req: Request, res: Response) => {
       createdAt: co.created_at,
       leaderId: co.created_by,
       leaderEmail: userMap.get(co.created_by ?? '') ?? null,
+      workStartHour: (co as any).work_start_hour ?? 8,
+      workEndHour: (co as any).work_end_hour ?? 17,
+      workSkipWeekends: (co as any).work_skip_weekends ?? true,
+      workTz: (co as any).work_tz ?? 'America/Bogota',
       campaignCount: (campaigns ?? []).filter(c => c.company_id === co.id).length,
       activeCampaignCount: (campaigns ?? []).filter(c => c.company_id === co.id && c.is_active).length,
       technicianCount: (technicians ?? []).filter(t => t.company_id === co.id).length,
@@ -243,14 +247,24 @@ router.get('/companies', async (_req: Request, res: Response) => {
 
 // POST /api/admin/companies — create company assigned to a specific leader
 router.post('/companies', async (req: Request, res: Response) => {
-  const { name, leaderId } = req.body as { name: string; leaderId: string }
+  const { name, leaderId, workStartHour, workEndHour, workSkipWeekends, workTz } = req.body as {
+    name: string; leaderId: string
+    workStartHour?: number; workEndHour?: number; workSkipWeekends?: boolean; workTz?: string
+  }
   if (!name?.trim()) { res.status(400).json({ error: 'El nombre es requerido' }); return }
   if (!leaderId)       { res.status(400).json({ error: 'El líder es requerido' }); return }
 
   try {
     const { data, error } = await supabase
       .from('companies')
-      .insert({ name: name.trim(), created_by: leaderId })
+      .insert({
+        name: name.trim(),
+        created_by: leaderId,
+        work_start_hour: workStartHour ?? 8,
+        work_end_hour: workEndHour ?? 17,
+        work_skip_weekends: workSkipWeekends ?? true,
+        work_tz: workTz ?? 'America/Bogota',
+      })
       .select('id, name, created_by, created_at')
       .single()
     if (error) throw error
@@ -267,11 +281,18 @@ router.post('/companies', async (req: Request, res: Response) => {
 // PATCH /api/admin/companies/:id — rename or reassign
 router.patch('/companies/:id', async (req: Request, res: Response) => {
   const { id } = req.params
-  const { name, leaderId } = req.body as { name?: string; leaderId?: string }
+  const { name, leaderId, workStartHour, workEndHour, workSkipWeekends, workTz } = req.body as {
+    name?: string; leaderId?: string
+    workStartHour?: number; workEndHour?: number; workSkipWeekends?: boolean; workTz?: string
+  }
 
   const updates: Record<string, unknown> = {}
   if (name?.trim()) updates.name = name.trim()
   if (leaderId)     updates.created_by = leaderId
+  if (workStartHour    !== undefined) updates.work_start_hour    = workStartHour
+  if (workEndHour      !== undefined) updates.work_end_hour      = workEndHour
+  if (workSkipWeekends !== undefined) updates.work_skip_weekends = workSkipWeekends
+  if (workTz           !== undefined) updates.work_tz            = workTz
   if (!Object.keys(updates).length) { res.status(400).json({ error: 'Nada que actualizar' }); return }
 
   try {

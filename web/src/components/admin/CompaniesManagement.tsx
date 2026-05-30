@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Plus, Trash2, RefreshCw, X, Building2, FolderOpen,
-  Loader2, ChevronDown, ChevronRight, Pencil, Check, Users,
+  Loader2, ChevronDown, ChevronRight, Pencil, Check, Users, Clock,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,10 @@ interface CompanyRow {
   campaignCount: number
   activeCampaignCount: number
   technicianCount: number
+  workStartHour: number
+  workEndHour: number
+  workSkipWeekends: boolean
+  workTz: string
   campaigns: CampaignRow[]
 }
 interface Leader { id: string; email: string; role: string }
@@ -27,6 +31,13 @@ const inp = cn(
   'w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary',
   'placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors'
 )
+
+// Zonas horarias comunes en LatAm (ampliable).
+const TZ_OPTIONS = [
+  'America/Bogota', 'America/Lima', 'America/Mexico_City', 'America/Santiago',
+  'America/Argentina/Buenos_Aires', 'America/Caracas', 'America/Guayaquil',
+  'America/La_Paz', 'America/Panama', 'America/Costa_Rica',
+]
 
 // ── Create/Edit modal ─────────────────────────────────────────────────────────
 function CompanyModal({
@@ -44,6 +55,10 @@ function CompanyModal({
 }) {
   const [name, setName]       = useState(company?.name ?? '')
   const [leaderId, setLeader] = useState(company?.leaderId ?? (leaders[0]?.id ?? ''))
+  const [workStartHour, setWorkStartHour]       = useState(company?.workStartHour ?? 8)
+  const [workEndHour, setWorkEndHour]           = useState(company?.workEndHour ?? 17)
+  const [workSkipWeekends, setWorkSkipWeekends] = useState(company?.workSkipWeekends ?? true)
+  const [workTz, setWorkTz]   = useState(company?.workTz ?? 'America/Bogota')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
@@ -52,10 +67,11 @@ function CompanyModal({
     if (!name.trim()) { setError('El nombre es requerido'); return }
     setSaving(true); setError(null)
     try {
+      const payload = { name, leaderId, workStartHour, workEndHour, workSkipWeekends, workTz }
       if (mode === 'create') {
-        await api.post('/api/admin/companies', { name, leaderId })
+        await api.post('/api/admin/companies', payload)
       } else {
-        await api.patch(`/api/admin/companies/${company!.id}`, { name, leaderId })
+        await api.patch(`/api/admin/companies/${company!.id}`, payload)
       }
       onSaved(); onClose()
     } catch (err: any) {
@@ -129,6 +145,53 @@ function CompanyModal({
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Horario de alertas: cuándo se generan "sin señal" y "batería baja". */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-1 h-4 bg-primary rounded-full" />
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Horario de alertas</p>
+            </div>
+            <p className="text-text-muted text-xs mb-3">
+              Las alertas de "sin señal" y batería baja solo se generan dentro de este horario.
+              Accidente y SOS siempre alertan, 24/7.
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-text-muted font-medium mb-1.5">Desde</label>
+                  <select value={workStartHour} onChange={e => setWorkStartHour(Number(e.target.value))} className={inp}>
+                    {Array.from({ length: 25 }, (_, h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-text-muted font-medium mb-1.5">Hasta</label>
+                  <select value={workEndHour} onChange={e => setWorkEndHour(Number(e.target.value))} className={inp}>
+                    {Array.from({ length: 25 }, (_, h) => (
+                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={workSkipWeekends}
+                  onChange={e => setWorkSkipWeekends(e.target.checked)}
+                  className="rounded border-border-soft"
+                />
+                <span className="text-sm text-text-secondary">No alertar sábados ni domingos</span>
+              </label>
+              <div>
+                <label className="block text-xs text-text-muted font-medium mb-1.5">Zona horaria</label>
+                <select value={workTz} onChange={e => setWorkTz(e.target.value)} className={inp}>
+                  {TZ_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                </select>
               </div>
             </div>
           </div>
@@ -290,6 +353,12 @@ export function CompaniesManagement() {
                           </span>
                         </>
                       )}
+                      <span className="text-text-muted/50 text-xs">·</span>
+                      <span className="text-xs text-text-muted flex items-center gap-1" title="Horario de alertas">
+                        <Clock className="w-3 h-3" />
+                        {String(co.workStartHour ?? 8).padStart(2, '0')}–{String(co.workEndHour ?? 17).padStart(2, '0')}h
+                        {(co.workSkipWeekends ?? true) ? ' L–V' : ''}
+                      </span>
                     </div>
                   </div>
 

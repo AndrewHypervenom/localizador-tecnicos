@@ -18,6 +18,7 @@ import {
 } from './offlineQueue';
 import { applyTrackingTier } from './locationService';
 import { detectMotionFromGPS, setTechIdForSensor } from './sensorService';
+import { setMockDetected } from './mockLocationGuard';
 
 export const LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 
@@ -81,6 +82,14 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     setTechIdForSensor(technicianId);
 
     const loc = data.locations[data.locations.length - 1];
+
+    // ── Anti "Fake GPS": no subir fixes simulados ──
+    // Android marca loc.mocked = true cuando la posición viene de una app de
+    // ubicación falsa. Lo señalamos (para que la UI bloquee y suspenda el
+    // rastreo) y descartamos el punto sin enviarlo.
+    if (loc.mocked) { setMockDetected(true); return; }
+    setMockDetected(false);
+
     const { latitude, longitude, altitude, accuracy, speed, heading } = loc.coords;
     // iOS/Android reportan speed = -1 (o null) cuando el fix no tiene velocidad
     // fiable. Lo normalizamos a null para que no contamine los promedios (un -1

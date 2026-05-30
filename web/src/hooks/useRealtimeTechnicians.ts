@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTrackingStore } from '@/store/trackingStore'
-import type { TechnicianState, TechnicianStatus } from '@/store/trackingStore'
+import type { TechnicianState } from '@/store/trackingStore'
 import { toast } from 'sonner'
 
 let audioCtx: AudioContext | null = null
@@ -44,13 +44,9 @@ function playAccidentAlert() {
 //   string[]  → leader mode, filter to these IDs only
 export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   const { setTechnicians, replaceTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
-  const prevStatusesRef = useRef<Record<string, TechnicianStatus>>({})
   const filterRef = useRef(filterByIds)
   // true tras un corte de realtime: dispara un catch-up al reconectar
   const wasDisconnectedRef = useRef(false)
-  // Técnicos ya avisados como inactivos: evita repetir el toast en cada tick
-  // mientras siguen inactivos (la causa del "envía más alertas de la cuenta").
-  const inactiveWarnedRef = useRef<Record<string, boolean>>({})
 
   useEffect(() => {
     filterRef.current = filterByIds
@@ -182,41 +178,14 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
     }
     document.addEventListener('visibilitychange', onVisible)
 
-    // Recalcular estados basados en tiempo transcurrido (detecta cuando la app deja de enviar)
+    // Recalcular estados según el tiempo transcurrido: actualiza el color del
+    // marcador a "sin señal" cuando un técnico deja de enviar ubicación. Es
+    // SOLO visual — ya no lanzamos un toast por técnico: "sin señal" es un
+    // estado (no una emergencia) y con muchos técnicos sería una catarata de
+    // avisos. El conteo agregado ya se ve en LeaderStats / la lista de técnicos.
     const statusRefreshInterval = setInterval(() => {
       if (document.hidden) return
-      const store = useTrackingStore.getState()
-
-      store.refreshStatuses()
-
-      // Detectar transiciones activo → inactivo y notificar UNA sola vez por
-      // episodio. El estado puede oscilar idle↔stopped entre heartbeats; sin
-      // este guard se disparaba un toast en cada oscilación.
-      const afterTechs = useTrackingStore.getState().technicians
-      Object.values(afterTechs).forEach((tech) => {
-        const prev       = prevStatusesRef.current[tech.id]
-        const wasActive  = prev === 'moving' || prev === 'idle'
-        const isActive   = tech.status === 'moving' || tech.status === 'idle'
-        const isInactive = tech.status === 'stopped' || tech.status === 'offline'
-
-        // Volvió a estar activo: rearmar el aviso para el próximo corte real.
-        if (isActive) inactiveWarnedRef.current[tech.id] = false
-
-        // Avisar SOLO en una transición real activo→inactivo de un técnico con
-        // app vinculada. Evita falsos avisos de técnicos recién creados o sin
-        // dispositivo, que nunca estuvieron enviando ubicación.
-        if (tech.deviceId && wasActive && isInactive && !inactiveWarnedRef.current[tech.id]) {
-          inactiveWarnedRef.current[tech.id] = true
-          toast.warning(`${tech.name} dejó de enviar ubicación`, {
-            description: tech.status === 'offline'
-              ? 'Sin señal por más de 10 minutos'
-              : 'Sin datos por más de 1 minuto',
-            duration: 10_000,
-          })
-        }
-
-        prevStatusesRef.current[tech.id] = tech.status
-      })
+      useTrackingStore.getState().refreshStatuses()
     }, 10_000)
 
     // Suscripción a nuevos puntos GPS en tiempo real
@@ -323,7 +292,9 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
               duration: 0,
             })
             playAccidentAlert()
-          } else {
+          } else if (row.event_type !== 'offline') {
+            // 'offline' (sin señal) ya quedó registrado en el panel (addAlert),
+            // pero no molestamos con un toast: es un estado, no una emergencia.
             toast.warning(`${icon} ${label}`, {
               description: techName,
               duration: 5000,

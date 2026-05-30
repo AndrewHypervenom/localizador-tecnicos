@@ -27,11 +27,11 @@ import {
   Eye, EyeOff, MapPinned, Layers, Trash2,
   AlertTriangle, Loader2, X,
   Plus, Upload, ClipboardList, Wrench, MapPin, Building2, BarChart3,
-  History, FileText, Bell,
+  History, FileText, Bell, Settings,
 } from 'lucide-react'
 
 type PanelView = 'stats' | 'upload' | 'routes' | 'technicians' | 'campaigns'
-  | 'history' | 'reports' | 'alerts'
+  | 'history' | 'reports' | 'alerts' | 'settings'
 
 interface LeaderMapProps {
   onOpenPanel: (panel: PanelView) => void
@@ -47,6 +47,7 @@ const FAB_ACTIONS: { id: PanelView | 'zones'; icon: React.ElementType; label: st
   { id: 'history',     icon: History,      label: 'Historial'   },
   { id: 'reports',     icon: FileText,     label: 'Reportes'    },
   { id: 'alerts',      icon: Bell,         label: 'Alertas'     },
+  { id: 'settings',    icon: Settings,     label: 'Ajustes'     },
   { id: 'zones',       icon: Layers,       label: 'Zonas'       },
 ]
 

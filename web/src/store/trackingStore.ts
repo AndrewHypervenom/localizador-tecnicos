@@ -8,8 +8,8 @@ export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'offline' | 'acci
 export const STATUS_THRESHOLDS = {
   MOVING_FRESH_S: 30,   // speed > 1 km/h only counts as "moving" if data is < 30s old
   IDLE_S:         60,   // < 1 min since last event → idle (active but not moving)
-  STOPPED_S:      600,  // < 10 min → stopped (sin rastreo)
-  // > 10 min → offline (desconectado)
+  STOPPED_S:      900,  // < 15 min → stopped (sin rastreo)
+  // > 15 min → offline (sin señal)
 }
 
 export interface TechnicianState {

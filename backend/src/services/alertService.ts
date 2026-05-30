@@ -2,13 +2,29 @@ import { query } from '../config/db'
 import { dispatchToCompany, type AlertPayload } from './pushService'
 
 // ── Umbrales ──────────────────────────────────────────────────────────────────
-const OFFLINE_THRESHOLD_MIN = 10   // sin enviar ubicación
+const OFFLINE_THRESHOLD_MIN = 15   // sin enviar ubicación (estado "sin señal")
 const OFFLINE_RECENT_HOURS  = 24   // solo técnicos con actividad reciente
 const OFFLINE_DEDUP_MIN     = 30   // no repetir alerta offline dentro de este lapso
 const BATTERY_LOW_PCT       = 20
 const BATTERY_DEDUP_HOURS   = 6
 const ESCALATE_AFTER_MIN    = 5    // accidente/SOS sin acuse
 const ESCALATE_MAX_AGE_MIN  = 120  // no escalar eventos demasiado viejos
+
+// ── Horario laboral (por empresa) ────────────────────────────────────────────────
+// Fuera del horario de SU empresa es NORMAL que el técnico se desconecte (terminó el
+// turno), así que NO generamos "sin señal" ni "batería baja" — eso evita la lluvia
+// de alertas de 5pm a 8am. Las emergencias (accidente/SOS) sí se escalan 24/7.
+// El horario se configura por empresa desde el sitio (columnas en la tabla
+// `companies`); aquí solo se filtra en SQL con la hora LOCAL de cada empresa, en
+// una sola consulta (escala sin bucles). `now() AT TIME ZONE c.work_tz` da la hora
+// de pared de esa empresa; en EXTRACT(DOW ...) 0=domingo y 6=sábado.
+const WITHIN_COMPANY_HOURS = `
+        AND EXTRACT(HOUR FROM (now() AT TIME ZONE COALESCE(c.work_tz, 'America/Bogota')))
+              >= COALESCE(c.work_start_hour, 8)
+        AND EXTRACT(HOUR FROM (now() AT TIME ZONE COALESCE(c.work_tz, 'America/Bogota')))
+              <  COALESCE(c.work_end_hour, 17)
+        AND (COALESCE(c.work_skip_weekends, true) = false
+             OR EXTRACT(DOW FROM (now() AT TIME ZONE COALESCE(c.work_tz, 'America/Bogota'))) NOT IN (0, 6))`
 
 interface MotionEventRow {
   id: string
@@ -33,6 +49,12 @@ const LABELS: Record<string, string> = {
 }
 
 const CRITICAL = new Set(['accident', 'sos'])
+
+// Eventos que se REGISTRAN (para el panel/historial) pero nunca disparan push.
+// "offline" (sin señal) es un estado, no una emergencia: perder GPS unos minutos
+// es normal (edificios, túneles, ahorro de batería) y no debe notificar por
+// técnico — con muchos técnicos sería spam y no escala.
+const SILENT_PUSH_TYPES = new Set(['offline'])
 
 function buildPayload(ev: MotionEventRow, escalation = false): AlertPayload {
   const label = LABELS[ev.event_type] ?? 'Evento de conducción'
@@ -68,6 +90,14 @@ export async function dispatchMotionEvent(eventId: string, escalation = false): 
   if (!ev) return
   if (!escalation && ev.notified_at) return // ya notificado por otro disparador
 
+  // Estado silencioso (sin señal): se marca como atendido y NO se envía push.
+  // Este es el único punto por el que pasan el cron y el webhook de Supabase,
+  // así que silenciar aquí cubre ambos caminos.
+  if (SILENT_PUSH_TYPES.has(ev.event_type)) {
+    if (!ev.notified_at) await query(`UPDATE motion_events SET notified_at = now() WHERE id = $1`, [eventId])
+    return
+  }
+
   await dispatchToCompany(ev.company_id, buildPayload(ev, escalation))
 
   if (escalation) {
@@ -81,14 +111,15 @@ export async function dispatchMotionEvent(eventId: string, escalation = false): 
 
 /** Inserta alerta 'offline' para técnicos activos que dejaron de enviar. */
 export async function detectOfflineTechnicians(): Promise<void> {
-  const inserted = await query<{ id: string }>(
+  await query(
     `INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
      SELECT t.id, now(), 'offline', 50, NULL
        FROM technicians t
        JOIN technician_current_status s ON s.id = t.id
+       LEFT JOIN companies c ON c.id = t.company_id
       WHERE t.active = true
         AND s.last_seen < now() - ($1 || ' minutes')::interval
-        AND s.last_seen > now() - ($2 || ' hours')::interval
+        AND s.last_seen > now() - ($2 || ' hours')::interval${WITHIN_COMPANY_HOURS}
         AND NOT EXISTS (
           SELECT 1 FROM motion_events m
            WHERE m.technician_id = t.id
@@ -98,7 +129,8 @@ export async function detectOfflineTechnicians(): Promise<void> {
      RETURNING id`,
     [OFFLINE_THRESHOLD_MIN, OFFLINE_RECENT_HOURS, OFFLINE_DEDUP_MIN],
   )
-  for (const r of inserted) await dispatchMotionEvent(r.id)
+  // No se despacha push: 'offline' es silencioso (ver SILENT_PUSH_TYPES). Los
+  // registros quedan en motion_events para el panel/historial del líder.
 }
 
 /** Inserta alerta 'battery_low' cuando la batería del último punto cae bajo el umbral. */
@@ -108,10 +140,11 @@ export async function detectLowBattery(): Promise<void> {
      SELECT t.id, now(), 'battery_low', 30, NULL
        FROM technicians t
        JOIN technician_current_status s ON s.id = t.id
+       LEFT JOIN companies c ON c.id = t.company_id
       WHERE t.active = true
         AND s.battery IS NOT NULL
         AND s.battery < $1
-        AND s.last_seen > now() - interval '30 minutes'
+        AND s.last_seen > now() - interval '30 minutes'${WITHIN_COMPANY_HOURS}
         AND NOT EXISTS (
           SELECT 1 FROM motion_events m
            WHERE m.technician_id = t.id

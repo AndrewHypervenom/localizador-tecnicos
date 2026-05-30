@@ -13,10 +13,11 @@ import { LeaderCampaigns } from '@/components/leader/LeaderCampaigns'
 import { LeaderHistory } from '@/components/leader/LeaderHistory'
 import { LeaderReports } from '@/components/leader/LeaderReports'
 import { LeaderAlerts } from '@/components/leader/LeaderAlerts'
+import { LeaderSettings } from '@/components/leader/LeaderSettings'
 export type LeaderPanelView =
   | 'stats' | 'upload' | 'routes' | 'technicians'
   | 'campaigns'
-  | 'history' | 'reports' | 'alerts'
+  | 'history' | 'reports' | 'alerts' | 'settings'
   | null
 
 const PANEL_TITLES: Record<NonNullable<LeaderPanelView>, string> = {
@@ -28,6 +29,7 @@ const PANEL_TITLES: Record<NonNullable<LeaderPanelView>, string> = {
   history:     'Historial de viajes',
   reports:     'Reportes',
   alerts:      'Centro de alertas',
+  settings:    'Ajustes',
 }
 
 export function LeaderPanel() {
@@ -195,6 +197,7 @@ export function LeaderPanel() {
                     {openPanel === 'campaigns'   && <LeaderCampaigns />}
                     {openPanel === 'reports'     && <LeaderReports />}
                     {openPanel === 'alerts'      && <LeaderAlerts />}
+                    {openPanel === 'settings'    && <LeaderSettings />}
                   </div>
                 </div>
               )}
