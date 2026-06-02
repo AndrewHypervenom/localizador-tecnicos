@@ -4,7 +4,7 @@ import { useTrackingStore, MotionAlert, ZoneAlert } from '@/store/trackingStore'
 import {
   AlertTriangle, Zap, CornerDownLeft, RotateCcw, Siren, WifiOff, BatteryLow,
   CheckCheck, Eye, BellOff, LogIn, LogOut, Layers, CalendarDays, Clock, CalendarX, X,
-  User, Filter,
+  User, Filter, Home, DoorOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EnablePushButton } from '@/components/EnablePushButton'
@@ -22,7 +22,13 @@ const MOTION_CONFIG: Record<string, { icon: any; label: string; color: string; b
   harsh_turn:  { icon: RotateCcw,      label: 'Giro brusco',         color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
   offline:     { icon: WifiOff,        label: 'Técnico sin señal',   color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
   battery_low: { icon: BatteryLow,     label: 'Batería baja',        color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  home_enter:  { icon: Home,           label: 'Llegó a casa',        color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  home_exit:   { icon: DoorOpen,       label: 'Salió de casa',       color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
 }
+
+// Eventos de casa: viven en motion_events pero se muestran como su propia
+// categoría (entrada/salida del domicilio asignado), no como "conducción".
+const HOME_TYPES = new Set(['home_enter', 'home_exit'])
 
 const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ alert }, ref) => {
   const { acknowledgeAlert } = useTrackingStore()
@@ -160,7 +166,12 @@ type UnifiedAlert =
   | { kind: 'zone';   data: ZoneAlert;   ts: string }
 
 type DateFilter = 'today' | 'expired' | 'custom'
-type KindFilter = 'all' | 'motion' | 'zone'
+type KindFilter = 'all' | 'motion' | 'home' | 'zone'
+
+const categoryOf = (item: UnifiedAlert): 'motion' | 'home' | 'zone' =>
+  item.kind === 'zone'                            ? 'zone'
+  : HOME_TYPES.has((item.data as MotionAlert).type) ? 'home'
+  :                                                   'motion'
 
 interface AlertsPanelProps {
   className?: string
@@ -190,7 +201,10 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
     const alertDay = startOfDay(new Date(ts))
     if (dateFilter === 'expired') return isBefore(alertDay, today)
     if (dateFilter === 'custom' && customDate)
-      return isEqual(alertDay, startOfDay(new Date(customDate)))
+      // '2026-06-01' debe interpretarse como medianoche LOCAL, no UTC. Sin el
+      // sufijo 'T00:00:00', new Date() lo lee como UTC y en zonas negativas
+      // (p. ej. Bogotá UTC-5) cae al día anterior → el filtro no mostraba nada.
+      return isEqual(alertDay, startOfDay(new Date(customDate + 'T00:00:00')))
     return isEqual(alertDay, today)
   }
 
@@ -200,7 +214,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
     ...zoneAlerts.map((a) => ({ kind: 'zone'   as const, data: a, ts: a.ts })),
   ]
     .filter((item) => matchesDateFilter(item.ts))
-    .filter((item) => kindFilter === 'all' || item.kind === kindFilter)
+    .filter((item) => kindFilter === 'all' || categoryOf(item) === kindFilter)
     .filter((item) => techFilter === 'all' || item.data.technicianId === techFilter)
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, 50)
@@ -212,7 +226,8 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
     zoneAlerts.filter((a) => !a.acknowledged).length
 
   const zoneUnacked   = zoneAlerts.filter((a) => !a.acknowledged).length
-  const motionUnacked = alerts.filter((a) => !a.acknowledged).length
+  const homeUnacked   = alerts.filter((a) => !a.acknowledged && HOME_TYPES.has(a.type)).length
+  const motionUnacked = alerts.filter((a) => !a.acknowledged && !HOME_TYPES.has(a.type)).length
 
   const todayLabel = format(today, "d MMM", { locale: es })
 
@@ -257,12 +272,18 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
         </div>
 
         {/* Mini stats */}
-        <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', motionUnacked > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
               {motionUnacked}
             </div>
             <div className="text-xs text-text-muted">Conducción</div>
+          </div>
+          <div className="bg-success/10 rounded-lg px-2 py-1.5 text-center">
+            <div className={cn('font-mono font-bold text-base', homeUnacked > 0 ? 'text-success' : 'text-text-muted')}>
+              {homeUnacked}
+            </div>
+            <div className="text-xs text-text-muted">Casa</div>
           </div>
           <div className="bg-primary/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', zoneUnacked > 0 ? 'text-primary' : 'text-text-muted')}>
@@ -357,6 +378,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
           {([
             { key: 'all' as const,    label: 'Todas' },
             { key: 'motion' as const, label: 'Conducción' },
+            { key: 'home' as const,   label: 'Casa' },
             { key: 'zone' as const,   label: 'Zonas' },
           ]).map((opt) => (
             <button

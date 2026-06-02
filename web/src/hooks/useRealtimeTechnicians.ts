@@ -271,6 +271,8 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
             harsh_turn:  '↩️',
             offline:     '📡',
             battery_low: '🔋',
+            home_enter:  '🏠',
+            home_exit:   '🚪',
           }
           const labels: Record<string, string> = {
             accident:    'ACCIDENTE DETECTADO',
@@ -280,6 +282,8 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
             harsh_turn:  'Giro brusco',
             offline:     'Técnico sin señal',
             battery_low: 'Batería baja',
+            home_enter:  'Llegó a casa',
+            home_exit:   'Salió de casa',
           }
 
           const icon  = icons[row.event_type]  ?? '⚠️'
@@ -292,6 +296,10 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
               duration: 0,
             })
             playAccidentAlert()
+          } else if (row.event_type === 'home_enter') {
+            toast.success(`${icon} ${label}`, { description: techName, duration: 5000 })
+          } else if (row.event_type === 'home_exit') {
+            toast(`${icon} ${label}`, { description: techName, duration: 5000 })
           } else if (row.event_type !== 'offline') {
             // 'offline' (sin señal) ya quedó registrado en el panel (addAlert),
             // pero no molestamos con un toast: es un estado, no una emergencia.

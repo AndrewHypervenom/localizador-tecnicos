@@ -40,7 +40,7 @@ export interface MotionAlert {
   id: string
   technicianId: string
   technicianName: string
-  type: 'accident' | 'hard_brake' | 'rapid_accel' | 'harsh_turn'
+  type: 'accident' | 'hard_brake' | 'rapid_accel' | 'harsh_turn' | 'offline' | 'battery_low' | 'home_enter' | 'home_exit'
   severity: number
   ts: string
   lat?: number

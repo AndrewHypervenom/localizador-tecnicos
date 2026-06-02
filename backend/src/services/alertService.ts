@@ -46,6 +46,8 @@ const LABELS: Record<string, string> = {
   harsh_turn:  '↩️ Giro brusco',
   offline:     '📡 Técnico sin señal',
   battery_low: '🔋 Batería baja',
+  home_enter:  '🏠 Llegó a casa',
+  home_exit:   '🚪 Salió de casa',
 }
 
 const CRITICAL = new Set(['accident', 'sos'])
@@ -157,6 +159,58 @@ export async function detectLowBattery(): Promise<void> {
   for (const r of inserted) await dispatchMotionEvent(r.id)
 }
 
+/**
+ * Inserta home_enter / home_exit comparando la última posición conocida de cada
+ * técnico con su casa asignada (home_lat/home_lng + home_radius). Funciona por
+ * transición: solo registra el evento cuando el estado cambia respecto al último
+ * evento de casa, así no repite "entró" mientras siga dentro ni "salió" mientras
+ * siga fuera.
+ *
+ * - Si está DENTRO y el último evento no fue 'home_enter' (o no hay ninguno) → 'home_enter'.
+ * - Si está FUERA y el último evento fue 'home_enter'                        → 'home_exit'.
+ *   (No registramos "salió" si nunca hubo un "entró": evita ruido al arrancar.)
+ *
+ * Es una sola consulta basada en conjuntos (escala sin bucles). Cada técnico
+ * pertenece a una empresa (t.company_id), así que el push se reparte por tenant
+ * en dispatchMotionEvent → dispatchToCompany. Se ejecuta 24/7: entrar/salir de
+ * casa marca el inicio/fin de jornada y es relevante a cualquier hora.
+ */
+export async function detectHomeTransitions(): Promise<void> {
+  const inserted = await query<{ id: string }>(
+    `WITH last_home_evt AS (
+       SELECT DISTINCT ON (technician_id) technician_id, event_type
+         FROM motion_events
+        WHERE event_type IN ('home_enter', 'home_exit')
+        ORDER BY technician_id, ts DESC
+     )
+     INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
+     SELECT t.id, now(),
+            CASE WHEN d.inside THEN 'home_enter' ELSE 'home_exit' END,
+            10,
+            NULL
+       FROM technicians t
+       JOIN technician_current_status s ON s.id = t.id
+       LEFT JOIN last_home_evt e ON e.technician_id = t.id
+       CROSS JOIN LATERAL (
+         SELECT ST_DWithin(
+                  ST_SetSRID(ST_MakePoint(s.lng, s.lat),           4326)::geography,
+                  ST_SetSRID(ST_MakePoint(t.home_lng, t.home_lat), 4326)::geography,
+                  COALESCE(t.home_radius, 100)
+                ) AS inside
+       ) d
+      WHERE t.active = true
+        AND t.home_lat IS NOT NULL AND t.home_lng IS NOT NULL
+        AND s.lat IS NOT NULL AND s.lng IS NOT NULL
+        AND s.last_seen > now() - interval '15 minutes'
+        AND (
+              (d.inside     AND e.event_type IS DISTINCT FROM 'home_enter')
+           OR (NOT d.inside AND e.event_type = 'home_enter')
+        )
+     RETURNING id`,
+  )
+  for (const r of inserted) await dispatchMotionEvent(r.id)
+}
+
 /** Re-notifica accidentes/SOS críticos sin acuse pasados unos minutos. */
 export async function escalateUnacknowledged(): Promise<void> {
   const rows = await query<{ id: string }>(
@@ -175,5 +229,6 @@ export async function escalateUnacknowledged(): Promise<void> {
 export async function runAlertChecks(): Promise<void> {
   try { await detectOfflineTechnicians() } catch (e) { console.error('[alerts] offline:', e) }
   try { await detectLowBattery() }         catch (e) { console.error('[alerts] battery:', e) }
+  try { await detectHomeTransitions() }    catch (e) { console.error('[alerts] home:', e) }
   try { await escalateUnacknowledged() }   catch (e) { console.error('[alerts] escalate:', e) }
 }
