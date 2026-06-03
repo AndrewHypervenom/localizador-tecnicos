@@ -19,6 +19,21 @@ export interface RouteStat {
   failed: number
 }
 
+/** Tracking por técnico en el período (distancias, viajes, zonas, incidentes). */
+export interface TrackStat {
+  techId: string
+  name: string
+  company: string | null
+  km: number
+  trips: number
+  durationMin: number
+  avgSpeed: number
+  maxSpeed: number
+  zoneEnters: number
+  zoneExits: number
+  incidents: number
+}
+
 /** Fila diaria de horas (una por técnico y día). */
 export interface HoursDaily {
   techId: string
@@ -105,46 +120,81 @@ export function aggregateHours(daily: HoursDaily[]): HoursAgg[] {
 
 export function exportLeaderExcel(
   meta: ReportMeta,
+  track: TrackStat[],
   routes: RouteStat[],
   hoursAgg: HoursAgg[],
   hoursDaily: HoursDaily[],
 ) {
   const wb = utils.book_new()
 
-  // ── Hoja 1: Resumen (cruce rutas + horas por técnico) ──
+  // ── Hoja 1: Resumen (cruce tracking + servicios + horas por técnico) ──
   const routeById = new Map(routes.map(r => [r.techId, r]))
-  const techIds = new Set<string>([...routes.map(r => r.techId), ...hoursAgg.map(h => h.techId)])
-  const nameById = new Map<string, { name: string; company: string | null }>()
-  hoursAgg.forEach(h => nameById.set(h.techId, { name: h.name, company: h.company }))
-  routes.forEach(r => { if (!nameById.has(r.techId)) nameById.set(r.techId, { name: r.name, company: null }) })
+  const trackById = new Map(track.map(t => [t.techId, t]))
   const hoursById = new Map(hoursAgg.map(h => [h.techId, h]))
+  const techIds = new Set<string>([
+    ...track.map(t => t.techId), ...routes.map(r => r.techId), ...hoursAgg.map(h => h.techId),
+  ])
+  const nameById = new Map<string, { name: string; company: string | null }>()
+  track.forEach(t => nameById.set(t.techId, { name: t.name, company: t.company }))
+  hoursAgg.forEach(h => { if (!nameById.has(h.techId)) nameById.set(h.techId, { name: h.name, company: h.company }) })
+  routes.forEach(r => { if (!nameById.has(r.techId)) nameById.set(r.techId, { name: r.name, company: null }) })
 
   const resumen = [...techIds].map(id => {
+    const t = trackById.get(id)
     const r = routeById.get(id)
     const h = hoursById.get(id)
     const info = nameById.get(id)!
     return {
       'Técnico': info.name,
       'Empresa': info.company ?? '',
+      // Tracking primero
+      'Km recorridos': Math.round((t?.km ?? 0) * 10) / 10,
+      'Viajes': t?.trips ?? 0,
+      'Horas en ruta': Math.round(((t?.durationMin ?? 0) / 60) * 100) / 100,
+      'Vel. prom (km/h)': Math.round((t?.avgSpeed ?? 0) * 10) / 10,
+      'Vel. máx (km/h)': Math.round((t?.maxSpeed ?? 0) * 10) / 10,
+      'Entradas a zona': t?.zoneEnters ?? 0,
+      'Salidas de zona': t?.zoneExits ?? 0,
+      'Incidentes': t?.incidents ?? 0,
+      // Servicios
+      'Servicios asignados': r?.assigned ?? 0,
+      'Servicios completados': r?.completed ?? 0,
+      'En progreso': r?.in_progress ?? 0,
+      'Fallidos': r?.failed ?? 0,
+      '% Cumplimiento': r ? pct(r.completed, r.assigned) : 0,
+      // Horas (extra al final)
       'Días trabajados': h?.daysWorked ?? 0,
       'Horas trabajadas': hoursDec(h?.workedSec ?? 0),
       'Horas regulares': hoursDec(h?.regularSec ?? 0),
       'Horas extra': hoursDec(h?.overtimeSec ?? 0),
-      'Horas fin de semana': hoursDec(h?.weekendSec ?? 0),
-      'Prom. h/día': h && h.daysWorked > 0 ? Math.round((h.workedSec / h.daysWorked / 3600) * 100) / 100 : 0,
-      'Rutas asignadas': r?.assigned ?? 0,
-      'Rutas completadas': r?.completed ?? 0,
-      'En progreso': r?.in_progress ?? 0,
-      'Fallidas': r?.failed ?? 0,
-      '% Cumplimiento': r ? pct(r.completed, r.assigned) : 0,
     }
-  }).sort((a, b) => (b['Horas extra'] as number) - (a['Horas extra'] as number))
+  }).sort((a, b) => (b['Km recorridos'] as number) - (a['Km recorridos'] as number))
 
   const wsResumen = utils.json_to_sheet(resumen.length ? resumen : [{ 'Sin datos': '' }])
   autoWidth(wsResumen, resumen)
   utils.book_append_sheet(wb, wsResumen, 'Resumen')
 
-  // ── Hoja 2: Horas por día (detalle para cruces) ──
+  // ── Hoja 2: Tracking por técnico ──
+  const tracking = track
+    .slice()
+    .sort((a, b) => b.km - a.km)
+    .map(t => ({
+      'Técnico': t.name,
+      'Empresa': t.company ?? '',
+      'Km recorridos': Math.round(t.km * 10) / 10,
+      'Viajes': t.trips,
+      'Horas en ruta': Math.round((t.durationMin / 60) * 100) / 100,
+      'Vel. prom (km/h)': Math.round(t.avgSpeed * 10) / 10,
+      'Vel. máx (km/h)': Math.round(t.maxSpeed * 10) / 10,
+      'Entradas a zona': t.zoneEnters,
+      'Salidas de zona': t.zoneExits,
+      'Incidentes': t.incidents,
+    }))
+  const wsTracking = utils.json_to_sheet(tracking.length ? tracking : [{ 'Sin datos': '' }])
+  autoWidth(wsTracking, tracking)
+  utils.book_append_sheet(wb, wsTracking, 'Tracking')
+
+  // ── Hoja 3: Horas por día (detalle para cruces) ──
   const detalle = hoursDaily
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name) || a.date.localeCompare(b.date))
@@ -204,12 +254,28 @@ const SLATE: [number, number, number] = [20, 20, 32]
 
 export function exportLeaderPdf(
   meta: ReportMeta,
+  track: TrackStat[],
   routes: RouteStat[],
   hoursAgg: HoursAgg[],
 ) {
   const doc = new jsPDF({ orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
   const now = format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })
+
+  const headStyles = (rgb: [number, number, number], text: [number, number, number]) =>
+    ({ fillColor: rgb, textColor: text, fontStyle: 'bold' as const })
+  const baseStyles = { fontSize: 8, cellPadding: 2.5 }
+  const zebra = { fillColor: [245, 245, 248] as [number, number, number] }
+
+  /** Título de sección con salto de página automático. Devuelve el startY de la tabla. */
+  const section = (title: string): number => {
+    let yy = ((doc as any).lastAutoTable?.finalY ?? 36) + 9
+    if (yy > pageH - 26) { doc.addPage('landscape'); yy = 18 }
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30)
+    doc.text(title, 14, yy)
+    return yy + 4
+  }
 
   // ── Cabecera ──
   doc.setFillColor(...DARK)
@@ -223,19 +289,19 @@ export function exportLeaderPdf(
   doc.setFont('helvetica', 'normal')
   doc.text('PositivoS+ · Localizador GPS', 14, 20)
   doc.text(`Período: ${meta.from}  —  ${meta.to}`, 14, 26)
-  doc.text(`Empresa: ${meta.companyName}`, 110, 20)
-  doc.text(`Generado: ${now}`, 110, 26)
+  doc.text(`Empresa: ${meta.companyName}`, 130, 20)
+  doc.text(`Generado: ${now}`, 130, 26)
 
-  // ── Totales ──
-  const tot = hoursAgg.reduce((a, h) => ({
-    worked: a.worked + h.workedSec,
-    regular: a.regular + h.regularSec,
-    overtime: a.overtime + h.overtimeSec,
-  }), { worked: 0, regular: 0, overtime: 0 })
+  // ── Resumen general (tracking primero) ──
+  const tt = track.reduce((a, t) => ({
+    km: a.km + t.km, trips: a.trips + t.trips,
+    enters: a.enters + t.zoneEnters, exits: a.exits + t.zoneExits, inc: a.inc + t.incidents,
+  }), { km: 0, trips: 0, enters: 0, exits: 0, inc: 0 })
   const rt = routes.reduce((a, r) => ({
-    assigned: a.assigned + r.assigned,
-    completed: a.completed + r.completed,
+    assigned: a.assigned + r.assigned, completed: a.completed + r.completed,
   }), { assigned: 0, completed: 0 })
+  const ht = hoursAgg.reduce((a, h) => ({ worked: a.worked + h.workedSec }), { worked: 0 })
+  const techCount = new Set([...track.map(t => t.techId), ...routes.map(r => r.techId), ...hoursAgg.map(h => h.techId)]).size
 
   doc.setTextColor(30, 30, 30)
   doc.setFontSize(11)
@@ -244,79 +310,87 @@ export function exportLeaderPdf(
 
   autoTable(doc, {
     startY: 46,
-    head: [['Técnicos', 'Horas trabajadas', 'Horas regulares', 'Horas extra', 'Rutas asignadas', 'Completadas', '% Cumplimiento']],
+    head: [['Técnicos', 'Km recorridos', 'Viajes', 'Servicios completados', 'Entradas a zona', 'Salidas de zona', 'Incidentes', 'Horas trabajadas']],
     body: [[
-      String(hoursAgg.length || routes.length),
-      hm(tot.worked),
-      hm(tot.regular),
-      hm(tot.overtime),
-      String(rt.assigned),
-      String(rt.completed),
-      `${pct(rt.completed, rt.assigned)}%`,
+      String(techCount),
+      `${tt.km.toFixed(1)} km`,
+      String(tt.trips),
+      `${rt.completed} / ${rt.assigned}`,
+      String(tt.enters),
+      String(tt.exits),
+      String(tt.inc),
+      hm(ht.worked),
     ]],
     styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: GREEN, textColor: DARK, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 248] },
+    headStyles: headStyles(GREEN, DARK),
+    alternateRowStyles: zebra,
     margin: { left: 14, right: 14 },
   })
 
-  // ── Horas por técnico ──
-  let y = (doc as any).lastAutoTable.finalY + 8
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(30, 30, 30)
-  doc.text('Horas trabajadas por técnico', 14, y)
-
+  // ── 1) Tracking por técnico (lo principal) ──
   autoTable(doc, {
-    startY: y + 4,
-    head: [['Técnico', 'Empresa', 'Días', 'Trabajadas', 'Regulares', 'Extra', 'Fin de semana', 'Prom. h/día']],
-    body: aggregateSorted(hoursAgg).map(h => [
-      h.name,
-      h.company ?? '—',
-      String(h.daysWorked),
-      hm(h.workedSec),
-      hm(h.regularSec),
-      hm(h.overtimeSec),
-      hm(h.weekendSec),
-      h.daysWorked > 0 ? hm(h.workedSec / h.daysWorked) : '—',
+    startY: section('Tracking por técnico'),
+    head: [['Técnico', 'Empresa', 'Km', 'Viajes', 'Tiempo en ruta', 'Vel. prom.', 'Vel. máx.', 'Entradas', 'Salidas', 'Incidentes']],
+    body: track.slice().sort((a, b) => b.km - a.km).map(t => [
+      t.name, t.company ?? '—',
+      t.km.toFixed(1), String(t.trips), hm(t.durationMin * 60),
+      `${t.avgSpeed.toFixed(1)}`, `${t.maxSpeed.toFixed(1)}`,
+      String(t.zoneEnters), String(t.zoneExits), String(t.incidents),
     ]),
-    styles: { fontSize: 8, cellPadding: 2.5 },
-    headStyles: { fillColor: SLATE, textColor: [200, 200, 200], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [245, 245, 248] },
-    // Resaltar horas extra (>0) en color
-    didParseCell: (d: any) => {
-      if (d.section === 'body' && d.column.index === 5 && d.cell.raw !== '0m') {
-        d.cell.styles.textColor = [180, 83, 9]
-        d.cell.styles.fontStyle = 'bold'
-      }
-    },
+    styles: baseStyles,
+    headStyles: headStyles(SLATE, [200, 200, 200]),
+    alternateRowStyles: zebra,
     margin: { left: 14, right: 14 },
   })
 
-  // ── Cumplimiento de rutas ──
+  // ── 2) Servicios (cumplimiento de rutas) ──
   if (routes.length) {
-    y = (doc as any).lastAutoTable.finalY + 8
-    if (y > doc.internal.pageSize.getHeight() - 30) { doc.addPage('landscape'); y = 18 }
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(30, 30, 30)
-    doc.text('Cumplimiento de rutas', 14, y)
-
     autoTable(doc, {
-      startY: y + 4,
-      head: [['Técnico', 'Asignadas', 'Completadas', 'En progreso', 'Fallidas', '% Cumplimiento']],
-      body: routes
-        .slice()
-        .sort((a, b) => pct(b.completed, b.assigned) - pct(a.completed, a.assigned))
-        .map(r => [
-          r.name, String(r.assigned), String(r.completed), String(r.in_progress), String(r.failed),
-          `${pct(r.completed, r.assigned)}%`,
-        ]),
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      headStyles: { fillColor: SLATE, textColor: [200, 200, 200], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 245, 248] },
+      startY: section('Servicios (cumplimiento de rutas)'),
+      head: [['Técnico', 'Asignados', 'Completados', 'En progreso', 'Fallidos', '% Cumplimiento']],
+      body: routes.slice().sort((a, b) => pct(b.completed, b.assigned) - pct(a.completed, a.assigned)).map(r => [
+        r.name, String(r.assigned), String(r.completed), String(r.in_progress), String(r.failed),
+        `${pct(r.completed, r.assigned)}%`,
+      ]),
+      styles: baseStyles,
+      headStyles: headStyles(SLATE, [200, 200, 200]),
+      alternateRowStyles: zebra,
       margin: { left: 14, right: 14 },
     })
+  }
+
+  // ── 3) Horas trabajadas (sin foco en extra) ──
+  if (hoursAgg.length) {
+    autoTable(doc, {
+      startY: section('Horas trabajadas por técnico'),
+      head: [['Técnico', 'Empresa', 'Días', 'Trabajadas', 'Regulares', 'Prom. h/día']],
+      body: hoursAgg.slice().sort((a, b) => b.workedSec - a.workedSec).map(h => [
+        h.name, h.company ?? '—', String(h.daysWorked), hm(h.workedSec), hm(h.regularSec),
+        h.daysWorked > 0 ? hm(h.workedSec / h.daysWorked) : '—',
+      ]),
+      styles: baseStyles,
+      headStyles: headStyles(SLATE, [200, 200, 200]),
+      alternateRowStyles: zebra,
+      margin: { left: 14, right: 14 },
+    })
+  }
+
+  // ── 4) Horas extra — AL FINAL ──
+  const withOt = hoursAgg.filter(h => h.overtimeSec > 0).sort((a, b) => b.overtimeSec - a.overtimeSec)
+  const yOt = section('Horas extra')
+  if (withOt.length) {
+    autoTable(doc, {
+      startY: yOt,
+      head: [['Técnico', 'Empresa', 'Horas extra', 'En fin de semana']],
+      body: withOt.map(h => [h.name, h.company ?? '—', hm(h.overtimeSec), h.weekendSec > 0 ? hm(h.weekendSec) : '—']),
+      styles: baseStyles,
+      headStyles: headStyles([180, 83, 9], [255, 255, 255]),
+      alternateRowStyles: { fillColor: [253, 246, 236] },
+      margin: { left: 14, right: 14 },
+    })
+  } else {
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 90, 90)
+    doc.text('Sin horas extra registradas en el período.', 14, yOt + 2)
   }
 
   // ── Pie de página ──
@@ -327,13 +401,9 @@ export function exportLeaderPdf(
     doc.setTextColor(150, 150, 150)
     doc.text(
       `PositivoS+ · Localizador  ·  Página ${i} de ${pages}`,
-      pageW / 2, doc.internal.pageSize.getHeight() - 6, { align: 'center' },
+      pageW / 2, pageH - 6, { align: 'center' },
     )
   }
 
   doc.save(`reporte_${fileStamp(meta)}.pdf`)
-}
-
-function aggregateSorted(h: HoursAgg[]): HoursAgg[] {
-  return h.slice().sort((a, b) => b.overtimeSec - a.overtimeSec || b.workedSec - a.workedSec)
 }

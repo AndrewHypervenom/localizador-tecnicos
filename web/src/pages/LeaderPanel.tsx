@@ -170,7 +170,7 @@ export function LeaderPanel() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className={`fixed right-0 top-0 bottom-0 w-full bg-surface z-[941] flex flex-col shadow-2xl border-l border-border-soft ${openPanel === 'history' ? 'max-w-[95vw] xl:max-w-[1500px]' : 'max-w-2xl'}`}
+              className={`fixed right-0 top-0 bottom-0 w-full bg-surface z-[941] flex flex-col shadow-2xl border-l border-border-soft ${openPanel === 'history' || openPanel === 'reports' ? 'max-w-[95vw] xl:max-w-[1500px]' : 'max-w-2xl'}`}
             >
               <div className="flex items-center gap-3 px-4 py-3 border-b border-border-soft flex-shrink-0">
                 <button

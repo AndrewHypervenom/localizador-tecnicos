@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   RefreshCw, Download, CheckCircle2, Clock, XCircle, AlertTriangle, TrendingUp,
-  FileText, FileSpreadsheet, Timer, Hourglass,
+  FileText, FileSpreadsheet, Timer, Hourglass, Navigation, Route, MapPin,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { cn } from '@/lib/utils'
-import { format, subDays } from 'date-fns'
+import { format, subDays, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   exportLeaderPdf, exportLeaderExcel, aggregateHours, hm,
-  type HoursDaily, type HoursAgg, type RouteStat, type ReportMeta,
+  type HoursDaily, type HoursAgg, type RouteStat, type ReportMeta, type TrackStat,
 } from '@/lib/reportExports'
 
 interface Company {
@@ -72,6 +72,9 @@ export function LeaderReports() {
   const [hoursDaily, setHoursDaily] = useState<HoursDaily[]>([])
   const [hoursAgg,   setHoursAgg]   = useState<HoursAgg[]>([])
   const [hoursAvailable, setHoursAvailable] = useState(true) // false si falta la migración RPC
+
+  // Tracking (distancias, viajes, zonas, incidentes)
+  const [track, setTrack] = useState<TrackStat[]>([])
 
   // Load company list for filter
   useEffect(() => {
@@ -191,6 +194,73 @@ export function LeaderReports() {
           setHoursAvailable(true)
         }
       }
+
+      // ── Tracking: distancias, viajes, zonas, incidentes ──
+      if (hoursTechIds.length === 0) {
+        setTrack([])
+      } else {
+        const toNext = format(addDays(new Date(dateTo + 'T12:00:00'), 1), 'yyyy-MM-dd')
+        const [tripsRes, zonesRes, namesRes] = await Promise.all([
+          supabase.from('trips')
+            .select('technician_id, distance_km, duration_min, avg_speed_kmh, max_speed_kmh, hard_brakes, rapid_accels, harsh_turns, accidents')
+            .in('technician_id', hoursTechIds)
+            .gte('started_at', `${dateFrom}T00:00:00`)
+            .lt('started_at', `${toNext}T00:00:00`),
+          supabase.from('zone_events')
+            .select('technician_id, event_type')
+            .in('technician_id', hoursTechIds)
+            .gte('ts', `${dateFrom}T00:00:00`)
+            .lt('ts', `${toNext}T00:00:00`),
+          supabase.from('technicians')
+            .select('id, name, company_id')
+            .in('id', hoursTechIds),
+        ])
+
+        const nameMap = new Map<string, { name: string; company: string | null }>()
+        ;(namesRes.data ?? []).forEach((t: any) => {
+          const comp = companies.find(c => c.id === t.company_id)?.name ?? null
+          nameMap.set(t.id, { name: t.name, company: comp })
+        })
+
+        const tmap = new Map<string, TrackStat>()
+        const ensure = (id: string): TrackStat => {
+          let s = tmap.get(id)
+          if (!s) {
+            const info = nameMap.get(id)
+            s = {
+              techId: id, name: info?.name ?? 'Técnico', company: info?.company ?? null,
+              km: 0, trips: 0, durationMin: 0, avgSpeed: 0, maxSpeed: 0,
+              zoneEnters: 0, zoneExits: 0, incidents: 0,
+            }
+            tmap.set(id, s)
+          }
+          return s
+        }
+
+        const avgAccum = new Map<string, { sum: number; n: number }>()
+        ;(tripsRes.data ?? []).forEach((tr: any) => {
+          const s = ensure(tr.technician_id)
+          s.km          += tr.distance_km ?? 0
+          s.trips       += 1
+          s.durationMin += tr.duration_min ?? 0
+          s.maxSpeed     = Math.max(s.maxSpeed, tr.max_speed_kmh ?? 0)
+          s.incidents   += (tr.hard_brakes ?? 0) + (tr.rapid_accels ?? 0) + (tr.harsh_turns ?? 0) + (tr.accidents ?? 0)
+          if (tr.avg_speed_kmh != null) {
+            const a = avgAccum.get(tr.technician_id) ?? { sum: 0, n: 0 }
+            a.sum += tr.avg_speed_kmh; a.n += 1
+            avgAccum.set(tr.technician_id, a)
+          }
+        })
+        avgAccum.forEach((a, id) => { const s = tmap.get(id); if (s) s.avgSpeed = a.n > 0 ? a.sum / a.n : 0 })
+
+        ;(zonesRes.data ?? []).forEach((z: any) => {
+          const s = ensure(z.technician_id)
+          if (z.event_type === 'enter') s.zoneEnters += 1
+          else if (z.event_type === 'exit') s.zoneExits += 1
+        })
+
+        setTrack([...tmap.values()].sort((a, b) => b.km - a.km))
+      }
     } finally {
       setLoading(false)
     }
@@ -230,10 +300,21 @@ export function LeaderReports() {
     : 'Todas las empresas'
   const reportMeta: ReportMeta = { from: dateFrom, to: dateTo, companyName }
 
-  function handlePdf()   { exportLeaderPdf(reportMeta, rows as RouteStat[], hoursAgg) }
-  function handleExcel() { exportLeaderExcel(reportMeta, rows as RouteStat[], hoursAgg, hoursDaily) }
+  function handlePdf()   { exportLeaderPdf(reportMeta, track, rows as RouteStat[], hoursAgg) }
+  function handleExcel() { exportLeaderExcel(reportMeta, track, rows as RouteStat[], hoursAgg, hoursDaily) }
 
-  const hasAnyData = rows.length > 0 || hoursDaily.length > 0
+  const hasAnyData = rows.length > 0 || hoursDaily.length > 0 || track.length > 0
+
+  const trackTotals = track.reduce(
+    (a, t) => ({
+      km:     a.km     + t.km,
+      trips:  a.trips  + t.trips,
+      enters: a.enters + t.zoneEnters,
+      exits:  a.exits  + t.zoneExits,
+      inc:    a.inc    + t.incidents,
+    }),
+    { km: 0, trips: 0, enters: 0, exits: 0, inc: 0 },
+  )
 
   const hoursTotals = hoursAgg.reduce(
     (a, h) => ({
@@ -334,7 +415,62 @@ export function LeaderReports() {
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* ── Tracking (lo principal) ── */}
+      {!loading && track.length > 0 && (
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-text-primary font-semibold text-base flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-primary" /> Tracking de técnicos
+            </h3>
+            <p className="text-text-muted text-xs mt-0.5">Distancias, viajes, entradas/salidas de zonas e incidentes en el período.</p>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <SummaryCard icon={Navigation} label="Km recorridos"  value={`${trackTotals.km.toFixed(1)} km`} color="bg-primary/10 text-primary" />
+            <SummaryCard icon={Route}      label="Viajes"          value={trackTotals.trips} color="bg-accent/10 text-accent" />
+            <SummaryCard icon={MapPin}     label="Entradas a zona" value={trackTotals.enters} sub={`${trackTotals.exits} salidas`} color="bg-success/10 text-success" />
+            <SummaryCard icon={MapPin}     label="Salidas de zona" value={trackTotals.exits} color="bg-warning/10 text-warning" />
+            <SummaryCard icon={AlertTriangle} label="Incidentes"   value={trackTotals.inc} color={trackTotals.inc > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
+          </div>
+
+          <div className="bg-surface border border-border-soft rounded-2xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border-soft bg-surface-raised">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Técnico</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Km</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Viajes</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Tiempo en ruta</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Vel. prom.</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Vel. máx.</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Entradas</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Salidas</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Incidentes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft">
+                {track.map(t => (
+                  <tr key={t.techId} className="hover:bg-surface-raised transition-colors">
+                    <td className="px-4 py-3 text-text-primary font-medium truncate max-w-[180px]">{t.name}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.km.toFixed(1)}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.trips}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.durationMin > 0 ? hm(t.durationMin * 60) : '—'}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.avgSpeed.toFixed(1)}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.maxSpeed.toFixed(1)}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.zoneEnters}</td>
+                    <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.zoneExits}</td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={cn('font-mono', t.incidents > 0 ? 'text-danger font-bold' : 'text-text-muted')}>{t.incidents}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Summary cards — servicios (cumplimiento de rutas) */}
       {totals && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <SummaryCard
