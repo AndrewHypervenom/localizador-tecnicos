@@ -4,6 +4,7 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -14,11 +15,12 @@ const QR_PREFIX = 'localizador:register:';
 
 interface Props {
   onRegistered: (techName: string) => void;
+  onCancel?: () => void; // si se provee, muestra "Volver" (re-registro desde Home)
 }
 
 type ScanState = 'scanning' | 'processing' | 'success' | 'error';
 
-export default function RegisterScreen({ onRegistered }: Props) {
+export default function RegisterScreen({ onRegistered, onCancel }: Props) {
   const deviceId = useDeviceId();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanState, setScanState]       = useState<ScanState>('scanning');
@@ -175,6 +177,14 @@ export default function RegisterScreen({ onRegistered }: Props) {
           )}
         </View>
       </View>
+
+      {/* Botón Volver (solo en re-registro desde Home). Fuera del overlay para
+          que sí reciba toques (el overlay tiene pointerEvents="none"). */}
+      {onCancel && (
+        <TouchableOpacity style={styles.backBtn} onPress={onCancel} activeOpacity={0.8}>
+          <Text style={styles.backText}>‹  Volver</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -305,4 +315,16 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
   appNameBrand: { color: '#00D632' },
   link: { fontSize: 14, color: '#00D632', fontWeight: '600', marginTop: 8 },
+  backBtn: {
+    position: 'absolute',
+    top: 48,
+    left: 20,
+    backgroundColor: 'rgba(15,23,42,0.92)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.3)',
+  },
+  backText: { color: '#f8fafc', fontSize: 14, fontWeight: '600' },
 });

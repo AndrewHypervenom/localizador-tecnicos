@@ -63,7 +63,7 @@ export default function TermsScreen({ onAccept }: Props) {
           Los datos NO serán vendidos, cedidos ni compartidos con terceros ajenos a la empresa.
         </Section>
 
-        <Section title="4. Rastreo en Segundo Plano">
+        <Section title="4. Localización en Segundo Plano">
           Esta aplicación requiere permiso de ubicación en segundo plano para seguir
           enviando datos GPS incluso cuando la aplicación no está visible en pantalla.
           Este permiso es necesario para el funcionamiento correcto del sistema de monitoreo.

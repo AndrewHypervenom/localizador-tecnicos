@@ -1,12 +1,17 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   RefreshCw, Download, CheckCircle2, Clock, XCircle, AlertTriangle, TrendingUp,
+  FileText, FileSpreadsheet, Timer, Hourglass,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { cn } from '@/lib/utils'
 import { format, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
+import {
+  exportLeaderPdf, exportLeaderExcel, aggregateHours, hm,
+  type HoursDaily, type HoursAgg, type RouteStat, type ReportMeta,
+} from '@/lib/reportExports'
 
 interface Company {
   id: string
@@ -62,6 +67,11 @@ export function LeaderReports() {
   const [totals,  setTotals]  = useState<Totals | null>(null)
   const [loading, setLoading] = useState(false)
   const [sortDesc, setSortDesc] = useState(true)
+
+  // Horas trabajadas (vía RPC leader_work_hours)
+  const [hoursDaily, setHoursDaily] = useState<HoursDaily[]>([])
+  const [hoursAgg,   setHoursAgg]   = useState<HoursAgg[]>([])
+  const [hoursAvailable, setHoursAvailable] = useState(true) // false si falta la migración RPC
 
   // Load company list for filter
   useEffect(() => {
@@ -137,6 +147,50 @@ export function LeaderReports() {
         }),
         { assigned: 0, completed: 0, in_progress: 0, failed: 0 }
       ))
+
+      // ── Horas trabajadas ──
+      // Si hay empresa seleccionada, acotar a sus técnicos; si no, todo el scope.
+      let hoursTechIds = technicianIds
+      if (selectedCompanyId && companyIds.includes(selectedCompanyId)) {
+        const { data: techsOfCompany } = await supabase
+          .from('technicians')
+          .select('id')
+          .eq('company_id', selectedCompanyId)
+          .in('id', technicianIds)
+        hoursTechIds = (techsOfCompany ?? []).map((t: any) => t.id)
+      }
+
+      if (hoursTechIds.length === 0) {
+        setHoursDaily([]); setHoursAgg([]); setHoursAvailable(true)
+      } else {
+        const { data: hData, error: hErr } = await supabase.rpc('leader_work_hours', {
+          p_from: dateFrom,
+          p_to:   dateTo,
+          p_technician_ids: hoursTechIds,
+        })
+        if (hErr) {
+          // La función aún no existe (falta correr la migración) u otro error.
+          console.warn('[leader_work_hours]', hErr.message)
+          setHoursDaily([]); setHoursAgg([]); setHoursAvailable(false)
+        } else {
+          const daily: HoursDaily[] = (hData ?? []).map((r: any) => ({
+            techId:     r.technician_id,
+            name:       r.technician_name,
+            company:    r.company_name ?? null,
+            date:       r.work_date,
+            firstLocal: r.first_local ?? '—',
+            lastLocal:  r.last_local ?? '—',
+            points:     Number(r.points ?? 0),
+            workedSec:  Number(r.worked_seconds ?? 0),
+            regularSec: Number(r.regular_seconds ?? 0),
+            overtimeSec: Number(r.overtime_seconds ?? 0),
+            isWeekend:  !!r.is_weekend,
+          }))
+          setHoursDaily(daily)
+          setHoursAgg(aggregateHours(daily))
+          setHoursAvailable(true)
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -170,6 +224,26 @@ export function LeaderReports() {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  const companyName = selectedCompanyId
+    ? (companies.find(c => c.id === selectedCompanyId)?.name ?? 'Empresa')
+    : 'Todas las empresas'
+  const reportMeta: ReportMeta = { from: dateFrom, to: dateTo, companyName }
+
+  function handlePdf()   { exportLeaderPdf(reportMeta, rows as RouteStat[], hoursAgg) }
+  function handleExcel() { exportLeaderExcel(reportMeta, rows as RouteStat[], hoursAgg, hoursDaily) }
+
+  const hasAnyData = rows.length > 0 || hoursDaily.length > 0
+
+  const hoursTotals = hoursAgg.reduce(
+    (a, h) => ({
+      worked:   a.worked   + h.workedSec,
+      regular:  a.regular  + h.regularSec,
+      overtime: a.overtime + h.overtimeSec,
+      withOt:   a.withOt   + (h.overtimeSec > 0 ? 1 : 0),
+    }),
+    { worked: 0, regular: 0, overtime: 0, withOt: 0 },
+  )
 
   const sortedRows = [...rows].sort((a, b) => {
     const pa = pct(a.completed, a.assigned)
@@ -231,14 +305,31 @@ export function LeaderReports() {
             className="p-1.5 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-surface-raised disabled:opacity-50">
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
           </button>
-          {rows.length > 0 && (
-            <button
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-xl text-xs font-medium hover:bg-primary/20 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Exportar CSV
-            </button>
+          {hasAnyData && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handlePdf}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-danger/10 text-danger border border-danger/20 rounded-xl text-xs font-medium hover:bg-danger/20 transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                PDF
+              </button>
+              <button
+                onClick={handleExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success border border-success/20 rounded-xl text-xs font-medium hover:bg-success/20 transition-colors"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Excel
+              </button>
+              <button
+                onClick={exportCSV}
+                disabled={rows.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-xl text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-40"
+              >
+                <Download className="w-3.5 h-3.5" />
+                CSV
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -347,6 +438,81 @@ export function LeaderReports() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Horas trabajadas ── */}
+      {!loading && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-text-primary font-semibold text-base flex items-center gap-2">
+                <Timer className="w-4 h-4 text-primary" /> Horas trabajadas
+              </h3>
+              <p className="text-text-muted text-xs mt-0.5">
+                Tiempo activo según GPS. <span className="text-warning">Extra</span> = fuera del horario laboral de la empresa o en fin de semana.
+              </p>
+            </div>
+          </div>
+
+          {!hoursAvailable ? (
+            <div className="bg-warning/10 border border-warning/30 rounded-2xl p-4 text-sm text-warning flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>
+                El cálculo de horas requiere una migración en la base de datos
+                (<code className="font-mono text-xs">leader_work_hours</code>). Ejecuta
+                <code className="font-mono text-xs"> supabase/migrations/20260603_leader_work_hours.sql</code> en el SQL Editor para activarlo.
+                El resto del reporte y los exports funcionan igual.
+              </span>
+            </div>
+          ) : hoursAgg.length === 0 ? (
+            <div className="bg-surface border border-border-soft rounded-2xl p-8 text-center">
+              <Hourglass className="w-8 h-8 mx-auto mb-2 text-text-muted/30" />
+              <p className="text-text-secondary text-sm">Sin horas registradas en el período.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <SummaryCard icon={Timer}      label="Horas trabajadas" value={hm(hoursTotals.worked)}   color="bg-primary/10 text-primary" />
+                <SummaryCard icon={Clock}      label="Horas regulares"  value={hm(hoursTotals.regular)}  color="bg-success/10 text-success" />
+                <SummaryCard icon={Hourglass}  label="Horas extra"      value={hm(hoursTotals.overtime)} color="bg-warning/10 text-warning" />
+                <SummaryCard icon={AlertTriangle} label="Técnicos con extra" value={hoursTotals.withOt} sub={`de ${hoursAgg.length}`} color="bg-warning/10 text-warning" />
+              </div>
+
+              <div className="bg-surface border border-border-soft rounded-2xl overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border-soft bg-surface-raised">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Técnico</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Días</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Trabajadas</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Regulares</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Extra</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Fin de semana</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Prom. h/día</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-soft">
+                    {hoursAgg.map(h => (
+                      <tr key={h.techId} className="hover:bg-surface-raised transition-colors">
+                        <td className="px-4 py-3 text-text-primary font-medium truncate max-w-[180px]">{h.name}</td>
+                        <td className="px-3 py-3 text-center text-text-secondary font-mono">{h.daysWorked}</td>
+                        <td className="px-3 py-3 text-center text-text-secondary font-mono">{hm(h.workedSec)}</td>
+                        <td className="px-3 py-3 text-center text-text-secondary font-mono">{hm(h.regularSec)}</td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={cn('font-mono font-bold', h.overtimeSec > 0 ? 'text-warning' : 'text-text-muted')}>
+                            {hm(h.overtimeSec)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center text-text-secondary font-mono">{h.weekendSec > 0 ? hm(h.weekendSec) : '—'}</td>
+                        <td className="px-3 py-3 text-center text-text-secondary font-mono">{h.daysWorked > 0 ? hm(h.workedSec / h.daysWorked) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,9 +1,9 @@
 import * as Location from 'expo-location';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { LOCATION_TASK } from './locationTask';
-import { removeTechnicianId, storeTechnicianId } from './offlineQueue';
+import { removeTechnicianId, storeTechnicianId, flushLocationQueue, flushMotionQueue } from './offlineQueue';
 import { setTechIdForSensor, startAccelerometer, stopAccelerometer } from './sensorService';
-import { supabase } from '../lib/supabase';
+import { supabase, ensureAuth } from '../lib/supabase';
 
 // ── Niveles (tiers) de captura GPS para ahorrar batería ───────────────────────
 // MOVING: alta precisión y frecuencia cuando el técnico se desplaza.
@@ -30,7 +30,7 @@ let _currentTier: TrackingTier = 'MOVING';
 
 const FOREGROUND_SERVICE = {
   notificationTitle: 'Localizador PositivoS+ Activo',
-  notificationBody:  'Rastreando ubicación en segundo plano...',
+  notificationBody:  'Localizando ubicación en segundo plano...',
   notificationColor: '#00D632',
 };
 
@@ -101,6 +101,18 @@ export async function applyTrackingTier(tier: TrackingTier): Promise<void> {
 
 export async function stopTracking(): Promise<void> {
   stopAccelerometer();
+
+  // Enviar lo que quede en cola ANTES de soltar el servicio: tras detener, el
+  // background task ya no se ejecuta, así que esta es la última oportunidad de
+  // mapear los puntos finales de una sesión corta. force=true ignora el backoff.
+  try {
+    await ensureAuth();
+    await flushLocationQueue(true);
+    await flushMotionQueue(true);
+  } catch (e: any) {
+    console.warn('[stopTracking] flush final:', e?.message);
+  }
+
   const running = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
   if (running) await Location.stopLocationUpdatesAsync(LOCATION_TASK);
   await removeTechnicianId();

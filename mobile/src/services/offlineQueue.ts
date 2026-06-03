@@ -9,12 +9,36 @@ const LAST_ERROR_KEY    = '@localizador/last_error';
 const LAST_SENT_KEY     = '@localizador/last_sent';
 const LAST_UPLOADED_KEY = '@localizador/last_uploaded';
 const NEXT_RETRY_KEY    = '@localizador/next_retry_at';
+const LOC_DEAD_KEY      = '@localizador/location_deadletter';
+const MOTION_DEAD_KEY   = '@localizador/motion_deadletter';
 
 // Capacidad de cola dimensionada para cubrir >=4 h sin señal aun en el peor caso.
 // Con el throttle adaptativo (locationTask) los puntos reales son muy inferiores.
 const LOC_QUEUE_CAP    = 10_000;  // ~1.5 MB en AsyncStorage
 const MOTION_QUEUE_CAP = 1_000;
 const FLUSH_BATCH      = 100;     // se drena en lotes FIFO (más antiguo primero)
+const DEAD_LETTER_CAP  = 2_000;   // filas rechazadas permanentemente (apartadas, no perdidas)
+
+// Códigos SQLSTATE considerados TRANSITORIOS (vale la pena reintentar sin
+// descartar nada): serialización, deadlock, timeout, exceso de conexiones,
+// y toda la clase 08 (fallos de conexión).
+const TRANSIENT_PG_CODES = new Set([
+  '40001', '40P01', '57014', '53300', '55P03',
+  '08000', '08003', '08006', '08001', '08004', '08007', '08P01',
+]);
+
+/**
+ * ¿El error es transitorio (reintentar) o permanente (apartar la fila)?
+ * Sin código suele ser un fallo de red/fetch → transitorio (NUNCA descartar).
+ * Con código de Postgres que no esté en la lista transitoria → el servidor
+ * rechazó el contenido de la fila (p.ej. `ts` fuera de partición, geometría
+ * inválida): es permanente y reintentarla eternamente atascaría la cola.
+ */
+function isTransientError(error: any): boolean {
+  const code = error?.code;
+  if (!code) return true;
+  return TRANSIENT_PG_CODES.has(String(code));
+}
 
 // Backoff exponencial entre reintentos de flush (ms).
 const BACKOFF_STEPS_MS = [5_000, 10_000, 30_000, 60_000, 120_000, 300_000];
@@ -140,40 +164,106 @@ export async function enqueueLocation(row: LocationRow) {
   await AsyncStorage.setItem(LOC_QUEUE_KEY, JSON.stringify(queue.slice(-LOC_QUEUE_CAP)));
 }
 
+/** Aparta una fila rechazada permanentemente para no perderla ni atascar la cola. */
+async function appendDeadLetter(deadKey: string, row: any): Promise<void> {
+  const raw = await AsyncStorage.getItem(deadKey);
+  const dl: any[] = raw ? JSON.parse(raw) : [];
+  dl.push(row);
+  await AsyncStorage.setItem(deadKey, JSON.stringify(dl.slice(-DEAD_LETTER_CAP)));
+}
+
 /**
- * Drena la cola en orden FIFO (más antiguo primero), en lotes, eliminando
- * únicamente lo confirmado por el servidor. Se detiene al primer error
- * dejando el resto intacto. Respeta conectividad y backoff.
+ * Drena una cola en orden FIFO por lotes. Solo elimina lo confirmado por el
+ * servidor. Ante un error de LOTE:
+ *   - transitorio (red/servidor) → backoff y se conserva todo para reintentar.
+ *   - permanente → reintenta fila por fila; las válidas pasan y la fila "veneno"
+ *     (p.ej. `ts` fuera de partición) se aparta a dead-letter, de modo que la
+ *     cola NUNCA queda bloqueada para siempre por un registro irrecuperable.
+ *
+ * `useBackoff`/`touchDiag` permiten compartir esta lógica entre la cola de
+ * ubicación (con backoff y diagnóstico visible) y la de movimiento (sin ambos).
  */
-export async function flushLocationQueue(force = false) {
-  const raw = await AsyncStorage.getItem(LOC_QUEUE_KEY);
+async function drainQueue(opts: {
+  queueKey: string;
+  deadKey: string;
+  table: string;
+  force: boolean;
+  useBackoff: boolean;
+  touchDiag: boolean;
+}): Promise<void> {
+  const { queueKey, deadKey, table, force, useBackoff, touchDiag } = opts;
+
+  const raw = await AsyncStorage.getItem(queueKey);
   if (!raw) return;
-  let queue: LocationRow[] = JSON.parse(raw);
+  let queue: any[] = JSON.parse(raw);
   if (!queue.length) return;
+
   // El flush manual (force) ignora backoff y verificación de red: el usuario
   // pidió enviar AHORA. El automático respeta ambos para no malgastar batería.
   if (!force) {
-    if (!(await canRetryNow())) return;
+    if (useBackoff && !(await canRetryNow())) return;
     if (!(await isOnline())) return;
   }
 
+  const persist = () => AsyncStorage.setItem(queueKey, JSON.stringify(queue));
+
   while (queue.length) {
     const batch = queue.slice(0, FLUSH_BATCH); // más antiguos primero
-    const { error } = await supabase.from('location_events').insert(batch);
-    if (error) {
-      await bumpBackoff();
-      await storeLastError(error.message);
-      await AsyncStorage.setItem(LOC_QUEUE_KEY, JSON.stringify(queue)); // conservar remanente
+    const { error } = await supabase.from(table).insert(batch);
+
+    if (!error) {
+      queue = queue.slice(batch.length);
+      await persist();
+      continue;
+    }
+
+    // Lote con error transitorio: backoff y conservar TODO (no perder datos).
+    if (isTransientError(error)) {
+      if (useBackoff) await bumpBackoff();
+      if (touchDiag) await storeLastError(error.message);
+      await persist();
       return;
     }
-    queue = queue.slice(batch.length);
-    await AsyncStorage.setItem(LOC_QUEUE_KEY, JSON.stringify(queue)); // persistir progreso por lote
+
+    // Lote con error permanente: hay al menos una fila irrecuperable. Reintentar
+    // fila por fila para no perder las buenas ni atascarnos en la mala.
+    const n = batch.length;
+    for (let i = 0; i < n; i++) {
+      const row = queue[0];
+      const { error: e1 } = await supabase.from(table).insert(row);
+      if (!e1) {
+        queue = queue.slice(1);
+        await persist();
+        continue;
+      }
+      if (isTransientError(e1)) {
+        if (useBackoff) await bumpBackoff();
+        if (touchDiag) await storeLastError(e1.message);
+        await persist();
+        return; // conservar esta fila y el resto para el próximo intento
+      }
+      // Permanente → apartar y seguir drenando.
+      await appendDeadLetter(deadKey, row);
+      if (touchDiag) await storeLastError(`Registro apartado (rechazado por el servidor): ${e1.message}`);
+      queue = queue.slice(1);
+      await persist();
+    }
   }
 
-  await AsyncStorage.removeItem(LOC_QUEUE_KEY);
-  await clearBackoff();
-  await clearLastError();
-  await storeLastSent();
+  await AsyncStorage.removeItem(queueKey);
+  if (useBackoff) await clearBackoff();
+  if (touchDiag) { await clearLastError(); await storeLastSent(); }
+}
+
+export async function flushLocationQueue(force = false) {
+  await drainQueue({
+    queueKey: LOC_QUEUE_KEY,
+    deadKey:  LOC_DEAD_KEY,
+    table:    'location_events',
+    force,
+    useBackoff: true,
+    touchDiag:  true,
+  });
 }
 
 // ── Motion queue ─────────────────────────────────────────────────────────────
@@ -195,21 +285,12 @@ export async function enqueueMotion(row: MotionRow) {
 
 /** Drena la cola de eventos de conducción en orden FIFO por lotes. */
 export async function flushMotionQueue(force = false) {
-  const raw = await AsyncStorage.getItem(MOTION_QUEUE_KEY);
-  if (!raw) return;
-  let queue: MotionRow[] = JSON.parse(raw);
-  if (!queue.length) return;
-  if (!force && !(await isOnline())) return;
-
-  while (queue.length) {
-    const batch = queue.slice(0, FLUSH_BATCH);
-    const { error } = await supabase.from('motion_events').insert(batch);
-    if (error) {
-      await AsyncStorage.setItem(MOTION_QUEUE_KEY, JSON.stringify(queue));
-      return;
-    }
-    queue = queue.slice(batch.length);
-    await AsyncStorage.setItem(MOTION_QUEUE_KEY, JSON.stringify(queue));
-  }
-  await AsyncStorage.removeItem(MOTION_QUEUE_KEY);
+  await drainQueue({
+    queueKey: MOTION_QUEUE_KEY,
+    deadKey:  MOTION_DEAD_KEY,
+    table:    'motion_events',
+    force,
+    useBackoff: false,
+    touchDiag:  false,
+  });
 }

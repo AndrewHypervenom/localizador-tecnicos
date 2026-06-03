@@ -18,6 +18,9 @@ export default function App() {
   const [techName, setTechName]         = useState<string | null>(null);
   const [termsOk, setTermsOk]           = useState(false);
   const [mockBlocked, setMockBlocked]   = useState(false);
+  // true cuando se llega a la pantalla de registro desde el botón "Volver a
+  // registrar" del Home (permite cancelar y volver), no en el registro inicial.
+  const [canCancelRegister, setCanCancelRegister] = useState(false);
 
   // Anti "Fake GPS": vigila si una app está simulando la ubicación. Si la
   // detecta, suspende el rastreo y muestra una pantalla de bloqueo hasta que
@@ -46,7 +49,9 @@ export default function App() {
     });
   }, [deviceId]);
 
-  // Paso 2: verificar registro del dispositivo una vez que los términos están ok
+  // Paso 2: verificar registro del dispositivo una vez que los términos están ok.
+  // Si el device_id no está enlazado a ningún técnico, se exige escanear el QR
+  // de nuevo (evita inconsistencias de sincronización con un enlace incorrecto).
   useEffect(() => {
     if (!termsOk || !deviceId) return;
 
@@ -102,8 +107,10 @@ export default function App() {
         <RegisterScreen
           onRegistered={(name) => {
             setTechName(name);
+            setCanCancelRegister(false);
             setAppState('home');
           }}
+          onCancel={canCancelRegister ? () => { setCanCancelRegister(false); setAppState('home'); } : undefined}
         />
       </>
     );
@@ -112,7 +119,9 @@ export default function App() {
   return (
     <>
       <StatusBar style="light" />
-      <HomeScreen />
+      <HomeScreen
+        onReRegister={() => { setCanCancelRegister(true); setAppState('register'); }}
+      />
     </>
   );
 }

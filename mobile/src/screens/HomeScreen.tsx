@@ -13,7 +13,15 @@ import {
   View,
 } from 'react-native';
 import * as Location from 'expo-location';
+import NetInfo from '@react-native-community/netinfo';
 import { useDeviceId } from '../hooks/useDeviceId';
+import {
+  LocationPinIcon,
+  SignalIcon,
+  CheckCircleIcon,
+  WarningTriangle,
+  StatusRow,
+} from '../components/StatusIndicators';
 import { supabase, ensureAuth } from '../lib/supabase';
 import {
   isTracking,
@@ -43,7 +51,7 @@ function timeAgo(isoStr: string): string {
   return `hace ${Math.floor(secs / 3600)}h`;
 }
 
-export default function HomeScreen() {
+export default function HomeScreen({ onReRegister }: { onReRegister?: () => void }) {
   const deviceId = useDeviceId();
 
   const [tracking,    setTracking]    = useState(false);
@@ -54,6 +62,42 @@ export default function HomeScreen() {
   const [lastSent,    setLastSent]    = useState<string | null>(null);
   const [lastError,   setLastError]   = useState<{ msg: string; ts: string } | null>(null);
   const [refreshing,  setRefreshing]  = useState(false);
+
+  // Estado real del dispositivo (para detectar GPS apagado / sin internet / sin permiso)
+  const [gpsOn,    setGpsOn]    = useState<boolean | null>(null);
+  const [permLevel, setPermLevel] = useState<'full' | 'partial' | 'none' | null>(null);
+  const [net,      setNet]      = useState<{ connected: boolean; type: string }>({ connected: true, type: 'unknown' });
+
+  // Lee el estado del GPS y de los permisos de ubicación (sin abrir Ajustes ni diálogos).
+  const loadDeviceStatus = useCallback(async () => {
+    try {
+      const servicesOn = await Location.hasServicesEnabledAsync();
+      setGpsOn(servicesOn);
+      const { status: fg } = await Location.getForegroundPermissionsAsync();
+      const { status: bg } = await Location.getBackgroundPermissionsAsync();
+      setPermLevel(fg !== 'granted' ? 'none' : bg === 'granted' ? 'full' : 'partial');
+    } catch (e: any) {
+      console.error('[deviceStatus]', e?.message);
+    }
+  }, []);
+
+  // Suscripción a cambios de conectividad (Wi-Fi / datos / sin red).
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      setNet({
+        connected: !!state.isConnected && state.isInternetReachable !== false,
+        type: state.type,
+      });
+    });
+    return () => unsub();
+  }, []);
+
+  // Sondeo periódico del GPS y permisos (no tienen listener nativo directo).
+  useEffect(() => {
+    loadDeviceStatus();
+    const interval = setInterval(loadDeviceStatus, 4_000);
+    return () => clearInterval(interval);
+  }, [loadDeviceStatus]);
 
   const loadDiagnostics = useCallback(async () => {
     const [count, sent, err] = await Promise.all([
@@ -77,6 +121,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return;
+      loadDeviceStatus();
       try {
         const techId = await loadTechnicianId();
         if (!techId) return;
@@ -186,7 +231,7 @@ export default function HomeScreen() {
       // Pedir exención de optimización de batería para sostener >=4 h continuas.
       await ensureBatteryOptimizationExempt();
     } catch (e: any) {
-      Alert.alert('Error al iniciar rastreo', e?.message ?? 'No se pudo iniciar el servicio GPS. Reinicia la app e intenta de nuevo.');
+      Alert.alert('Error al iniciar la localización', e?.message ?? 'No se pudo iniciar el servicio GPS. Reinicia la app e intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -257,14 +302,39 @@ export default function HomeScreen() {
     );
   }
 
+  function handleReRegister() {
+    if (!onReRegister) return;
+    Alert.alert(
+      'Volver a registrar',
+      'Vas a vincular este teléfono escaneando un código QR nuevo. Pídelo a tu líder. No necesitas desinstalar la app.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Escanear QR', onPress: onReRegister },
+      ],
+    );
+  }
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDiagnostics();
+    await Promise.all([loadDiagnostics(), loadDeviceStatus()]);
     setRefreshing(false);
-  }, [loadDiagnostics]);
+  }, [loadDiagnostics, loadDeviceStatus]);
 
   const hasError   = !!lastError;
-  const statusText = tracking ? 'Rastreando' : 'Inactivo';
+
+  // ¿El rastreo está activo pero algo lo está saboteando? (GPS off, sin permiso o sin red)
+  const gpsBad   = gpsOn === false;
+  const permBad  = permLevel === 'none' || permLevel === 'partial';
+  const netBad   = !net.connected;
+  const trackingBroken = tracking && (gpsBad || permBad || netBad);
+
+  const netTypeLabel =
+    net.type === 'wifi' ? 'Wi-Fi'
+    : net.type === 'cellular' ? 'Datos móviles'
+    : net.type === 'ethernet' ? 'Ethernet'
+    : 'Conectado';
+
+  const statusText = trackingBroken ? 'Localización con fallas' : tracking ? 'Localizando' : 'Inactivo';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -294,11 +364,70 @@ export default function HomeScreen() {
         </View>
 
         {/* Estado de rastreo */}
-        <View style={[styles.section, styles.statusSection, tracking ? styles.statusActive : styles.statusInactive]}>
-          <View style={[styles.dot, tracking ? styles.dotActive : styles.dotInactive]} />
-          <Text style={[styles.statusText, tracking ? styles.textActive : styles.textInactive]}>
+        <View style={[
+          styles.section, styles.statusSection,
+          trackingBroken ? styles.statusBroken : tracking ? styles.statusActive : styles.statusInactive,
+        ]}>
+          <View style={[
+            styles.dot,
+            trackingBroken ? styles.dotBroken : tracking ? styles.dotActive : styles.dotInactive,
+          ]} />
+          <Text style={[
+            styles.statusText,
+            trackingBroken ? styles.textBroken : tracking ? styles.textActive : styles.textInactive,
+          ]}>
             {statusText}
           </Text>
+        </View>
+
+        {/* Banner de advertencia: rastreo activo pero interrumpido por el dispositivo.
+            Visible y grande para que NO se pueda recortar en una captura. */}
+        {trackingBroken && (
+          <View style={styles.warnBanner}>
+            <WarningTriangle size={22} color="#fbbf24" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warnTitle}>LA LOCALIZACIÓN NO ESTÁ FUNCIONANDO</Text>
+              <Text style={styles.warnMsg}>
+                {[
+                  gpsBad && 'GPS desactivado',
+                  permBad && 'Permiso de ubicación incompleto',
+                  netBad && 'Sin conexión a internet',
+                ].filter(Boolean).join(' · ')}
+              </Text>
+              <Text style={styles.warnHint}>Tu ubicación NO se está enviando. Reactiva lo indicado.</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Estado del dispositivo (íconos, sin emojis) */}
+        <View style={styles.diagBox}>
+          <Text style={styles.diagTitle}>ESTADO DEL DISPOSITIVO</Text>
+
+          <StatusRow
+            icon={<LocationPinIcon color={gpsOn === false ? '#ef4444' : '#00D632'} disabled={gpsOn === false} />}
+            label="GPS"
+            value={gpsOn === null ? '…' : gpsOn ? 'Activado' : 'Desactivado'}
+            ok={gpsOn !== false}
+          />
+
+          <StatusRow
+            icon={<CheckCircleIcon color={permBad ? '#ef4444' : '#00D632'} disabled={permLevel === 'none'} />}
+            label="Permiso de ubicación"
+            value={
+              permLevel === null ? '…'
+              : permLevel === 'full' ? 'Siempre'
+              : permLevel === 'partial' ? 'Solo en uso'
+              : 'Denegado'
+            }
+            ok={permLevel === 'full'}
+          />
+
+          <StatusRow
+            icon={<SignalIcon color={netBad ? '#ef4444' : '#00D632'} disabled={netBad} />}
+            label="Internet"
+            value={net.connected ? netTypeLabel : 'Sin conexión'}
+            ok={net.connected}
+          />
         </View>
 
         {/* Diagnósticos */}
@@ -357,9 +486,22 @@ export default function HomeScreen() {
         >
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.btnText}>{tracking ? 'DETENER RASTREO' : 'INICIAR RASTREO'}</Text>
+            : <Text style={styles.btnText}>{tracking ? 'DETENER LOCALIZACIÓN' : 'INICIAR LOCALIZACIÓN'}</Text>
           }
         </TouchableOpacity>
+
+        {/* Re-registro sin desinstalar: vincular este teléfono con un QR nuevo. */}
+        {onReRegister && (
+          !techName ? (
+            <TouchableOpacity style={[styles.button, styles.btnRelink]} onPress={handleReRegister}>
+              <Text style={styles.btnText}>VINCULAR DISPOSITIVO (ESCANEAR QR)</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={handleReRegister} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.relinkLink}>¿Apareces como "No registrado" aunque sí lo estás? Vuelve a vincular</Text>
+            </TouchableOpacity>
+          )
+        )}
 
         <Text style={styles.hint}>Desliza hacia abajo para actualizar</Text>
       </ScrollView>
@@ -383,12 +525,20 @@ const styles = StyleSheet.create({
   statusSection:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
   statusActive:   { borderLeftWidth: 3, borderLeftColor: '#00D632' },
   statusInactive: { borderLeftWidth: 3, borderLeftColor: '#64748b' },
+  statusBroken:   { borderLeftWidth: 3, borderLeftColor: '#f59e0b' },
   dot:            { width: 10, height: 10, borderRadius: 5 },
   dotActive:      { backgroundColor: '#00D632' },
   dotInactive:    { backgroundColor: '#64748b' },
+  dotBroken:      { backgroundColor: '#f59e0b' },
   statusText:     { fontSize: 17, fontWeight: '700' },
   textActive:     { color: '#00D632' },
   textInactive:   { color: '#94a3b8' },
+  textBroken:     { color: '#fbbf24' },
+
+  warnBanner:     { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#3a2206', borderRadius: 12, borderWidth: 1, borderColor: '#f59e0b', padding: 14 },
+  warnTitle:      { color: '#fde68a', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  warnMsg:        { color: '#fbbf24', fontSize: 13, fontWeight: '700', marginTop: 2 },
+  warnHint:       { color: '#fcd34d', fontSize: 11, marginTop: 3 },
 
   diagBox:        { width: '100%', backgroundColor: '#141420', borderRadius: 12, padding: 16, gap: 10 },
   diagTitle:      { fontSize: 11, color: '#64748b', letterSpacing: 1.2, marginBottom: 4 },
@@ -407,6 +557,8 @@ const styles = StyleSheet.create({
   btnStop:        { backgroundColor: '#dc2626' },
   btnSos:         { backgroundColor: '#b91c1c', borderWidth: 1, borderColor: '#fecaca' },
   btnSync:        { backgroundColor: '#7B2FF7' },
+  btnRelink:      { backgroundColor: '#2563eb' },
+  relinkLink:     { color: '#60a5fa', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 4, textDecorationLine: 'underline' },
   btnText:        { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
   hint:           { fontSize: 11, color: '#252540', marginTop: 8 },
 });

@@ -15,7 +15,7 @@ export default function MockBlockedScreen() {
         </Text>
         <Text style={styles.body}>
           Para seguir usando el Localizador, cierra esa aplicación o reinicia
-          el teléfono. El rastreo está suspendido hasta entonces.
+          el teléfono. La localización está suspendida hasta entonces.
         </Text>
         <View style={styles.waitRow}>
           <ActivityIndicator color="#fca5a5" />
