@@ -11,12 +11,15 @@ import {
   loadLastUploaded,
   loadTechnicianId,
   storeLastError,
+  storeLastFixTs,
   storeLastUploaded,
   type LocationRow,
 } from './offlineQueue';
 import { applyTrackingTier } from './locationService';
 import { detectMotionFromGPS, setTechIdForSensor } from './sensorService';
+import { auditGps, auditNet } from './deviceAudit';
 import { setMockDetected } from './mockLocationGuard';
+import { sendHeartbeat } from './heartbeat';
 
 export const LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 
@@ -44,6 +47,8 @@ const BATCH_MAX_PENDING = 25;      // o antes, si se acumulan tantos puntos sin 
 // ── Estado a nivel de módulo (sobrevive entre invocaciones en el mismo hilo JS) ─
 let _batteryLevel: number | null = null;
 let _batteryTs     = 0;
+let _charging: boolean | null = null;
+let _chargingTs    = 0;
 let _lastMovingTs  = Date.now();
 let _lastFlushTs   = 0;
 
@@ -55,6 +60,18 @@ async function getBatteryCached(): Promise<number | null> {
     if (level >= 0) { _batteryLevel = Math.round(level * 100); _batteryTs = now; }
   } catch { /* no crítico */ }
   return _batteryLevel;
+}
+
+/** ¿El dispositivo está cargando? Cacheado (sirve para medir el drenaje real). */
+async function getChargingCached(): Promise<boolean | null> {
+  const now = Date.now();
+  if (_charging !== null && now - _chargingTs < BATTERY_TTL_MS) return _charging;
+  try {
+    const st = await Battery.getBatteryStateAsync();
+    _charging = st === Battery.BatteryState.CHARGING || st === Battery.BatteryState.FULL;
+    _chargingTs = now;
+  } catch { /* no crítico */ }
+  return _charging;
 }
 
 function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
@@ -98,6 +115,15 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     if (loc.mocked) { setMockDetected(true); return; }
     setMockDetected(false);
 
+    // Heartbeat de "GPS vivo": el servicio acaba de entregar un fix. Se marca
+    // ANTES de los filtros (precisión/throttle) para que el watchdog sepa que
+    // el GPS sigue entregando aunque este punto en concreto no se suba.
+    void storeLastFixTs();
+
+    // Llegó un fix → el GPS está encendido. Cierra la bitácora (gps_on) si venía
+    // de un apagado detectado en segundo plano, sin esperar a que se abra la UI.
+    void auditGps(true);
+
     const { latitude, longitude, altitude, accuracy, speed, heading } = loc.coords;
     // iOS/Android reportan speed = -1 (o null) cuando el fix no tiene velocidad
     // fiable. Lo normalizamos a null para que no contamine los promedios (un -1
@@ -125,10 +151,17 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     if (timeToFlush || tooManyPending) {
       _lastFlushTs = now;
       try {
-        if (await isOnline()) {
+        const online = await isOnline();
+        // Auditar la conexión en segundo plano: si el técnico apagó los datos /
+        // Wi-Fi con la app cerrada (pero el GPS sigue entregando fixes), esto deja
+        // la evidencia (net_off) y registra net_on al reconectar.
+        void auditNet(online);
+        if (online) {
           await ensureAuth();
           await flushLocationQueue();
           await flushMotionQueue();
+          // Latido de "app viva" desde segundo plano (piggyback del flush).
+          void sendHeartbeat({ appState: 'background' });
         }
       } catch (e: any) {
         await storeLastError(e?.message ?? 'Error desconocido');
@@ -152,6 +185,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       bearing:       heading ?? null,
       accuracy:      accuracy ?? null,
       battery_level: await getBatteryCached(),
+      charging:      await getChargingCached(),
     };
 
     // Siempre encolar: el envío real ocurre en el flush por lotes de arriba.

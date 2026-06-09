@@ -221,10 +221,11 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   }
 
   const statusDot = {
-    moving:  'bg-success animate-pulse',
-    idle:    'bg-warning',
-    stopped: 'bg-text-muted',
-    offline: 'bg-border',
+    moving:    'bg-success animate-pulse',
+    idle:      'bg-warning',
+    stopped:   'bg-text-muted',
+    no_signal: 'bg-amber-500',
+    offline:   'bg-border',
   }
 
   const realtimeCfg = {

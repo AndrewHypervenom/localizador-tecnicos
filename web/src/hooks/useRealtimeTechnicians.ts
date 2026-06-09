@@ -43,7 +43,7 @@ function playAccidentAlert() {
 //   null      → leader scope not yet resolved, skip fetch
 //   string[]  → leader mode, filter to these IDs only
 export function useRealtimeTechnicians(filterByIds?: string[] | null) {
-  const { setTechnicians, replaceTechnicians, updateTechnicianPosition, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
+  const { setTechnicians, replaceTechnicians, updateTechnicianPosition, updateTechnicianHeartbeat, addAlert, setRealtimeStatus, markRealtimeEvent, updateTechnicianMeta } = useTrackingStore()
   const filterRef = useRef(filterByIds)
   // true tras un corte de realtime: dispara un catch-up al reconectar
   const wasDisconnectedRef = useRef(false)
@@ -74,6 +74,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
 
       let statusQuery = supabase.from('technician_current_status').select('*')
       let homeQuery   = supabase.from('technicians').select('id, home_lat, home_lng, home_address, home_radius')
+      let hbQuery     = supabase.from('technician_heartbeat').select('technician_id, last_heartbeat, gps_on, net_on, perm, battery, charging')
 
       if (ids !== undefined) {
         // Líder sin técnicos: vaciar de verdad (replace), no fusionar — si no,
@@ -81,9 +82,10 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
         if (ids.length === 0) { replaceTechnicians([]); return }
         statusQuery = (statusQuery as any).in('id', ids)
         homeQuery   = (homeQuery   as any).in('id', ids)
+        hbQuery     = (hbQuery     as any).in('technician_id', ids)
       }
 
-      const [statusRes, homeRes] = await Promise.all([statusQuery, homeQuery])
+      const [statusRes, homeRes, hbRes] = await Promise.all([statusQuery, homeQuery, hbQuery])
 
       if (statusRes.error) {
         console.error('[Realtime] Error cargando técnicos:', statusRes.error)
@@ -91,9 +93,13 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       }
 
       const homeMap = new Map((homeRes.data ?? []).map((h: any) => [h.id, h]))
+      // El heartbeat es opcional (APK antigua sin latido): si la consulta falla
+      // o no hay fila, el técnico se comporta como antes (solo last_seen).
+      const hbMap = new Map((hbRes.data ?? []).map((h: any) => [h.technician_id, h]))
 
       const techs: TechnicianState[] = (statusRes.data ?? []).map((row: any) => {
         const home = homeMap.get(row.id)
+        const hb   = hbMap.get(row.id)
         return {
           id:           row.id,
           name:         row.name,
@@ -109,6 +115,12 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           battery:      row.battery,
           status:       row.status ?? 'offline',
           trail:        row.lat && row.lng ? [[row.lat, row.lng]] : [],
+          lastHeartbeat: hb?.last_heartbeat ?? undefined,
+          hbGpsOn:       hb?.gps_on   ?? undefined,
+          hbNetOn:       hb?.net_on   ?? undefined,
+          hbPerm:        hb?.perm     ?? undefined,
+          hbBattery:     hb?.battery  ?? undefined,
+          hbCharging:    hb?.charging ?? undefined,
           home_lat:     home?.home_lat     ?? undefined,
           home_lng:     home?.home_lng     ?? undefined,
           home_address: home?.home_address ?? undefined,
@@ -273,6 +285,20 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
             battery_low: '🔋',
             home_enter:  '🏠',
             home_exit:   '🚪',
+            gps_off:        '📍',
+            gps_on:         '📍',
+            mock_on:        '👻',
+            mock_off:       '🛡️',
+            tracking_start: '▶️',
+            tracking_stop:  '⏹️',
+            net_off:              '📵',
+            net_on:               '📶',
+            battery_restricted:   '🪫',
+            battery_unrestricted: '🔋',
+            tracking_killed:      '✖️',
+            perm_revoked:         '🚫',
+            perm_granted:         '✅',
+            clock_skew:           '🕐',
           }
           const labels: Record<string, string> = {
             accident:    'ACCIDENTE DETECTADO',
@@ -284,30 +310,89 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
             battery_low: 'Batería baja',
             home_enter:  'Llegó a casa',
             home_exit:   'Salió de casa',
+            gps_off:        'Apagó el GPS',
+            gps_on:         'Reactivó el GPS',
+            mock_on:        'UBICACIÓN FALSA (Fake GPS)',
+            mock_off:       'Cesó la ubicación falsa',
+            tracking_start: 'Inició la localización',
+            tracking_stop:  'Detuvo la localización',
+            net_off:              'Apagó datos / Wi-Fi',
+            net_on:               'Reactivó datos / Wi-Fi',
+            battery_restricted:   'Restringió la batería de la app',
+            battery_unrestricted: 'Quitó la restricción de batería',
+            tracking_killed:      'Cerró la app a la fuerza',
+            perm_revoked:         'Quitó "Permitir siempre"',
+            perm_granted:         'Restauró "Permitir siempre"',
+            clock_skew:           'RELOJ DEL TELÉFONO ALTERADO',
           }
 
           const icon  = icons[row.event_type]  ?? '⚠️'
           const label = labels[row.event_type] ?? 'Evento de conducción'
 
           const isCritical = row.event_type === 'accident' || row.event_type === 'sos'
+          // Sabotaje del rastreo: avisar fuerte (apagar GPS/datos, Fake GPS,
+          // restringir batería, forzar el cierre de la app) y el "sin señal sin
+          // causa declarada" (severidad 70 del backend = probable force-stop).
+          const TAMPER_TYPES = new Set([
+            'gps_off', 'mock_on', 'net_off', 'battery_restricted', 'tracking_killed',
+            'perm_revoked', 'clock_skew',
+          ])
+          const isUnexplainedOffline = row.event_type === 'offline' && (row.severity ?? 0) >= 70
+          const isTamper = TAMPER_TYPES.has(row.event_type) || isUnexplainedOffline
+          // Eventos informativos: quedan en el panel, sin toast (recuperaciones e
+          // inicio de rastreo). 'tracking_stop' SÍ avisa (cae al toast.warning).
+          const RECOVERY_TYPES = new Set([
+            'gps_on', 'mock_off', 'tracking_start', 'net_on', 'battery_unrestricted',
+            'perm_granted',
+          ])
+          const isRecovery = RECOVERY_TYPES.has(row.event_type)
           if (isCritical) {
             toast.error(`${icon} ${label}`, {
               description: techName,
               duration: 0,
             })
             playAccidentAlert()
+          } else if (isTamper) {
+            const tamperLabel = isUnexplainedOffline ? '⚠️ Sin señal — sin causa declarada' : `${icon} ${label}`
+            toast.error(tamperLabel, { description: techName, duration: 8000 })
           } else if (row.event_type === 'home_enter') {
             toast.success(`${icon} ${label}`, { description: techName, duration: 5000 })
           } else if (row.event_type === 'home_exit') {
             toast(`${icon} ${label}`, { description: techName, duration: 5000 })
-          } else if (row.event_type !== 'offline') {
-            // 'offline' (sin señal) ya quedó registrado en el panel (addAlert),
-            // pero no molestamos con un toast: es un estado, no una emergencia.
+          } else if (row.event_type !== 'offline' && !isRecovery) {
+            // 'offline' (sin señal) y los eventos de recuperación ya quedan
+            // registrados en el panel (addAlert), pero no molestamos con un toast:
+            // son estados, no emergencias.
             toast.warning(`${icon} ${label}`, {
               description: techName,
               duration: 5000,
             })
           }
+        }
+      )
+      .subscribe()
+
+    // Suscripción al latido (heartbeat): mantiene vivo el estado "app activa sin
+    // señal" sin esperar a un punto GPS. INSERT (primer latido) y UPDATE (upsert
+    // posterior) actualizan al técnico.
+    const heartbeatChannel = supabase
+      .channel('technician_heartbeat_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'technician_heartbeat' },
+        (payload) => {
+          const row = payload.new as any
+          if (!row?.technician_id) return
+          if (!useTrackingStore.getState().technicians[row.technician_id]) return
+          updateTechnicianHeartbeat({
+            technician_id:  row.technician_id,
+            last_heartbeat: row.last_heartbeat,
+            gps_on:         row.gps_on,
+            net_on:         row.net_on,
+            perm:           row.perm,
+            battery:        row.battery,
+            charging:       row.charging,
+          })
         }
       )
       .subscribe()
@@ -318,6 +403,7 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       document.removeEventListener('visibilitychange', onVisible)
       supabase.removeChannel(locationChannel)
       supabase.removeChannel(alertChannel)
+      supabase.removeChannel(heartbeatChannel)
     }
   }, [setTechnicians, updateTechnicianPosition, addAlert])
 

@@ -5,6 +5,11 @@ import { dispatchToCompany, type AlertPayload } from './pushService'
 const OFFLINE_THRESHOLD_MIN = 15   // sin enviar ubicación (estado "sin señal")
 const OFFLINE_RECENT_HOURS  = 24   // solo técnicos con actividad reciente
 const OFFLINE_DEDUP_MIN     = 30   // no repetir alerta offline dentro de este lapso
+// Tolerancia del latido (heartbeat): si la app sigue latiendo dentro de este
+// lapso, NO está "desconectada" aunque no envíe puntos GPS (está viva sin señal
+// GPS). Mayor que el intervalo del watchdog (~15 min) para no marcar offline a
+// quien sí late. Si NO hay latido reciente, sí es una desconexión real.
+const HEARTBEAT_STALE_MIN   = 20
 const BATTERY_LOW_PCT       = 20
 const BATTERY_DEDUP_HOURS   = 6
 const ESCALATE_AFTER_MIN    = 5    // accidente/SOS sin acuse
@@ -48,6 +53,14 @@ const LABELS: Record<string, string> = {
   battery_low: '🔋 Batería baja',
   home_enter:  '🏠 Llegó a casa',
   home_exit:   '🚪 Salió de casa',
+  // Bitácora de dispositivo (sabotaje del rastreo)
+  gps_off:             '📍 Apagó el GPS',
+  net_off:             '📵 Apagó datos / Wi-Fi',
+  mock_on:             '👻 Ubicación falsa (Fake GPS)',
+  battery_restricted:  '🪫 Restringió la batería de la app',
+  tracking_killed:     '✖️ Cerró la app a la fuerza',
+  perm_revoked:        '🚫 Quitó "Permitir siempre"',
+  clock_skew:          '🕐 Reloj del teléfono alterado',
 }
 
 const CRITICAL = new Set(['accident', 'sos'])
@@ -111,17 +124,53 @@ export async function dispatchMotionEvent(eventId: string, escalation = false): 
 
 // ── Generación de alertas del lado servidor (cron) ────────────────────────────
 
-/** Inserta alerta 'offline' para técnicos activos que dejaron de enviar. */
+// Eventos de la bitácora del dispositivo que EXPLICAN un silencio: si alguno
+// ocurrió poco antes de quedarse sin señal, el hueco tiene causa declarada por el
+// propio teléfono (el técnico apagó GPS/datos, usó Fake GPS, restringió batería o
+// detuvo el rastreo). Si NO hay ninguno, el silencio es "sin causa declarada":
+// la firma típica de force-stop / borrar la app de recientes para que deje de
+// rastrear y luego decir "la app no sirve".
+const OFFLINE_CAUSE_TYPES = [
+  'gps_off', 'net_off', 'mock_on', 'battery_restricted', 'tracking_stop', 'tracking_killed',
+  'perm_revoked',
+]
+// Ventana hacia atrás para buscar la causa (algo mayor que el umbral de silencio
+// para cubrir el desfase entre el último fix y la detección del cron).
+const OFFLINE_CAUSE_LOOKBACK_MIN = OFFLINE_THRESHOLD_MIN + 10
+
+/**
+ * Inserta alerta 'offline' SOLO para técnicos que de verdad se desconectaron:
+ * dejaron de enviar puntos GPS Y dejaron de latir (heartbeat). Si la app sigue
+ * latiendo (viva, aunque sin señal GPS) NO se genera 'offline' — eso ya no es
+ * una desconexión, es "app activa sin señal" y el front lo pinta en amarillo a
+ * partir del heartbeat. Así se elimina el falso "desconectado" que aparecía
+ * cuando el técnico estaba en un túnel/edificio o con el GPS apagado.
+ *
+ * Compatibilidad: si el técnico no tiene fila de heartbeat (APK antigua sin el
+ * latido), se comporta como antes (la condición de heartbeat se cumple con NULL).
+ */
 export async function detectOfflineTechnicians(): Promise<void> {
   await query(
     `INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
-     SELECT t.id, now(), 'offline', 50, NULL
+     SELECT t.id, now(), 'offline',
+            -- severidad 50 = silencio con causa declarada (GPS/datos off, etc.);
+            -- 70 = SIN causa declarada (probable force-stop / app cerrada a mano).
+            CASE WHEN EXISTS (
+              SELECT 1 FROM motion_events mc
+               WHERE mc.technician_id = t.id
+                 AND mc.event_type = ANY($4::text[])
+                 AND mc.ts > now() - ($5 || ' minutes')::interval
+            ) THEN 50 ELSE 70 END,
+            NULL
        FROM technicians t
        JOIN technician_current_status s ON s.id = t.id
        LEFT JOIN companies c ON c.id = t.company_id
+       LEFT JOIN technician_heartbeat h ON h.technician_id = t.id
       WHERE t.active = true
         AND s.last_seen < now() - ($1 || ' minutes')::interval
         AND s.last_seen > now() - ($2 || ' hours')::interval${WITHIN_COMPANY_HOURS}
+        -- La app dejó de latir (o nunca latió → APK antigua): desconexión real.
+        AND (h.last_heartbeat IS NULL OR h.last_heartbeat < now() - ($6 || ' minutes')::interval)
         AND NOT EXISTS (
           SELECT 1 FROM motion_events m
            WHERE m.technician_id = t.id
@@ -129,10 +178,49 @@ export async function detectOfflineTechnicians(): Promise<void> {
              AND m.ts > now() - ($3 || ' minutes')::interval
         )
      RETURNING id`,
-    [OFFLINE_THRESHOLD_MIN, OFFLINE_RECENT_HOURS, OFFLINE_DEDUP_MIN],
+    [OFFLINE_THRESHOLD_MIN, OFFLINE_RECENT_HOURS, OFFLINE_DEDUP_MIN,
+     OFFLINE_CAUSE_TYPES, OFFLINE_CAUSE_LOOKBACK_MIN, HEARTBEAT_STALE_MIN],
   )
   // No se despacha push: 'offline' es silencioso (ver SILENT_PUSH_TYPES). Los
-  // registros quedan en motion_events para el panel/historial del líder.
+  // registros quedan en motion_events para el panel/historial del líder, donde la
+  // severidad distingue "sin causa declarada" (sabotaje probable) del normal.
+}
+
+// ── Reloj manipulado ──────────────────────────────────────────────────────────
+// El dispositivo manda `ts` (su reloj); el servidor guarda `received_at = now()`
+// al insertar. Si `ts` viene en el FUTURO respecto a received_at, el reloj del
+// teléfono está adelantado a propósito (truco para falsear horas de trabajo).
+// Solo detectamos el adelanto: un `ts` muy en el pasado es ambiguo (puede ser
+// backlog offline legítimo que se envió tarde), así que no se marca.
+const CLOCK_SKEW_MIN          = 5    // ts adelantado más de esto = manipulado
+const CLOCK_SKEW_LOOKBACK_MIN = 10   // solo inserciones recientes
+const CLOCK_SKEW_DEDUP_HOURS  = 6
+
+/** Inserta 'clock_skew' para técnicos cuyo reloj envía timestamps futuros. */
+export async function detectClockSkew(): Promise<void> {
+  const inserted = await query<{ id: string }>(
+    `INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
+     SELECT DISTINCT le.technician_id, now(), 'clock_skew', 60, NULL
+       FROM location_events le
+       JOIN technicians t ON t.id = le.technician_id
+      WHERE t.active = true
+        -- Filtro por ts (clave de partición) para que el planner pode a la
+        -- partición del mes actual: un reloj adelantado da ts en el futuro, así
+        -- que el evento siempre cae en ts > now() - margen. Evita escanear todas
+        -- las particiones aunque no exista índice sobre received_at.
+        AND le.ts > now() - interval '1 hour'
+        AND le.received_at > now() - ($1 || ' minutes')::interval
+        AND le.ts > le.received_at + ($2 || ' minutes')::interval
+        AND NOT EXISTS (
+          SELECT 1 FROM motion_events m
+           WHERE m.technician_id = le.technician_id
+             AND m.event_type = 'clock_skew'
+             AND m.ts > now() - ($3 || ' hours')::interval
+        )
+     RETURNING id`,
+    [CLOCK_SKEW_LOOKBACK_MIN, CLOCK_SKEW_MIN, CLOCK_SKEW_DEDUP_HOURS],
+  )
+  for (const r of inserted) await dispatchMotionEvent(r.id)
 }
 
 /** Inserta alerta 'battery_low' cuando la batería del último punto cae bajo el umbral. */
@@ -228,6 +316,7 @@ export async function escalateUnacknowledged(): Promise<void> {
 /** Ejecuta todas las comprobaciones del cron de alertas. */
 export async function runAlertChecks(): Promise<void> {
   try { await detectOfflineTechnicians() } catch (e) { console.error('[alerts] offline:', e) }
+  try { await detectClockSkew() }          catch (e) { console.error('[alerts] clock_skew:', e) }
   try { await detectLowBattery() }         catch (e) { console.error('[alerts] battery:', e) }
   try { await detectHomeTransitions() }    catch (e) { console.error('[alerts] home:', e) }
   try { await escalateUnacknowledged() }   catch (e) { console.error('[alerts] escalate:', e) }

@@ -1,15 +1,20 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
-export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'offline' | 'accident'
+// 'no_signal' = la app sigue LATIENDO (viva) pero no llegan puntos GPS (túnel,
+// edificio, GPS apagado, sin red): NO es lo mismo que 'offline' (app muerta).
+export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'no_signal' | 'offline' | 'accident'
 
 // Thresholds for determining technician status based on time since last GPS event.
 // The mobile app sends every 2s, so these catch app stops / connection loss quickly.
 export const STATUS_THRESHOLDS = {
-  MOVING_FRESH_S: 30,   // speed > 1 km/h only counts as "moving" if data is < 30s old
-  IDLE_S:         60,   // < 1 min since last event → idle (active but not moving)
-  STOPPED_S:      900,  // < 15 min → stopped (sin rastreo)
-  // > 15 min → offline (sin señal)
+  MOVING_FRESH_S:    30,    // speed > 1 km/h only counts as "moving" if data is < 30s old
+  IDLE_S:            60,    // < 1 min since last event → idle (active but not moving)
+  STOPPED_S:         900,   // < 15 min → stopped (sin movimiento, pero visto hace poco)
+  // Tras 15 min sin punto GPS: si la app sigue latiendo (heartbeat fresco dentro
+  // de este lapso) → 'no_signal' (app viva sin señal); si no → 'offline' (muerta).
+  // 1200 s = 20 min, alineado con HEARTBEAT_STALE_MIN del backend.
+  HEARTBEAT_FRESH_S: 1200,
 }
 
 export interface TechnicianState {
@@ -27,6 +32,14 @@ export interface TechnicianState {
   bearing?: number
   battery?: number
   status: TechnicianStatus
+  // Latido (heartbeat): prueba de "app viva" independiente del GPS. Distingue
+  // "app activa sin señal" de "desconectado de verdad".
+  lastHeartbeat?: string
+  hbGpsOn?: boolean    // ¿el GPS estaba encendido en el último latido?
+  hbNetOn?: boolean    // ¿había datos/Wi-Fi?
+  hbPerm?: 'full' | 'partial' | 'none'  // nivel de permiso de ubicación
+  hbBattery?: number
+  hbCharging?: boolean
   // Ruta del día (últimos N puntos)
   trail: [number, number][]  // [lat, lng][]
   // Datos de casa
@@ -36,11 +49,23 @@ export interface TechnicianState {
   home_radius?:  number   // metros — radio del círculo alrededor de la casa
 }
 
+export type MotionAlertType =
+  | 'accident' | 'hard_brake' | 'rapid_accel' | 'harsh_turn' | 'sos'
+  | 'offline' | 'battery_low' | 'home_enter' | 'home_exit'
+  // Bitácora de dispositivo (evidencia de sabotaje al rastreo)
+  | 'gps_off' | 'gps_on' | 'mock_on' | 'mock_off'
+  | 'tracking_start' | 'tracking_stop'
+  | 'net_off' | 'net_on'
+  | 'battery_restricted' | 'battery_unrestricted'
+  | 'tracking_killed'
+  | 'perm_revoked' | 'perm_granted'
+  | 'clock_skew'
+
 export interface MotionAlert {
   id: string
   technicianId: string
   technicianName: string
-  type: 'accident' | 'hard_brake' | 'rapid_accel' | 'harsh_turn' | 'offline' | 'battery_low' | 'home_enter' | 'home_exit'
+  type: MotionAlertType
   severity: number
   ts: string
   lat?: number
@@ -72,6 +97,7 @@ interface TrackingStore {
   setTechnicians: (techs: TechnicianState[]) => void
   replaceTechnicians: (techs: TechnicianState[]) => void
   updateTechnicianPosition: (payload: LocationPayload) => void
+  updateTechnicianHeartbeat: (payload: HeartbeatPayload) => void
   updateTechnicianMeta: (id: string, patch: { name?: string; phone?: string; home_lat?: number | null; home_lng?: number | null; home_address?: string | null; home_radius?: number | null }) => void
   addAlert: (alert: MotionAlert) => void
   acknowledgeAlert: (alertId: string) => void
@@ -98,16 +124,42 @@ interface LocationPayload {
   battery_level?: number
 }
 
+interface HeartbeatPayload {
+  technician_id: string
+  last_heartbeat: string
+  gps_on?: boolean | null
+  net_on?: boolean | null
+  perm?: 'full' | 'partial' | 'none' | null
+  battery?: number | null
+  charging?: boolean | null
+}
+
 const MAX_TRAIL_POINTS = 200
 
-function computeStatus(lastSeen: string | undefined, lastSpeed: number | undefined, now: number): TechnicianStatus {
-  if (!lastSeen) return 'offline'
-  const secsSinceLast = (now - new Date(lastSeen).getTime()) / 1000
+function computeStatus(
+  lastSeen: string | undefined,
+  lastSpeed: number | undefined,
+  now: number,
+  lastHeartbeat?: string,
+): TechnicianStatus {
+  const locSecs = lastSeen ? (now - new Date(lastSeen).getTime()) / 1000 : Infinity
   const speedKmh = (lastSpeed ?? 0) * 3.6
-  if (speedKmh > 1 && secsSinceLast < STATUS_THRESHOLDS.MOVING_FRESH_S) return 'moving'
-  if (secsSinceLast < STATUS_THRESHOLDS.IDLE_S)                          return 'idle'
-  if (secsSinceLast < STATUS_THRESHOLDS.STOPPED_S)                       return 'stopped'
+  if (speedKmh > 1 && locSecs < STATUS_THRESHOLDS.MOVING_FRESH_S) return 'moving'
+  if (locSecs < STATUS_THRESHOLDS.IDLE_S)                         return 'idle'
+  if (locSecs < STATUS_THRESHOLDS.STOPPED_S)                      return 'stopped'
+  // Sin punto GPS fresco: ¿la app sigue latiendo? Si sí, está viva pero sin
+  // señal GPS (no es una desconexión real); si no, está desconectada.
+  const hbSecs = lastHeartbeat ? (now - new Date(lastHeartbeat).getTime()) / 1000 : Infinity
+  if (hbSecs < STATUS_THRESHOLDS.HEARTBEAT_FRESH_S) return 'no_signal'
   return 'offline'
+}
+
+/** Motivo legible de un estado 'no_signal', según el último latido. */
+export function noSignalReason(tech: Pick<TechnicianState, 'hbGpsOn' | 'hbNetOn' | 'hbPerm'>): string {
+  if (tech.hbGpsOn === false) return 'App activa — GPS apagado'
+  if (tech.hbNetOn === false) return 'App activa — sin datos/Wi-Fi'
+  if (tech.hbPerm && tech.hbPerm !== 'full') return 'App activa — permiso incompleto'
+  return 'App activa — sin señal GPS'
 }
 
 export const useTrackingStore = create<TrackingStore>()(
@@ -133,7 +185,7 @@ export const useTrackingStore = create<TrackingStore>()(
       set((state) => {
         const now = Date.now()
         techs.forEach((t) => {
-          const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now)
+          const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now, t.lastHeartbeat)
           state.technicians[t.id] = {
             ...t,
             status,
@@ -151,7 +203,7 @@ export const useTrackingStore = create<TrackingStore>()(
         const now = Date.now()
         state.technicians = {}
         techs.forEach((t) => {
-          const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now)
+          const status = t.status === 'accident' ? 'accident' : computeStatus(t.lastSeen, t.lastSpeed, now, t.lastHeartbeat)
           state.technicians[t.id] = {
             ...t,
             status,
@@ -181,7 +233,7 @@ export const useTrackingStore = create<TrackingStore>()(
         const tech = state.technicians[payload.technician_id]
         if (!tech) return
 
-        let status = computeStatus(payload.ts, payload.speed, Date.now())
+        let status = computeStatus(payload.ts, payload.speed, Date.now(), tech.lastHeartbeat)
 
         // Mantener estado de accidente si hay alerta reciente no reconocida
         const recentAccident = state.alerts.find(
@@ -268,12 +320,29 @@ export const useTrackingStore = create<TrackingStore>()(
     markRealtimeEvent: () =>
       set((state) => { state.lastRealtimeEvent = new Date().toISOString() }),
 
+    updateTechnicianHeartbeat: (hb) =>
+      set((state) => {
+        const tech = state.technicians[hb.technician_id]
+        if (!tech) return
+        tech.lastHeartbeat = hb.last_heartbeat
+        tech.hbGpsOn   = hb.gps_on   ?? undefined
+        tech.hbNetOn   = hb.net_on   ?? undefined
+        tech.hbPerm    = hb.perm     ?? undefined
+        tech.hbBattery = hb.battery  ?? undefined
+        tech.hbCharging = hb.charging ?? undefined
+        // El latido puede sacar a un técnico de 'offline' a 'no_signal' (sigue
+        // vivo) sin esperar a que llegue un punto GPS.
+        if (tech.status !== 'accident') {
+          tech.status = computeStatus(tech.lastSeen, tech.lastSpeed, Date.now(), tech.lastHeartbeat)
+        }
+      }),
+
     refreshStatuses: () =>
       set((state) => {
         const now = Date.now()
         Object.values(state.technicians).forEach((tech) => {
           if (tech.status === 'accident') return
-          tech.status = computeStatus(tech.lastSeen, tech.lastSpeed, now)
+          tech.status = computeStatus(tech.lastSeen, tech.lastSpeed, now, tech.lastHeartbeat)
         })
       }),
   }))

@@ -4,7 +4,8 @@ import { useTrackingStore, MotionAlert, ZoneAlert } from '@/store/trackingStore'
 import {
   AlertTriangle, Zap, CornerDownLeft, RotateCcw, Siren, WifiOff, BatteryLow,
   CheckCheck, Eye, BellOff, LogIn, LogOut, Layers, CalendarDays, Clock, CalendarX, X,
-  User, Filter, Home, DoorOpen,
+  User, Filter, Home, DoorOpen, MapPinOff, MapPin, Ghost, ShieldCheck, ShieldOff, Play, Square,
+  Wifi, Power, Battery, BatteryWarning,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EnablePushButton } from '@/components/EnablePushButton'
@@ -24,16 +25,45 @@ const MOTION_CONFIG: Record<string, { icon: any; label: string; color: string; b
   battery_low: { icon: BatteryLow,     label: 'Batería baja',        color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
   home_enter:  { icon: Home,           label: 'Llegó a casa',        color: 'text-success', bg: 'bg-success/10 border-success/30' },
   home_exit:   { icon: DoorOpen,       label: 'Salió de casa',       color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  // Bitácora de dispositivo: evidencia de sabotaje al rastreo.
+  gps_off:        { icon: MapPinOff,   label: 'Apagó el GPS',        color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  gps_on:         { icon: MapPin,      label: 'Reactivó el GPS',     color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  mock_on:        { icon: Ghost,       label: 'Ubicación falsa (Fake GPS)', color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  mock_off:       { icon: ShieldCheck, label: 'Cesó ubicación falsa', color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_start: { icon: Play,        label: 'Inició la localización', color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_stop:  { icon: Square,      label: 'Detuvo la localización', color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  net_off:              { icon: WifiOff,        label: 'Apagó datos / Wi-Fi',          color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  net_on:               { icon: Wifi,           label: 'Reactivó datos / Wi-Fi',       color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  battery_restricted:   { icon: BatteryWarning, label: 'Restringió la batería de la app', color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  battery_unrestricted: { icon: Battery,        label: 'Quitó la restricción de batería', color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_killed:      { icon: Power,          label: 'Cerró la app a la fuerza',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  perm_revoked:         { icon: ShieldOff,      label: 'Quitó "Permitir siempre"',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  perm_granted:         { icon: ShieldCheck,    label: 'Restauró "Permitir siempre"',  color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  clock_skew:           { icon: Clock,          label: 'Reloj del teléfono alterado',  color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
 }
 
 // Eventos de casa: viven en motion_events pero se muestran como su propia
 // categoría (entrada/salida del domicilio asignado), no como "conducción".
 const HOME_TYPES = new Set(['home_enter', 'home_exit'])
 
+// Bitácora de dispositivo: GPS apagado/encendido y Fake GPS. Categoría propia
+// para que el líder detecte de un vistazo quién está saboteando el rastreo.
+const DEVICE_TYPES = new Set([
+  'gps_off', 'gps_on', 'mock_on', 'mock_off', 'tracking_start', 'tracking_stop',
+  'net_off', 'net_on', 'battery_restricted', 'battery_unrestricted', 'tracking_killed',
+  'perm_revoked', 'perm_granted', 'clock_skew',
+])
+
 const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ alert }, ref) => {
   const { acknowledgeAlert } = useTrackingStore()
   const cfg  = MOTION_CONFIG[alert.type] ?? MOTION_CONFIG['hard_brake']
-  const Icon = cfg.icon
+  // "Sin señal" sin causa declarada (severidad 70 del backend): el técnico se
+  // quedó mudo SIN apagar GPS/datos ni detener el rastreo → probable force-stop.
+  const isUnexplainedOffline = alert.type === 'offline' && alert.severity >= 70
+  const Icon  = isUnexplainedOffline ? Power : cfg.icon
+  const label = isUnexplainedOffline ? 'Sin señal — sin causa declarada' : cfg.label
+  const color = isUnexplainedOffline ? 'text-danger' : cfg.color
+  const bg    = isUnexplainedOffline ? 'bg-danger/10 border-danger/30' : cfg.bg
 
   const handleAck = async () => {
     acknowledgeAlert(alert.id)
@@ -50,12 +80,12 @@ const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ al
       exit={{ opacity: 0, x: 20 }}
       className={cn(
         'flex items-start gap-2.5 p-2.5 rounded-xl border text-xs',
-        alert.acknowledged ? 'opacity-40 border-border-soft bg-surface' : cn(cfg.bg, 'border')
+        alert.acknowledged ? 'opacity-40 border-border-soft bg-surface' : cn(bg, 'border')
       )}
     >
-      <Icon className={cn('w-3.5 h-3.5 mt-0.5 flex-shrink-0', cfg.color)} />
+      <Icon className={cn('w-3.5 h-3.5 mt-0.5 flex-shrink-0', color)} />
       <div className="flex-1 min-w-0">
-        <div className={cn('font-semibold', cfg.color)}>{cfg.label}</div>
+        <div className={cn('font-semibold', color)}>{label}</div>
         <div className="text-text-secondary truncate">{alert.technicianName}</div>
         <div className="text-text-muted mt-0.5">
           {formatDistanceToNow(new Date(alert.ts), { addSuffix: true, locale: es })}
@@ -166,12 +196,13 @@ type UnifiedAlert =
   | { kind: 'zone';   data: ZoneAlert;   ts: string }
 
 type DateFilter = 'today' | 'expired' | 'custom'
-type KindFilter = 'all' | 'motion' | 'home' | 'zone'
+type KindFilter = 'all' | 'motion' | 'home' | 'device' | 'zone'
 
-const categoryOf = (item: UnifiedAlert): 'motion' | 'home' | 'zone' =>
-  item.kind === 'zone'                            ? 'zone'
-  : HOME_TYPES.has((item.data as MotionAlert).type) ? 'home'
-  :                                                   'motion'
+const categoryOf = (item: UnifiedAlert): 'motion' | 'home' | 'device' | 'zone' =>
+  item.kind === 'zone'                                ? 'zone'
+  : HOME_TYPES.has((item.data as MotionAlert).type)   ? 'home'
+  : DEVICE_TYPES.has((item.data as MotionAlert).type) ? 'device'
+  :                                                     'motion'
 
 interface AlertsPanelProps {
   className?: string
@@ -227,7 +258,8 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
 
   const zoneUnacked   = zoneAlerts.filter((a) => !a.acknowledged).length
   const homeUnacked   = alerts.filter((a) => !a.acknowledged && HOME_TYPES.has(a.type)).length
-  const motionUnacked = alerts.filter((a) => !a.acknowledged && !HOME_TYPES.has(a.type)).length
+  const deviceUnacked = alerts.filter((a) => !a.acknowledged && DEVICE_TYPES.has(a.type)).length
+  const motionUnacked = alerts.filter((a) => !a.acknowledged && !HOME_TYPES.has(a.type) && !DEVICE_TYPES.has(a.type)).length
 
   const todayLabel = format(today, "d MMM", { locale: es })
 
@@ -272,7 +304,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
         </div>
 
         {/* Mini stats */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-4 gap-2 mb-3">
           <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', motionUnacked > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
               {motionUnacked}
@@ -284,6 +316,12 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
               {homeUnacked}
             </div>
             <div className="text-xs text-text-muted">Casa</div>
+          </div>
+          <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
+            <div className={cn('font-mono font-bold text-base', deviceUnacked > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
+              {deviceUnacked}
+            </div>
+            <div className="text-xs text-text-muted">Disp.</div>
           </div>
           <div className="bg-primary/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', zoneUnacked > 0 ? 'text-primary' : 'text-text-muted')}>
@@ -379,6 +417,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
             { key: 'all' as const,    label: 'Todas' },
             { key: 'motion' as const, label: 'Conducción' },
             { key: 'home' as const,   label: 'Casa' },
+            { key: 'device' as const, label: 'Disp.' },
             { key: 'zone' as const,   label: 'Zonas' },
           ]).map((opt) => (
             <button

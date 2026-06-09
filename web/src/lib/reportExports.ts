@@ -32,6 +32,43 @@ export interface TrackStat {
   zoneEnters: number
   zoneExits: number
   incidents: number
+  deviceTampers: number   // eventos de sabotaje al rastreo en el período
+  batteryDrainPerH?: number | null  // %/h de drenaje del equipo (sin cargar) mientras rastreaba
+  trackedHours?: number   // horas con muestras de batería cercanas (sin cargar)
+}
+
+/** Un evento de la bitácora de dispositivo (para la sección/hoja de detalle). */
+export interface DeviceEventRow {
+  techId: string
+  name: string
+  company: string | null
+  ts: string        // ISO
+  type: string      // event_type
+}
+
+// Eventos que cuentan como SABOTAJE/mal uso del rastreo (para el conteo y la
+// bitácora de evidencia). Las recuperaciones (gps_on, net_on, …) y el inicio de
+// rastreo no se cuentan como sabotaje.
+export const DEVICE_TAMPER_TYPES = [
+  'gps_off', 'net_off', 'mock_on', 'battery_restricted', 'tracking_killed', 'tracking_stop',
+  'perm_revoked', 'clock_skew',
+]
+
+export const DEVICE_EVENT_LABELS: Record<string, string> = {
+  gps_off:              'Apagó el GPS',
+  gps_on:               'Reactivó el GPS',
+  net_off:              'Apagó datos / Wi-Fi',
+  net_on:               'Reactivó datos / Wi-Fi',
+  mock_on:              'Ubicación falsa (Fake GPS)',
+  mock_off:             'Cesó ubicación falsa',
+  battery_restricted:   'Restringió la batería',
+  battery_unrestricted: 'Quitó restricción de batería',
+  tracking_killed:      'Cerró la app a la fuerza',
+  tracking_stop:        'Detuvo la localización',
+  tracking_start:       'Inició la localización',
+  perm_revoked:         'Quitó "Permitir siempre"',
+  perm_granted:         'Restauró "Permitir siempre"',
+  clock_skew:           'Reloj del teléfono alterado',
 }
 
 /** Fila diaria de horas (una por técnico y día). */
@@ -124,6 +161,7 @@ export function exportLeaderExcel(
   routes: RouteStat[],
   hoursAgg: HoursAgg[],
   hoursDaily: HoursDaily[],
+  deviceEvents: DeviceEventRow[] = [],
 ) {
   const wb = utils.book_new()
 
@@ -156,6 +194,7 @@ export function exportLeaderExcel(
       'Entradas a zona': t?.zoneEnters ?? 0,
       'Salidas de zona': t?.zoneExits ?? 0,
       'Incidentes': t?.incidents ?? 0,
+      'Sabotajes (disp.)': t?.deviceTampers ?? 0,
       // Servicios
       'Servicios asignados': r?.assigned ?? 0,
       'Servicios completados': r?.completed ?? 0,
@@ -189,10 +228,28 @@ export function exportLeaderExcel(
       'Entradas a zona': t.zoneEnters,
       'Salidas de zona': t.zoneExits,
       'Incidentes': t.incidents,
+      'Sabotajes (disp.)': t.deviceTampers,
+      'Batería %/h (sin cargar)': t.batteryDrainPerH != null ? Math.round(t.batteryDrainPerH * 10) / 10 : '',
+      'Horas con muestra batería': t.trackedHours != null ? Math.round(t.trackedHours * 10) / 10 : '',
     }))
   const wsTracking = utils.json_to_sheet(tracking.length ? tracking : [{ 'Sin datos': '' }])
   autoWidth(wsTracking, tracking)
   utils.book_append_sheet(wb, wsTracking, 'Tracking')
+
+  // ── Hoja: Bitácora de dispositivo (evidencia de sabotaje) ──
+  const bitacora = deviceEvents
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name) || a.ts.localeCompare(b.ts))
+    .map(e => ({
+      'Técnico': e.name,
+      'Empresa': e.company ?? '',
+      'Fecha': format(new Date(e.ts), 'yyyy-MM-dd'),
+      'Hora':  format(new Date(e.ts), 'HH:mm'),
+      'Evento': DEVICE_EVENT_LABELS[e.type] ?? e.type,
+    }))
+  const wsBit = utils.json_to_sheet(bitacora.length ? bitacora : [{ 'Sin eventos de dispositivo en el período': '' }])
+  autoWidth(wsBit, bitacora)
+  utils.book_append_sheet(wb, wsBit, 'Bitácora dispositivo')
 
   // ── Hoja 3: Horas por día (detalle para cruces) ──
   const detalle = hoursDaily
@@ -257,6 +314,7 @@ export function exportLeaderPdf(
   track: TrackStat[],
   routes: RouteStat[],
   hoursAgg: HoursAgg[],
+  deviceEvents: DeviceEventRow[] = [],
 ) {
   const doc = new jsPDF({ orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -301,6 +359,7 @@ export function exportLeaderPdf(
     assigned: a.assigned + r.assigned, completed: a.completed + r.completed,
   }), { assigned: 0, completed: 0 })
   const ht = hoursAgg.reduce((a, h) => ({ worked: a.worked + h.workedSec }), { worked: 0 })
+  const tamperTotal = track.reduce((a, t) => a + t.deviceTampers, 0)
   const techCount = new Set([...track.map(t => t.techId), ...routes.map(r => r.techId), ...hoursAgg.map(h => h.techId)]).size
 
   doc.setTextColor(30, 30, 30)
@@ -310,7 +369,7 @@ export function exportLeaderPdf(
 
   autoTable(doc, {
     startY: 46,
-    head: [['Técnicos', 'Km recorridos', 'Viajes', 'Servicios completados', 'Entradas a zona', 'Salidas de zona', 'Incidentes', 'Horas trabajadas']],
+    head: [['Técnicos', 'Km recorridos', 'Viajes', 'Servicios completados', 'Entradas a zona', 'Salidas de zona', 'Incidentes', 'Sabotajes', 'Horas trabajadas']],
     body: [[
       String(techCount),
       `${tt.km.toFixed(1)} km`,
@@ -319,6 +378,7 @@ export function exportLeaderPdf(
       String(tt.enters),
       String(tt.exits),
       String(tt.inc),
+      String(tamperTotal),
       hm(ht.worked),
     ]],
     styles: { fontSize: 9, cellPadding: 4 },
@@ -330,18 +390,58 @@ export function exportLeaderPdf(
   // ── 1) Tracking por técnico (lo principal) ──
   autoTable(doc, {
     startY: section('Tracking por técnico'),
-    head: [['Técnico', 'Empresa', 'Km', 'Viajes', 'Tiempo en ruta', 'Vel. prom.', 'Vel. máx.', 'Entradas', 'Salidas', 'Incidentes']],
+    head: [['Técnico', 'Empresa', 'Km', 'Viajes', 'Tiempo en ruta', 'Vel. prom.', 'Vel. máx.', 'Entradas', 'Salidas', 'Incidentes', 'Sabotajes', 'Batería %/h']],
     body: track.slice().sort((a, b) => b.km - a.km).map(t => [
       t.name, t.company ?? '—',
       t.km.toFixed(1), String(t.trips), hm(t.durationMin * 60),
       `${t.avgSpeed.toFixed(1)}`, `${t.maxSpeed.toFixed(1)}`,
-      String(t.zoneEnters), String(t.zoneExits), String(t.incidents),
+      String(t.zoneEnters), String(t.zoneExits), String(t.incidents), String(t.deviceTampers),
+      t.batteryDrainPerH != null ? t.batteryDrainPerH.toFixed(1) : '—',
     ]),
     styles: baseStyles,
     headStyles: headStyles(SLATE, [200, 200, 200]),
     alternateRowStyles: zebra,
     margin: { left: 14, right: 14 },
   })
+
+  // ── Bitácora de dispositivo (sabotaje al rastreo) ──
+  // Conteo por técnico y tipo: la evidencia de que el técnico apagó GPS/datos,
+  // usó Fake GPS, restringió la batería o cerró la app a la fuerza.
+  const tamperByTech = new Map<string, { name: string; company: string | null; counts: Record<string, number>; total: number }>()
+  for (const e of deviceEvents) {
+    if (!DEVICE_TAMPER_TYPES.includes(e.type)) continue
+    let g = tamperByTech.get(e.techId)
+    if (!g) { g = { name: e.name, company: e.company, counts: {}, total: 0 }; tamperByTech.set(e.techId, g) }
+    g.counts[e.type] = (g.counts[e.type] ?? 0) + 1
+    g.total += 1
+  }
+  const tamperRows = [...tamperByTech.values()].sort((a, b) => b.total - a.total)
+  const yBit = section('Bitácora de dispositivo (sabotaje al rastreo)')
+  if (tamperRows.length) {
+    autoTable(doc, {
+      startY: yBit,
+      head: [['Técnico', 'Empresa', 'GPS off', 'Datos off', 'Fake GPS', 'Batería', 'App cerrada', 'Detuvo', 'Permiso', 'Reloj', 'Total']],
+      body: tamperRows.map(g => [
+        g.name, g.company ?? '—',
+        String(g.counts['gps_off'] ?? 0),
+        String(g.counts['net_off'] ?? 0),
+        String(g.counts['mock_on'] ?? 0),
+        String(g.counts['battery_restricted'] ?? 0),
+        String(g.counts['tracking_killed'] ?? 0),
+        String(g.counts['tracking_stop'] ?? 0),
+        String(g.counts['perm_revoked'] ?? 0),
+        String(g.counts['clock_skew'] ?? 0),
+        String(g.total),
+      ]),
+      styles: baseStyles,
+      headStyles: headStyles([153, 27, 27], [255, 255, 255]),
+      alternateRowStyles: { fillColor: [253, 242, 242] },
+      margin: { left: 14, right: 14 },
+    })
+  } else {
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 90, 90)
+    doc.text('Sin eventos de sabotaje al rastreo en el período.', 14, yBit + 2)
+  }
 
   // ── 2) Servicios (cumplimiento de rutas) ──
   if (routes.length) {

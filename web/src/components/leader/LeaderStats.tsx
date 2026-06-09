@@ -169,9 +169,10 @@ export function LeaderStats() {
               <div key={route.id} className="px-4 py-3.5 flex items-center gap-3">
                 <div className={cn(
                   'w-2 h-2 rounded-full flex-shrink-0',
-                  route.techStatus === 'moving'  ? 'bg-success animate-pulse' :
-                  route.techStatus === 'idle'    ? 'bg-warning' :
-                  route.techStatus === 'stopped' ? 'bg-text-muted' :
+                  route.techStatus === 'moving'    ? 'bg-success animate-pulse' :
+                  route.techStatus === 'idle'      ? 'bg-warning' :
+                  route.techStatus === 'stopped'   ? 'bg-text-muted' :
+                  route.techStatus === 'no_signal' ? 'bg-amber-500' :
                   'bg-border'
                 )} />
                 <div className="flex-1 min-w-0">
@@ -204,14 +205,16 @@ export function LeaderStats() {
                 </div>
                 <span className={cn(
                   'text-xs px-2 py-0.5 rounded-full border flex-shrink-0',
-                  route.techStatus === 'moving'  ? 'bg-success/10 text-success border-success/20' :
-                  route.techStatus === 'idle'    ? 'bg-warning/10 text-warning border-warning/20' :
-                  route.techStatus === 'stopped' ? 'bg-text-muted/10 text-text-muted border-border' :
+                  route.techStatus === 'moving'    ? 'bg-success/10 text-success border-success/20' :
+                  route.techStatus === 'idle'      ? 'bg-warning/10 text-warning border-warning/20' :
+                  route.techStatus === 'stopped'   ? 'bg-text-muted/10 text-text-muted border-border' :
+                  route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                   'bg-surface-raised text-text-muted border-border'
                 )}>
-                  {route.techStatus === 'moving'  ? 'En campo' :
-                   route.techStatus === 'idle'    ? 'Inactivo' :
-                   route.techStatus === 'stopped' ? 'Detenido' : 'Sin conexión'}
+                  {route.techStatus === 'moving'    ? 'En campo' :
+                   route.techStatus === 'idle'      ? 'Inactivo' :
+                   route.techStatus === 'stopped'   ? 'Detenido' :
+                   route.techStatus === 'no_signal' ? 'Sin señal' : 'Sin conexión'}
                 </span>
               </div>
             ))}

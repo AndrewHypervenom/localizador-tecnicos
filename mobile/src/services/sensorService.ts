@@ -119,6 +119,53 @@ export async function reportSosEvent(technicianId: string): Promise<'sent' | 'qu
   }
 }
 
+// ── Bitácora de dispositivo (evidencia para el líder) ──────────────────────
+// Registra acciones que sabotean el rastreo —apagar el GPS o usar Fake GPS— como
+// motion_events, para que el líder tenga un historial con hora y última posición
+// conocida. Best-effort de ubicación: aunque el GPS esté apagado, el último fix
+// sirve de evidencia de DÓNDE estaba. Sin red, queda en cola y se envía al
+// reconectar (igual que el SOS).
+export type DeviceEventType =
+  | 'gps_off' | 'gps_on'        // apagó / encendió la ubicación del dispositivo
+  | 'mock_on' | 'mock_off'      // detectó / cesó Fake GPS
+  | 'tracking_start'            // pulsó INICIAR LOCALIZACIÓN (acción explícita)
+  | 'tracking_stop'             // pulsó DETENER LOCALIZACIÓN (acción explícita)
+  | 'net_off' | 'net_on'        // apagó / reactivó datos o Wi-Fi con rastreo activo
+  | 'battery_restricted'        // volvió a poner la app en "ahorro de batería"
+  | 'battery_unrestricted'      // quitó la restricción de batería
+  | 'tracking_killed'           // la app/servicio murió y se reanudó tras un hueco
+  | 'perm_revoked'              // bajó el permiso de "Permitir siempre"
+  | 'perm_granted';             // restauró el permiso "Permitir siempre"
+
+export async function reportDeviceEvent(
+  technicianId: string,
+  eventType: DeviceEventType,
+): Promise<void> {
+  if (!technicianId) return;
+
+  let location: string | null = null;
+  try {
+    const pos = await Location.getLastKnownPositionAsync();
+    if (pos) location = `POINT(${pos.coords.longitude} ${pos.coords.latitude})`;
+  } catch { /* sin ubicación: igual se registra el evento */ }
+
+  const row: MotionRow = {
+    technician_id: technicianId,
+    ts:            new Date().toISOString(),
+    event_type:    eventType,
+    severity:      0,
+    location,
+  };
+
+  try {
+    await ensureAuth();
+    const { error } = await supabase.from('motion_events').insert(row);
+    if (error) throw new Error(error.message);
+  } catch {
+    await enqueueMotion(row);
+  }
+}
+
 async function reportMotionEvent(type: string, severity: number) {
   const now    = Date.now();
   const lastTs = _lastEventTs.get(type) ?? 0;

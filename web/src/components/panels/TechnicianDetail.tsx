@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useTrackingStore, STATUS_THRESHOLDS } from '@/store/trackingStore'
+import { useTrackingStore, STATUS_THRESHOLDS, noSignalReason } from '@/store/trackingStore'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart }     from '@/components/charts/SpeedChart'
 import { supabase } from '@/lib/supabase'
@@ -9,11 +9,22 @@ import { TechnicianEditModal, TechnicianEditable } from '@/components/modals/Tec
 import {
   X, Battery, Gauge, Mountain, Phone,
   Navigation, Timer, Signal,
-  Loader2, Edit2,
+  Loader2, Edit2, ShieldAlert,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { DEVICE_EVENT_LABELS, DEVICE_TAMPER_TYPES } from '@/lib/reportExports'
+
+// Tipos de la bitácora de dispositivo (sabotaje + recuperaciones) para la línea
+// de tiempo. Los de DEVICE_TAMPER_TYPES se pintan en rojo (evidencia de mal uso).
+const DEVICE_LOG_TYPES = [
+  'gps_off', 'gps_on', 'net_off', 'net_on', 'mock_on', 'mock_off',
+  'battery_restricted', 'battery_unrestricted', 'tracking_killed',
+  'tracking_stop', 'tracking_start',
+  'perm_revoked', 'perm_granted', 'clock_skew',
+]
+const TAMPER_SET = new Set(DEVICE_TAMPER_TYPES)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,10 +57,15 @@ function StatCard({ icon: Icon, label, value, unit, color = 'text-primary' }: {
   )
 }
 
-function ActiveStatusCard({ isActive, isAccident }: { isActive: boolean; isAccident: boolean }) {
-  const dotColor  = isAccident ? 'bg-danger animate-pulse' : isActive ? 'bg-success animate-pulse' : 'bg-text-muted'
-  const textColor = isAccident ? 'text-danger' : isActive ? 'text-success' : 'text-text-muted'
-  const label     = isAccident ? 'Alerta' : isActive ? 'Activo' : 'Inactivo'
+function ActiveStatusCard({ isActive, isAccident, noSignal, hint }: {
+  isActive: boolean; isAccident: boolean; noSignal?: boolean; hint?: string
+}) {
+  // 'no_signal' = la app SIGUE VIVA (latido fresco) pero sin señal GPS: ámbar,
+  // distinto del gris "Inactivo/Desconectado". Es la refutación visual directa
+  // del "la app no sirve": el líder ve que la app está activa.
+  const dotColor  = isAccident ? 'bg-danger animate-pulse' : isActive ? 'bg-success animate-pulse' : noSignal ? 'bg-amber-500 animate-pulse' : 'bg-text-muted'
+  const textColor = isAccident ? 'text-danger' : isActive ? 'text-success' : noSignal ? 'text-amber-500' : 'text-text-muted'
+  const label     = isAccident ? 'Alerta' : isActive ? 'Activo' : noSignal ? 'App activa' : 'Inactivo'
   return (
     <div className="bg-surface-raised rounded-xl p-3 flex flex-col gap-1">
       <div className="flex items-center gap-1.5 text-text-muted">
@@ -60,6 +76,7 @@ function ActiveStatusCard({ isActive, isAccident }: { isActive: boolean; isAccid
         <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', dotColor)} />
         {label}
       </div>
+      {noSignal && hint && <span className="text-[10px] text-amber-500/80 leading-tight mt-0.5">{hint}</span>}
     </div>
   )
 }
@@ -101,6 +118,7 @@ export function TechnicianDetail() {
   const [elevData,  setElevData]  = useState<any[]>([])
   const [speedData, setSpeedData] = useState<any[]>([])
   const [loading,   setLoading]   = useState(false)
+  const [deviceLog, setDeviceLog] = useState<{ id: string; type: string; ts: string }[]>([])
 
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editData,      setEditData]      = useState<TechnicianEditable | null>(null)
@@ -238,6 +256,26 @@ export function TechnicianDetail() {
     return () => clearInterval(interval)
   }, [tech?.id])
 
+  // Bitácora de dispositivo: últimos eventos de GPS/datos/batería/Fake GPS y de
+  // cierre forzado de la app. Es la evidencia de mal uso para el líder.
+  useEffect(() => {
+    if (!tech) { setDeviceLog([]); return }
+    let cancelled = false
+    async function load() {
+      const { data } = await supabase
+        .from('motion_events')
+        .select('id, event_type, ts')
+        .eq('technician_id', tech!.id)
+        .in('event_type', DEVICE_LOG_TYPES)
+        .order('ts', { ascending: false })
+        .limit(20)
+      if (!cancelled) setDeviceLog((data ?? []).map((r: any) => ({ id: r.id, type: r.event_type, ts: r.ts })))
+    }
+    load()
+    const iv = setInterval(load, 30_000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [tech?.id])
+
   return (
     <AnimatePresence>
       {tech && (
@@ -314,7 +352,12 @@ export function TechnicianDetail() {
               color="text-text-secondary"
             />
             <TripDurationCard secs={activeSecs} isActive={isActive} hasData={effectiveTrip !== null} />
-            <ActiveStatusCard isActive={isActive} isAccident={tech.status === 'accident'} />
+            <ActiveStatusCard
+              isActive={isActive}
+              isAccident={tech.status === 'accident'}
+              noSignal={!isActive && tech.status === 'no_signal'}
+              hint={tech.status === 'no_signal' ? noSignalReason(tech) : undefined}
+            />
           </div>
 
           {/* Última actualización */}
@@ -367,6 +410,35 @@ export function TechnicianDetail() {
               ? <div className="h-36 bg-surface-raised rounded-xl animate-pulse" />
               : <SpeedChart data={speedData} />
             }
+          </div>
+
+          {/* Bitácora de dispositivo (evidencia de sabotaje al rastreo) */}
+          <div className="px-4 pb-4">
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5" /> Bitácora del dispositivo
+            </h4>
+            {deviceLog.length === 0 ? (
+              <div className="bg-surface-raised rounded-xl p-4 text-center text-xs text-text-muted">
+                Sin eventos de dispositivo registrados.
+              </div>
+            ) : (
+              <div className="bg-surface-raised rounded-xl divide-y divide-border-soft">
+                {deviceLog.map((e) => {
+                  const isTamper = TAMPER_SET.has(e.type)
+                  return (
+                    <div key={e.id} className="flex items-center gap-2.5 px-3 py-2">
+                      <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', isTamper ? 'bg-danger' : 'bg-success')} />
+                      <span className={cn('text-xs flex-1 min-w-0 truncate', isTamper ? 'text-danger font-medium' : 'text-text-secondary')}>
+                        {DEVICE_EVENT_LABELS[e.type] ?? e.type}
+                      </span>
+                      <span className="text-[11px] text-text-muted flex-shrink-0">
+                        {formatDistanceToNow(new Date(e.ts), { addSuffix: true, locale: es })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Spacer bottom */}

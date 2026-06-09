@@ -4,6 +4,7 @@ import {
   Alert,
   AppState,
   Image,
+  Linking,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -29,13 +30,23 @@ import {
   hasAllPermissions,
   startTracking,
   stopTracking,
+  ensureTrackingHealthy,
 } from '../services/locationService';
-import { ensureBatteryOptimizationExempt } from '../services/batteryOptimization';
-import { reportSosEvent } from '../services/sensorService';
+import {
+  ensureBatteryOptimizationExempt,
+  getBatteryGuard,
+  dismissBatteryGuard,
+  openBatterySettings,
+  type BatteryGuard,
+} from '../services/batteryOptimization';
+import { reportSosEvent, reportDeviceEvent } from '../services/sensorService';
+import { auditGps, auditNet, auditBatteryOpt, auditTrackingKilled, auditPermission } from '../services/deviceAudit';
 import { registerWatchdog } from '../services/watchdog';
+import { sendHeartbeat } from '../services/heartbeat';
 import {
   flushLocationQueue,
   flushMotionQueue,
+  isOnline,
   getLastError,
   getLastSent,
   getQueueCount,
@@ -69,6 +80,7 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
   // Estado real del dispositivo (para detectar GPS apagado / sin internet / sin permiso)
   const [gpsOn,    setGpsOn]    = useState<boolean | null>(null);
   const [permLevel, setPermLevel] = useState<'full' | 'partial' | 'none' | null>(null);
+  const [battery,  setBattery]  = useState<BatteryGuard | null>(null);
   const [net,      setNet]      = useState<{ connected: boolean; type: string }>({ connected: true, type: 'unknown' });
 
   // Lee el estado del GPS y de los permisos de ubicación (sin abrir Ajustes ni diálogos).
@@ -76,24 +88,32 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
     try {
       const servicesOn = await Location.hasServicesEnabledAsync();
       setGpsOn(servicesOn);
+      // Auditar la transición del GPS contra el estado PERSISTIDO (compartido con
+      // el watchdog en segundo plano, así no se duplican eventos). auditGps solo
+      // deja evidencia si hay sesión de rastreo activa. Si volvió a encenderse,
+      // re-suscribir el servicio al instante (Android no reanuda solo).
+      const gpsEvent = await auditGps(servicesOn);
+      if (gpsEvent === 'gps_on') void ensureTrackingHealthy();
+
       const { status: fg } = await Location.getForegroundPermissionsAsync();
       const { status: bg } = await Location.getBackgroundPermissionsAsync();
-      setPermLevel(fg !== 'granted' ? 'none' : bg === 'granted' ? 'full' : 'partial');
+      const level = fg !== 'granted' ? 'none' : bg === 'granted' ? 'full' : 'partial';
+      setPermLevel(level);
+      // Evidencia si el técnico bajó de "Permitir siempre" a "Solo en uso" o lo
+      // revocó (el truco para romper el rastreo de fondo sin apagar el GPS).
+      void auditPermission(level);
+
+      const guard = await getBatteryGuard();
+      setBattery(guard);
+      // Evidencia si re-activaron la optimización de batería (el truco para que el
+      // SO mate el servicio). Solo en Android no-Xiaomi: en Xiaomi la capa MIUI no
+      // es legible, y ahí needsAttention == optimized.
+      if (!guard.xiaomi) void auditBatteryOpt(guard.needsAttention);
     } catch (e: any) {
       console.error('[deviceStatus]', e?.message);
     }
   }, []);
 
-  // Suscripción a cambios de conectividad (Wi-Fi / datos / sin red).
-  useEffect(() => {
-    const unsub = NetInfo.addEventListener((state) => {
-      setNet({
-        connected: !!state.isConnected && state.isInternetReachable !== false,
-        type: state.type,
-      });
-    });
-    return () => unsub();
-  }, []);
 
   // Sondeo periódico del GPS y permisos (no tienen listener nativo directo).
   useEffect(() => {
@@ -147,24 +167,70 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
     return () => clearInterval(interval);
   }, [loadDiagnostics]);
 
-  // Watchdog en primer plano: si había sesión activa pero el SO mató el
-  // servicio de ubicación, reiniciarlo al volver a abrir la app.
+  // Drenar la cola directamente cuando la cola tenga datos, sin depender de que
+  // llegue un fix GPS (el background task es el único que flushea, y en algunos
+  // equipos —p.ej. Xiaomi con ahorro de batería— se suspende). Mientras la app
+  // esté abierta esto garantiza que lo encolado se envíe cada ~20 s.
+  const flushNow = useCallback(async () => {
+    try {
+      if (!(await isOnline())) return;
+      await clearBackoff();        // app abierta: no esperar la ventana de backoff
+      await ensureAuth();
+      await flushLocationQueue();
+      await flushMotionQueue();
+      // Latido de "app viva" desde primer plano (cada ~20 s con la app abierta).
+      void sendHeartbeat({ appState: 'foreground' });
+    } catch (e: any) {
+      console.warn('[flushNow]', e?.message);
+    } finally {
+      await loadDiagnostics();
+    }
+  }, [loadDiagnostics]);
+
+  useEffect(() => {
+    flushNow();                              // al montar / al empezar a rastrear
+    const interval = setInterval(flushNow, 20_000);
+    return () => clearInterval(interval);
+  }, [flushNow]);
+
+  // Conectividad: actualiza el indicador y, al RECONECTAR, drena la cola de
+  // inmediato en vez de esperar al próximo tick.
+  useEffect(() => {
+    let prevConnected = true;
+    const unsub = NetInfo.addEventListener((state) => {
+      const connected = !!state.isConnected && state.isInternetReachable !== false;
+      setNet({ connected, type: state.type });
+      // Evidencia de datos/Wi-Fi apagados con rastreo activo (net_off / net_on).
+      void auditNet(connected);
+      if (connected && !prevConnected) void flushNow();
+      prevConnected = connected;
+    });
+    return () => unsub();
+  }, [flushNow]);
+
+  // Watchdog en primer plano: al volver a abrir la app, repara el rastreo si el
+  // SO mató el servicio O si quedó "iniciado pero mudo" (GPS apagado/encendido).
   useEffect(() => {
     const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return;
       loadDeviceStatus();
+      void flushNow();                       // drenar lo encolado al volver a abrir
       try {
-        const techId = await loadTechnicianId();
-        if (!techId) return;
-        if (!(await isTracking())) {
-          await startTracking(techId);
-          setTracking(true);
-        }
+        const action = await ensureTrackingHealthy();
+        if (action === 'started' || action === 'restarted') setTracking(true);
       } catch (e: any) {
         console.error('[Watchdog AppState]', e?.message);
       }
     });
     return () => sub.remove();
+  }, [flushNow, loadDeviceStatus]);
+
+  // Auto-reparación mientras la app esté abierta: aunque no haya transición de
+  // GPS ni cambio de AppState, revisa cada 30 s que sigan llegando fixes y
+  // re-suscribe si el servicio quedó mudo (p.ej. tras una congelación de MIUI).
+  useEffect(() => {
+    const interval = setInterval(() => { void ensureTrackingHealthy(); }, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   // Inicialización: auto-arranca si había sesión previa y permisos ya concedidos
@@ -187,6 +253,12 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
           void refreshTechName();
           return;
         }
+
+        // El servicio NO está corriendo en un arranque en frío. Si había una
+        // sesión activa y hubo un hueco real sin fixes, el proceso fue terminado
+        // (force-stop, swipe de recientes o el SO por memoria): dejar evidencia
+        // (tracking_killed) antes de revivir el rastreo más abajo.
+        void auditTrackingKilled(false);
 
         // Asegurar sesión válida ANTES de leer (igual que App.tsx). Sin esto,
         // una sesión anónima vencida hacía que la lectura devolviera vacío y
@@ -233,6 +305,11 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
   async function handleToggle() {
     if (tracking) {
       setLoading(true);
+      // Bitácora: el técnico DETUVO la localización a propósito (acción explícita,
+      // distinta de "se apagó el GPS"). Se registra ANTES de stopTracking, que
+      // borra el technicianId y hace el flush final (el evento viaja con él).
+      const techId = await loadTechnicianId();
+      if (techId) await reportDeviceEvent(techId, 'tracking_stop');
       await stopTracking();
       setTracking(false);
       setLoading(false);
@@ -261,6 +338,23 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
       return;
     }
 
+    // Explicación previa: el SO obliga a que el técnico elija manualmente la
+    // opción "Siempre / Todo el tiempo". Le decimos qué tocar ANTES de que
+    // aparezca el diálogo del sistema, para que no escoja "Solo con la app".
+    if (!(await hasAllPermissions())) {
+      await new Promise<void>((resolve) =>
+        Alert.alert(
+          'Activar ubicación continua',
+          'Para el rastreo del técnico, en las siguientes pantallas elige:\n\n' +
+            '• Ubicación: "Permitir todo el tiempo" (NO "Solo con la app").\n' +
+            '• Precisión exacta: activada.\n\n' +
+            'Si eliges otra opción, el rastreo no funcionará en segundo plano.',
+          [{ text: 'Entendido', onPress: () => resolve() }],
+          { cancelable: false },
+        ),
+      );
+    }
+
     const granted = await requestPermissions();
     if (!granted) {
       Alert.alert('Permisos requeridos', 'Concede permiso de ubicación "Siempre" en Ajustes > Aplicaciones > Localizador > Permisos > Ubicación.');
@@ -271,6 +365,10 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
     try {
       await startTracking(tech.id);
       await registerWatchdog();
+      // Bitácora: el técnico INICIÓ la localización (acción explícita). Solo aquí,
+      // no en el auto-arranque ni en el watchdog, para que el evento signifique
+      // "el técnico la activó a mano" y la línea de tiempo del líder sea fiable.
+      void reportDeviceEvent(tech.id, 'tracking_start');
       setTechName(tech.name);
       setTracking(true);
       // Pedir exención de optimización de batería para sostener >=4 h continuas.
@@ -345,6 +443,45 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
         },
       ],
     );
+  }
+
+  // Abre la pantalla de Ajustes de la app para que el técnico cambie el permiso
+  // de ubicación a "Permitir siempre". openSettings lleva a la ficha de la app
+  // en ambas plataformas; desde ahí: Permisos > Ubicación > Permitir siempre.
+  async function openLocationSettings() {
+    Alert.alert(
+      'Activar "Permitir siempre"',
+      'Se abrirán los Ajustes de la app.\n\n' +
+        'Toca:  Permisos  ›  Ubicación  ›  "Permitir todo el tiempo"\n' +
+        'y activa  "Usar ubicación precisa".',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Abrir Ajustes', onPress: () => { void Linking.openSettings(); } },
+      ],
+    );
+  }
+
+  // Abre la pantalla de batería para dejar la app en "Sin restricciones".
+  async function handleOpenBattery() {
+    Alert.alert(
+      'Quitar restricción de batería',
+      battery?.xiaomi
+        ? 'Se abrirá la pantalla de batería de tu teléfono.\n\n' +
+          'Selecciona la opción  "Sin restricciones"  (NO "Ahorro de batería").\n\n' +
+          'Si no, el sistema cierra el rastreo en segundo plano.'
+        : 'Se abrirá la pantalla de batería.\n\nPermite que la app se ejecute sin restricciones / sin optimizar.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Abrir', onPress: () => { void openBatterySettings(); } },
+      ],
+    );
+  }
+
+  // En Xiaomi no podemos leer la capa MIUI; el técnico confirma que ya lo dejó
+  // en "Sin restricciones" y el banner se oculta.
+  async function handleBatteryDone() {
+    await dismissBatteryGuard();
+    setBattery(await getBatteryGuard());
   }
 
   function handleReRegister() {
@@ -447,6 +584,58 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
                 ].filter(Boolean).join(' · ')}
               </Text>
               <Text style={styles.warnHint}>Tu ubicación NO se está enviando. Reactiva lo indicado.</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Banner de PERMISO: visible SIEMPRE que la ubicación no esté en
+            "Permitir siempre", aunque el rastreo esté apagado. Es la causa #1 de
+            "la app no sirve": el técnico tiene el permiso en "Solo en uso" o
+            denegado y no lo sabe. Incluye botón para abrir Ajustes y arreglarlo. */}
+        {(permLevel === 'partial' || permLevel === 'none') && (
+          <View style={[styles.permBanner, permLevel === 'none' && styles.permBannerDenied]}>
+            <WarningTriangle size={22} color={permLevel === 'none' ? '#fca5a5' : '#fbbf24'} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.permTitle, permLevel === 'none' && styles.permTitleDenied]}>
+                FALTA EL PERMISO "PERMITIR SIEMPRE"
+              </Text>
+              <Text style={[styles.permMsg, permLevel === 'none' && styles.permMsgDenied]}>
+                {permLevel === 'none'
+                  ? 'No has dado permiso de ubicación. La app SÍ funciona, pero no puede rastrear sin este permiso.'
+                  : 'Tienes la ubicación en "Solo en uso". La app SÍ funciona, pero el rastreo necesita "Permitir siempre".'}
+              </Text>
+              <TouchableOpacity style={styles.permFixBtn} onPress={openLocationSettings}>
+                <Text style={styles.permFixText}>ARREGLAR — Abrir Ajustes</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Banner de BATERÍA: la app debe estar en "Sin restricciones", no en
+            "Ahorro de batería", o el sistema mata el rastreo. En Xiaomi no se
+            puede leer el estado real (capa MIUI cerrada): se muestra hasta que
+            el técnico confirme. En el resto de Android desaparece solo al quedar
+            exenta. */}
+        {battery?.needsAttention && (
+          <View style={styles.permBanner}>
+            <WarningTriangle size={22} color="#fbbf24" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.permTitle}>BATERÍA: PON "SIN RESTRICCIONES"</Text>
+              <Text style={styles.permMsg}>
+                {battery.xiaomi
+                  ? 'En "Ahorro de batería" el teléfono cierra el rastreo. Debe quedar en "Sin restricciones".'
+                  : 'La app está optimizada por batería. Permite que se ejecute sin restricciones para no perder el rastreo.'}
+              </Text>
+              <View style={styles.permBtnRow}>
+                <TouchableOpacity style={[styles.permFixBtn, { marginTop: 0 }]} onPress={handleOpenBattery}>
+                  <Text style={styles.permFixText}>ABRIR AJUSTES</Text>
+                </TouchableOpacity>
+                {battery.canDismiss && (
+                  <TouchableOpacity style={styles.permDoneBtn} onPress={handleBatteryDone}>
+                    <Text style={styles.permDoneText}>Ya está configurado</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -592,6 +781,18 @@ const styles = StyleSheet.create({
   warnTitle:      { color: '#fde68a', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   warnMsg:        { color: '#fbbf24', fontSize: 13, fontWeight: '700', marginTop: 2 },
   warnHint:       { color: '#fcd34d', fontSize: 11, marginTop: 3 },
+
+  permBanner:       { width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: '#3a2206', borderRadius: 12, borderWidth: 1, borderColor: '#f59e0b', padding: 14 },
+  permBannerDenied: { backgroundColor: '#3a0a0a', borderColor: '#ef4444' },
+  permTitle:        { color: '#fde68a', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  permTitleDenied:  { color: '#fecaca' },
+  permMsg:          { color: '#fbbf24', fontSize: 13, fontWeight: '600', marginTop: 3 },
+  permMsgDenied:    { color: '#fca5a5' },
+  permFixBtn:       { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#00D632', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  permFixText:      { color: '#06210d', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  permBtnRow:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' },
+  permDoneBtn:      { alignSelf: 'flex-start', borderWidth: 1, borderColor: '#fbbf24', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  permDoneText:     { color: '#fde68a', fontSize: 13, fontWeight: '700' },
 
   diagBox:        { width: '100%', backgroundColor: '#141420', borderRadius: 12, padding: 16, gap: 10 },
   diagTitle:      { fontSize: 11, color: '#64748b', letterSpacing: 1.2, marginBottom: 4 },

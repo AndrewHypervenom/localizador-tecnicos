@@ -15,6 +15,7 @@ import TermsScreen, { hasAcceptedTerms } from './screens/TermsScreen';
 import MockBlockedScreen from './screens/MockBlockedScreen';
 import { startMockWatch, stopMockWatch, subscribeMock, checkMockOnce, setMockDetected } from './services/mockLocationGuard';
 import { stopTracking } from './services/locationService';
+import { reportDeviceEvent } from './services/sensorService';
 
 type AppState = 'loading' | 'terms' | 'register' | 'home';
 
@@ -34,7 +35,15 @@ export default function App() {
   useEffect(() => {
     const unsub = subscribeMock((active) => {
       setMockBlocked(active);
-      if (active) void stopTracking();
+      if (active) {
+        // Fake GPS detectado: dejar EVIDENCIA para el líder (con la última
+        // posición conocida) ANTES de stopTracking(), que borra el technicianId.
+        void (async () => {
+          const techId = await loadTechnicianId();
+          if (techId) await reportDeviceEvent(techId, 'mock_on');
+          await stopTracking();
+        })();
+      }
     });
     startMockWatch();
     const appSub = RNAppState.addEventListener('change', (s) => {

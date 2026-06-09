@@ -9,6 +9,11 @@ const TECH_NAME_KEY     = '@localizador/technician_name';
 const LAST_ERROR_KEY    = '@localizador/last_error';
 const LAST_SENT_KEY     = '@localizador/last_sent';
 const LAST_UPLOADED_KEY = '@localizador/last_uploaded';
+const LAST_FIX_KEY      = '@localizador/last_fix_ts';
+const GPS_STATE_KEY     = '@localizador/gps_state';      // último estado conocido del GPS
+const NET_STATE_KEY     = '@localizador/net_state';      // último estado conocido de la red
+const BATTOPT_STATE_KEY = '@localizador/battopt_state';  // última lectura de optimización de batería
+const PERM_STATE_KEY    = '@localizador/perm_state';     // último nivel de permiso de ubicación
 const NEXT_RETRY_KEY    = '@localizador/next_retry_at';
 const LOC_DEAD_KEY      = '@localizador/location_deadletter';
 const MOTION_DEAD_KEY   = '@localizador/motion_deadletter';
@@ -130,6 +135,57 @@ export async function loadLastUploaded(): Promise<LastUploaded | null> {
   try { return JSON.parse(raw) as LastUploaded; } catch { return null; }
 }
 
+// ── Heartbeat de "último fix recibido" ─────────────────────────────────────────
+// Marca cuándo el background task recibió la ÚLTIMA ubicación del GPS, sea o no
+// subida (incluso si luego se descarta por imprecisa). Es la señal real de "el
+// GPS sigue entregando": el watchdog la usa para distinguir un servicio vivo de
+// uno "iniciado pero mudo" (típico tras apagar/encender el GPS). Se persiste
+// porque el background task puede correr en un contexto JS distinto al de la UI.
+export async function storeLastFixTs(): Promise<void> {
+  await AsyncStorage.setItem(LAST_FIX_KEY, String(Date.now()));
+}
+
+export async function loadLastFixTs(): Promise<number | null> {
+  const raw = await AsyncStorage.getItem(LAST_FIX_KEY);
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+// ── Estado de dispositivo persistido (para la bitácora en segundo plano) ───────
+// Guardamos el último estado conocido de GPS, red y optimización de batería para
+// que el watchdog y el background task —que corren en un contexto JS distinto al
+// de la UI— puedan detectar la TRANSICIÓN (off→on / on→off) aunque la app esté
+// cerrada y dejar evidencia. `null` = aún no medido (no dispara evento).
+type BoolKey = typeof GPS_STATE_KEY | typeof NET_STATE_KEY | typeof BATTOPT_STATE_KEY;
+
+async function storeBool(key: BoolKey, v: boolean): Promise<void> {
+  await AsyncStorage.setItem(key, v ? '1' : '0');
+}
+async function loadBool(key: BoolKey): Promise<boolean | null> {
+  const raw = await AsyncStorage.getItem(key);
+  return raw === null ? null : raw === '1';
+}
+
+export const storeGpsState     = (on: boolean)       => storeBool(GPS_STATE_KEY, on);
+export const loadGpsState      = ()                  => loadBool(GPS_STATE_KEY);
+export const storeNetState     = (connected: boolean)=> storeBool(NET_STATE_KEY, connected);
+export const loadNetState      = ()                  => loadBool(NET_STATE_KEY);
+export const storeBattOptState = (optimized: boolean)=> storeBool(BATTOPT_STATE_KEY, optimized);
+export const loadBattOptState  = ()                  => loadBool(BATTOPT_STATE_KEY);
+
+// Nivel de permiso de ubicación persistido (string, no booleano): sirve a la
+// auditoría para detectar cuándo el técnico baja de "Permitir siempre" (full) a
+// "Solo en uso" (partial) o lo revoca (none) — el truco para que el rastreo en
+// segundo plano deje de funcionar sin apagar el GPS. `null` = aún no medido.
+export type PermLevel = 'full' | 'partial' | 'none';
+export async function storePermState(level: PermLevel): Promise<void> {
+  await AsyncStorage.setItem(PERM_STATE_KEY, level);
+}
+export async function loadPermState(): Promise<PermLevel | null> {
+  const raw = await AsyncStorage.getItem(PERM_STATE_KEY);
+  return raw === 'full' || raw === 'partial' || raw === 'none' ? raw : null;
+}
+
 // ── Technician ID (persists across background task invocations) ─────────────
 
 export async function storeTechnicianId(id: string) {
@@ -174,6 +230,7 @@ export interface LocationRow {
   bearing: number | null;
   accuracy: number | null;
   battery_level: number | null;
+  charging: boolean | null;
 }
 
 export async function enqueueLocation(row: LocationRow) {
@@ -203,7 +260,31 @@ async function appendDeadLetter(deadKey: string, row: any): Promise<void> {
  * `useBackoff`/`touchDiag` permiten compartir esta lógica entre la cola de
  * ubicación (con backoff y diagnóstico visible) y la de movimiento (sin ambos).
  */
+// Candado en memoria por cola: evita que dos drenados concurrentes (p.ej. el
+// background task y el flush en primer plano, o el botón "Forzar") lean la misma
+// cola e inserten las MISMAS filas dos veces (duplicados en el servidor).
+const _draining = new Set<string>();
+
 async function drainQueue(opts: {
+  queueKey: string;
+  deadKey: string;
+  table: string;
+  force: boolean;
+  useBackoff: boolean;
+  touchDiag: boolean;
+}): Promise<void> {
+  const { queueKey, deadKey, table, force, useBackoff, touchDiag } = opts;
+
+  if (_draining.has(queueKey)) return;
+  _draining.add(queueKey);
+  try {
+    await drainQueueInner(opts);
+  } finally {
+    _draining.delete(queueKey);
+  }
+}
+
+async function drainQueueInner(opts: {
   queueKey: string;
   deadKey: string;
   table: string;

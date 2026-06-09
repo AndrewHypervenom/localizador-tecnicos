@@ -12,27 +12,30 @@ import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 
 const STATUS_LABELS: Record<TechnicianStatus, string> = {
-  moving:   'En movimiento',
-  idle:     'Activo',
-  stopped:  'Sin rastreo',
-  offline:  'Desconectado',
-  accident: 'ACCIDENTE',
+  moving:    'En movimiento',
+  idle:      'Activo',
+  stopped:   'Sin rastreo',
+  no_signal: 'App activa — sin señal',
+  offline:   'Desconectado',
+  accident:  'ACCIDENTE',
 }
 
 const STATUS_COLORS: Record<TechnicianStatus, string> = {
-  moving:   'text-success',
-  idle:     'text-warning',
-  stopped:  'text-warning/60',
-  offline:  'text-text-muted',
-  accident: 'text-danger animate-pulse',
+  moving:    'text-success',
+  idle:      'text-warning',
+  stopped:   'text-warning/60',
+  no_signal: 'text-amber-500',
+  offline:   'text-text-muted',
+  accident:  'text-danger animate-pulse',
 }
 
 const STATUS_DOT: Record<TechnicianStatus, string> = {
-  moving:   'bg-success',
-  idle:     'bg-warning',
-  stopped:  'bg-warning/50',
-  offline:  'bg-surface-raised',
-  accident: 'bg-danger animate-pulse',
+  moving:    'bg-success',
+  idle:      'bg-warning',
+  stopped:   'bg-warning/50',
+  no_signal: 'bg-amber-500',
+  offline:   'bg-surface-raised',
+  accident:  'bg-danger animate-pulse',
 }
 
 function BatteryIndicator({ level }: { level?: number }) {
@@ -170,14 +173,14 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
 
   const sortedTechs = [...techList].sort((a, b) => {
     const order: Record<TechnicianStatus, number> = {
-      accident: 0, moving: 1, idle: 2, stopped: 3, offline: 4,
+      accident: 0, moving: 1, idle: 2, stopped: 3, no_signal: 4, offline: 5,
     }
-    return (order[a.status] ?? 5) - (order[b.status] ?? 5)
+    return (order[a.status] ?? 6) - (order[b.status] ?? 6)
   })
 
   const counts = {
     active:   techList.filter((t) => t.status === 'moving' || t.status === 'idle').length,
-    inactive: techList.filter((t) => t.status === 'stopped' || t.status === 'offline').length,
+    inactive: techList.filter((t) => t.status === 'stopped' || t.status === 'no_signal' || t.status === 'offline').length,
     alert:    techList.filter((t) => t.status === 'accident').length,
   }
 

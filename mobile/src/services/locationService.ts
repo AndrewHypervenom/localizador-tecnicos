@@ -1,8 +1,9 @@
 import * as Location from 'expo-location';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { LOCATION_TASK } from './locationTask';
-import { removeTechnicianId, storeTechnicianId, flushLocationQueue, flushMotionQueue } from './offlineQueue';
+import { removeTechnicianId, storeTechnicianId, loadTechnicianId, loadLastFixTs, flushLocationQueue, flushMotionQueue } from './offlineQueue';
 import { setTechIdForSensor, startAccelerometer, stopAccelerometer } from './sensorService';
+import { auditGps, seedDeviceState } from './deviceAudit';
 import { supabase, ensureAuth } from '../lib/supabase';
 
 // ── Niveles (tiers) de captura GPS para ahorrar batería ───────────────────────
@@ -27,6 +28,11 @@ const TIER_OPTIONS: Record<TrackingTier, Location.LocationTaskOptions> = {
 };
 
 let _currentTier: TrackingTier = 'MOVING';
+
+/** Nivel de captura GPS actual (para el latido/heartbeat). */
+export function getCurrentTier(): TrackingTier {
+  return _currentTier;
+}
 
 const FOREGROUND_SERVICE = {
   notificationTitle: 'Localizador PositivoS+ Activo',
@@ -77,6 +83,14 @@ export async function startTracking(technicianId: string): Promise<void> {
   setTechIdForSensor(technicianId);
   startAccelerometer();
 
+  // Sembrar el estado de GPS y permiso con la foto actual para que la auditoría
+  // no dispare un falso "se encendió/apagó" ni un falso "revocó permiso" en el
+  // primer muestreo de la sesión.
+  const { status: fgPerm } = await Location.getForegroundPermissionsAsync();
+  const { status: bgPerm } = await Location.getBackgroundPermissionsAsync();
+  const permSeed = fgPerm !== 'granted' ? 'none' : bgPerm === 'granted' ? 'full' : 'partial';
+  await seedDeviceState({ gpsOn: await Location.hasServicesEnabledAsync(), perm: permSeed });
+
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   supabase.from('technicians').update({ timezone: tz }).eq('id', technicianId).then(
     ({ error }) => { if (error) console.warn('[startTracking] timezone update:', error.message) }
@@ -120,4 +134,68 @@ export async function stopTracking(): Promise<void> {
 
 export async function isTracking(): Promise<boolean> {
   return Location.hasStartedLocationUpdatesAsync(LOCATION_TASK);
+}
+
+// Si con sesión activa y GPS encendido no entra un fix en este lapso, el request
+// nativo está "vivo pero mudo" (caso típico: el técnico apagó y volvió a encender
+// el GPS) y hay que re-suscribir. En STATIONARY el heartbeat llega cada ~10 s, así
+// que 60 s deja margen de varios fixes perdidos antes de actuar (bajado de 90→60
+// para re-enganchar más rápido y que "nunca toque reiniciar el celular").
+const STALE_FIX_MS = 60_000;
+
+/**
+ * Re-suscribe el servicio de ubicación (stop + start). Es necesario cuando el
+ * request nativo sigue "iniciado" pero dejó de entregar fixes: un
+ * startLocationUpdatesAsync por sí solo NO reengancha la petición vieja; hay que
+ * detenerla y volver a arrancarla. A diferencia de startTracking, no reinicia
+ * acelerómetro ni re-guarda el técnico: la sesión ya está en curso.
+ */
+export async function restartTracking(): Promise<void> {
+  try {
+    if (await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK)) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK);
+    }
+  } catch { /* el servicio ya no estaba; seguimos a arrancar */ }
+  _currentTier = 'MOVING';
+  await Location.startLocationUpdatesAsync(LOCATION_TASK, tierConfig('MOVING'));
+}
+
+/**
+ * Verifica que el rastreo siga ENTREGANDO ubicaciones, no solo que esté
+ * "iniciado" (hasStartedLocationUpdatesAsync devuelve true aunque el servicio
+ * haya dejado de entregar fixes). Es el watchdog real contra el bug de
+ * "apago/enciendo el GPS y no vuelve". Si no hay sesión, no hace nada. Si la hay:
+ *   - no está iniciado                              → arranca de cero
+ *   - iniciado, GPS apagado                         → nada que reanudar todavía
+ *   - iniciado, GPS encendido, sin fixes recientes  → re-suscribe (stop+start)
+ * Devuelve la acción tomada (útil para diagnóstico).
+ */
+export async function ensureTrackingHealthy(): Promise<
+  'idle' | 'started' | 'restarted' | 'ok' | 'gps-off'
+> {
+  const technicianId = await loadTechnicianId();
+  if (!technicianId) return 'idle';
+
+  if (!(await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK))) {
+    await startTracking(technicianId);
+    return 'started';
+  }
+
+  // Auditar la transición del GPS también desde el watchdog en SEGUNDO PLANO:
+  // si el técnico apagó la ubicación con la app cerrada, esto deja la evidencia
+  // (gps_off) aunque el sondeo en primer plano de HomeScreen no esté corriendo.
+  const servicesOn = await Location.hasServicesEnabledAsync();
+  await auditGps(servicesOn);
+
+  // Si el GPS está apagado no hay fix que esperar; el banner de HomeScreen ya lo
+  // avisa y la transición a "encendido" dispara el re-enganche.
+  if (!servicesOn) return 'gps-off';
+
+  const lastFix = await loadLastFixTs();
+  const stale = lastFix === null || Date.now() - lastFix >= STALE_FIX_MS;
+  if (stale) {
+    await restartTracking();
+    return 'restarted';
+  }
+  return 'ok';
 }

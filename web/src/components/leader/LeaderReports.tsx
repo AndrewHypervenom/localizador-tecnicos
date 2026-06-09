@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   RefreshCw, Download, CheckCircle2, Clock, XCircle, AlertTriangle, TrendingUp,
-  FileText, FileSpreadsheet, Timer, Hourglass, Navigation, Route, MapPin,
+  FileText, FileSpreadsheet, Timer, Hourglass, Navigation, Route, MapPin, ShieldAlert,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getLeaderScope } from '@/lib/leaderContext'
@@ -9,8 +9,9 @@ import { cn } from '@/lib/utils'
 import { format, subDays, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
-  exportLeaderPdf, exportLeaderExcel, aggregateHours, hm,
+  exportLeaderPdf, exportLeaderExcel, aggregateHours, hm, DEVICE_TAMPER_TYPES,
   type HoursDaily, type HoursAgg, type RouteStat, type ReportMeta, type TrackStat,
+  type DeviceEventRow,
 } from '@/lib/reportExports'
 
 interface Company {
@@ -75,6 +76,9 @@ export function LeaderReports() {
 
   // Tracking (distancias, viajes, zonas, incidentes)
   const [track, setTrack] = useState<TrackStat[]>([])
+
+  // Bitácora de dispositivo (evidencia de sabotaje al rastreo) para los exports
+  const [deviceEvents, setDeviceEvents] = useState<DeviceEventRow[]>([])
 
   // Load company list for filter
   useEffect(() => {
@@ -198,9 +202,10 @@ export function LeaderReports() {
       // ── Tracking: distancias, viajes, zonas, incidentes ──
       if (hoursTechIds.length === 0) {
         setTrack([])
+        setDeviceEvents([])
       } else {
         const toNext = format(addDays(new Date(dateTo + 'T12:00:00'), 1), 'yyyy-MM-dd')
-        const [tripsRes, zonesRes, namesRes] = await Promise.all([
+        const [tripsRes, zonesRes, namesRes, deviceRes, batteryRes] = await Promise.all([
           supabase.from('trips')
             .select('technician_id, distance_km, duration_min, avg_speed_kmh, max_speed_kmh, hard_brakes, rapid_accels, harsh_turns, accidents')
             .in('technician_id', hoursTechIds)
@@ -214,6 +219,18 @@ export function LeaderReports() {
           supabase.from('technicians')
             .select('id, name, company_id')
             .in('id', hoursTechIds),
+          supabase.from('motion_events')
+            .select('technician_id, event_type, ts')
+            .in('technician_id', hoursTechIds)
+            .in('event_type', DEVICE_TAMPER_TYPES)
+            .gte('ts', `${dateFrom}T00:00:00`)
+            .lt('ts', `${toNext}T00:00:00`),
+          // Drenaje de batería (%/h) del equipo mientras rastreaba, sin cargar.
+          supabase.rpc('battery_drain_report', {
+            p_tech_ids: hoursTechIds,
+            p_from:     `${dateFrom}T00:00:00`,
+            p_to:       `${toNext}T00:00:00`,
+          }),
         ])
 
         const nameMap = new Map<string, { name: string; company: string | null }>()
@@ -230,7 +247,7 @@ export function LeaderReports() {
             s = {
               techId: id, name: info?.name ?? 'Técnico', company: info?.company ?? null,
               km: 0, trips: 0, durationMin: 0, avgSpeed: 0, maxSpeed: 0,
-              zoneEnters: 0, zoneExits: 0, incidents: 0,
+              zoneEnters: 0, zoneExits: 0, incidents: 0, deviceTampers: 0,
             }
             tmap.set(id, s)
           }
@@ -257,6 +274,30 @@ export function LeaderReports() {
           const s = ensure(z.technician_id)
           if (z.event_type === 'enter') s.zoneEnters += 1
           else if (z.event_type === 'exit') s.zoneExits += 1
+        })
+
+        // Bitácora de dispositivo: contar sabotajes por técnico y guardar el
+        // detalle (con hora) para los exports PDF/Excel.
+        const devRows: DeviceEventRow[] = []
+        ;(deviceRes.data ?? []).forEach((m: any) => {
+          const s = ensure(m.technician_id)
+          s.deviceTampers += 1
+          const info = nameMap.get(m.technician_id)
+          devRows.push({
+            techId:  m.technician_id,
+            name:    info?.name ?? 'Técnico',
+            company: info?.company ?? null,
+            ts:      m.ts,
+            type:    m.event_type,
+          })
+        })
+        setDeviceEvents(devRows)
+
+        // Consumo de batería: %/h de drenaje (sin cargar) por técnico.
+        ;(batteryRes.data ?? []).forEach((b: any) => {
+          const s = ensure(b.technician_id)
+          s.batteryDrainPerH = b.drain_pct_per_h != null ? Number(b.drain_pct_per_h) : null
+          s.trackedHours     = b.tracked_hours   != null ? Number(b.tracked_hours)   : 0
         })
 
         setTrack([...tmap.values()].sort((a, b) => b.km - a.km))
@@ -300,8 +341,8 @@ export function LeaderReports() {
     : 'Todas las empresas'
   const reportMeta: ReportMeta = { from: dateFrom, to: dateTo, companyName }
 
-  function handlePdf()   { exportLeaderPdf(reportMeta, track, rows as RouteStat[], hoursAgg) }
-  function handleExcel() { exportLeaderExcel(reportMeta, track, rows as RouteStat[], hoursAgg, hoursDaily) }
+  function handlePdf()   { exportLeaderPdf(reportMeta, track, rows as RouteStat[], hoursAgg, deviceEvents) }
+  function handleExcel() { exportLeaderExcel(reportMeta, track, rows as RouteStat[], hoursAgg, hoursDaily, deviceEvents) }
 
   const hasAnyData = rows.length > 0 || hoursDaily.length > 0 || track.length > 0
 
@@ -312,8 +353,9 @@ export function LeaderReports() {
       enters: a.enters + t.zoneEnters,
       exits:  a.exits  + t.zoneExits,
       inc:    a.inc    + t.incidents,
+      tampers: a.tampers + t.deviceTampers,
     }),
-    { km: 0, trips: 0, enters: 0, exits: 0, inc: 0 },
+    { km: 0, trips: 0, enters: 0, exits: 0, inc: 0, tampers: 0 },
   )
 
   const hoursTotals = hoursAgg.reduce(
@@ -425,12 +467,13 @@ export function LeaderReports() {
             <p className="text-text-muted text-xs mt-0.5">Distancias, viajes, entradas/salidas de zonas e incidentes en el período.</p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
             <SummaryCard icon={Navigation} label="Km recorridos"  value={`${trackTotals.km.toFixed(1)} km`} color="bg-primary/10 text-primary" />
             <SummaryCard icon={Route}      label="Viajes"          value={trackTotals.trips} color="bg-accent/10 text-accent" />
             <SummaryCard icon={MapPin}     label="Entradas a zona" value={trackTotals.enters} sub={`${trackTotals.exits} salidas`} color="bg-success/10 text-success" />
             <SummaryCard icon={MapPin}     label="Salidas de zona" value={trackTotals.exits} color="bg-warning/10 text-warning" />
             <SummaryCard icon={AlertTriangle} label="Incidentes"   value={trackTotals.inc} color={trackTotals.inc > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
+            <SummaryCard icon={ShieldAlert} label="Sabotajes"      value={trackTotals.tampers} sub="al rastreo" color={trackTotals.tampers > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
           </div>
 
           <div className="bg-surface border border-border-soft rounded-2xl overflow-x-auto">
@@ -446,6 +489,8 @@ export function LeaderReports() {
                   <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Entradas</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Salidas</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Incidentes</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Sabotajes</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider" title="Drenaje de batería del equipo por hora, sin cargar, mientras rastreaba">Batería %/h</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
@@ -461,6 +506,14 @@ export function LeaderReports() {
                     <td className="px-3 py-3 text-center text-text-secondary font-mono">{t.zoneExits}</td>
                     <td className="px-3 py-3 text-center">
                       <span className={cn('font-mono', t.incidents > 0 ? 'text-danger font-bold' : 'text-text-muted')}>{t.incidents}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={cn('font-mono', t.deviceTampers > 0 ? 'text-danger font-bold' : 'text-text-muted')}>{t.deviceTampers}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={cn('font-mono', (t.batteryDrainPerH ?? 0) > 12 ? 'text-warning font-bold' : 'text-text-secondary')}>
+                        {t.batteryDrainPerH != null ? `${t.batteryDrainPerH.toFixed(1)}%` : '—'}
+                      </span>
                     </td>
                   </tr>
                 ))}

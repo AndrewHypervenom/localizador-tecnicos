@@ -31,11 +31,12 @@ L.Icon.Default.mergeOptions({
 })
 
 const STATUS_COLORS: Record<string, string> = {
-  moving:   '#10B981',
-  idle:     '#F59E0B',
-  stopped:  '#64748B',
-  offline:  '#1E1E30',
-  accident: '#EF4444',
+  moving:    '#10B981',
+  idle:      '#F59E0B',
+  stopped:   '#64748B',
+  no_signal: '#F97316',
+  offline:   '#1E1E30',
+  accident:  '#EF4444',
 }
 
 function createTechMarkerIcon(tech: TechnicianState): L.DivIcon {
