@@ -158,10 +158,15 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     let upLat = latitude, upLng = longitude;
     let upSpeed = validSpeed;
     let effSpeedMs = speedMs;
+    let snapped = false;
     if (_anchor) {
+      // Solo los fixes CONFIABLES (precisión aceptable) cuentan como evidencia
+      // de movimiento: bajo techo la precisión se degrada a 60-100 m y esa
+      // dispersión soltaría el ancla con posiciones basura.
+      const trustedFix = accuracy == null || accuracy <= ACCURACY_MAX_M;
       const driftDist = haversineM(_anchor.lat, _anchor.lng, latitude, longitude);
-      _driftExitCount = driftDist >= DRIFT_RADIUS_M ? _driftExitCount + 1 : 0;
-      if (speedMs > DRIFT_EXIT_SPEED_MS || _driftExitCount >= DRIFT_EXIT_FIXES) {
+      if (trustedFix) _driftExitCount = driftDist >= DRIFT_RADIUS_M ? _driftExitCount + 1 : 0;
+      if (trustedFix && (speedMs > DRIFT_EXIT_SPEED_MS || _driftExitCount >= DRIFT_EXIT_FIXES)) {
         _anchor = null;            // movimiento real confirmado → soltar el ancla
         _driftExitCount = 0;
       } else {
@@ -169,6 +174,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
         upLng = _anchor.lng;
         upSpeed = 0;
         effSpeedMs = 0;
+        snapped = true;
       }
     }
 
@@ -179,8 +185,16 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       _lastMovingTs = now;
       void applyTrackingTier('MOVING');
     } else if (now - _lastMovingTs >= STATIONARY_AFTER_MS) {
-      // Confirmado detenido: fijar el ancla en la posición actual (si no estaba)
-      if (!_anchor) { _anchor = { lat: latitude, lng: longitude }; _driftExitCount = 0; }
+      // Confirmado detenido: fijar el ancla (si no estaba) en la última posición
+      // SUBIDA — esa ya pasó el filtro de precisión; el fix actual puede venir
+      // degradado si el técnico está bajo techo.
+      if (!_anchor) {
+        const lastUp = await loadLastUploaded();
+        _anchor = lastUp
+          ? { lat: lastUp.lat, lng: lastUp.lng }
+          : { lat: latitude, lng: longitude };
+        _driftExitCount = 0;
+      }
       void applyTrackingTier('STATIONARY');
     }
 
@@ -213,7 +227,11 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     // ── Descartar fixes imprecisos: son la causa de los "saltos" en el mapa ──
     // (un radio de error grande puede caer lejísimos del punto real). El backlog
     // ya se drenó arriba, así que ignorar este punto no detiene la sincronización.
-    if (accuracy != null && accuracy > ACCURACY_MAX_M) return;
+    // EXCEPCIÓN: anclado (snapped) las coordenadas subidas son las del ANCLA, no
+    // las del fix, así que su precisión no importa. Descartarlo dejaba al técnico
+    // "mudo" bajo techo (accuracy 60-100 m) y el líder lo veía Inactivo/Detenido
+    // con la app perfectamente sana.
+    if (!snapped && accuracy != null && accuracy > ACCURACY_MAX_M) return;
 
     // ── Throttle: si está detenido y ya envió hace poco, no subir el punto nuevo ──
     // (con ancla activa upLat/upLng = ancla → dist 0, solo manda la cadencia de 25 s)

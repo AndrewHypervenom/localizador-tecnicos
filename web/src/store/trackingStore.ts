@@ -163,11 +163,15 @@ function computeStatus(
   const speedKmh = (lastSpeed ?? 0) * 3.6
   if (speedKmh > 1 && locSecs < STATUS_THRESHOLDS.MOVING_FRESH_S) return 'moving'
   if (locSecs < STATUS_THRESHOLDS.IDLE_S)                         return 'idle'
-  if (locSecs < STATUS_THRESHOLDS.STOPPED_S)                      return 'stopped'
-  // Sin punto GPS fresco: ¿la app sigue latiendo? Si sí, está viva pero sin
-  // señal GPS (no es una desconexión real); si no, está desconectada.
+  // Sin punto GPS fresco: si la app sigue LATIENDO está viva (bajo techo, túnel,
+  // GPS sin fix) → mostrar "App activa — sin señal" DE INMEDIATO. Antes este
+  // chequeo iba después de 'stopped' y durante 2.5-15 min el técnico se veía
+  // "Inactivo"/"Detenido" gris con la app perfectamente sana (queja de líderes:
+  // parecía desconectado sin estarlo).
   const hbSecs = lastHeartbeat ? (now - new Date(lastHeartbeat).getTime()) / 1000 : Infinity
   if (hbSecs < STATUS_THRESHOLDS.HEARTBEAT_FRESH_S) return 'no_signal'
+  // Ni puntos ni latido reciente: visto hace poco → 'stopped'; si no → 'offline'.
+  if (locSecs < STATUS_THRESHOLDS.STOPPED_S) return 'stopped'
   return 'offline'
 }
 
