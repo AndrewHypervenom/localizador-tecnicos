@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTrackingStore, STATUS_THRESHOLDS, noSignalReason } from '@/store/trackingStore'
 import { ElevationChart } from '@/components/charts/ElevationChart'
@@ -114,7 +114,7 @@ function TripDurationCard({ secs, isActive, hasData }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function TechnicianDetail() {
-  const { selectedTechnicianId, technicians, selectTechnician, toggleHeatmap, showHeatmap, updateTechnicianMeta } = useTrackingStore()
+  const { selectedTechnicianId, technicians, selectTechnician, toggleHeatmap, showHeatmap, updateTechnicianMeta, alerts } = useTrackingStore()
   const [elevData,  setElevData]  = useState<any[]>([])
   const [speedData, setSpeedData] = useState<any[]>([])
   const [loading,   setLoading]   = useState(false)
@@ -276,6 +276,23 @@ export function TechnicianDetail() {
     return () => { cancelled = true; clearInterval(iv) }
   }, [tech?.id])
 
+  // Bitácora en TIEMPO REAL: el sondeo de arriba trae el histórico cada 30 s, pero
+  // las alertas que llegan por realtime (store.alerts, push instantáneo de
+  // useRealtimeTechnicians) deben verse al instante. Fusionamos ambas fuentes —
+  // dedup por id, solo tipos de bitácora de este técnico, más reciente primero— para
+  // que un sabotaje aparezca aquí en el momento, no en el próximo tick de 30 s.
+  const deviceLogLive = useMemo(() => {
+    if (!tech) return []
+    const liveRows = alerts
+      .filter((a) => a.technicianId === tech.id && DEVICE_LOG_TYPES.includes(a.type))
+      .map((a) => ({ id: a.id, type: a.type, ts: a.ts }))
+    const byId = new Map<string, { id: string; type: string; ts: string }>()
+    for (const r of [...deviceLog, ...liveRows]) byId.set(r.id, r)
+    return Array.from(byId.values())
+      .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+      .slice(0, 20)
+  }, [tech?.id, deviceLog, alerts])
+
   return (
     <AnimatePresence>
       {tech && (
@@ -417,13 +434,13 @@ export function TechnicianDetail() {
             <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5" /> Bitácora del dispositivo
             </h4>
-            {deviceLog.length === 0 ? (
+            {deviceLogLive.length === 0 ? (
               <div className="bg-surface-raised rounded-xl p-4 text-center text-xs text-text-muted">
                 Sin eventos de dispositivo registrados.
               </div>
             ) : (
               <div className="bg-surface-raised rounded-xl divide-y divide-border-soft">
-                {deviceLog.map((e) => {
+                {deviceLogLive.map((e) => {
                   const isTamper = TAMPER_SET.has(e.type)
                   return (
                     <div key={e.id} className="flex items-center gap-2.5 px-3 py-2">

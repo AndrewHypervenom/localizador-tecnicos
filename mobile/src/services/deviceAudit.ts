@@ -22,6 +22,25 @@ import { reportDeviceEvent } from './sensorService';
 //     dispara evento (evita un falso positivo al abrir la app).
 //   - Siempre persiste el estado nuevo, haya o no sesión, para tener continuidad.
 
+// ── Mutex por clave (anti-duplicados) ─────────────────────────────────────────
+// El bloque "leer estado previo → guardar nuevo → comparar → emitir" NO es
+// atómico: AsyncStorage es async, así que dos llamadas concurrentes a la MISMA
+// auditoría (p.ej. el sondeo de primer plano cada 4 s y el background task en el
+// mismo hilo JS) alcanzan a leer ambas el MISMO `prev` antes de que cualquiera
+// guarde el nuevo, y las dos detectan la transición → se emite el evento DOS
+// veces (los `gps_off`/`net_off` duplicados con ts a milisegundos). Encadenar el
+// bloque por clave serializa esos accesos: la segunda llamada corre DESPUÉS de
+// que la primera persistió el estado nuevo, ve `prev === actual` y no re-emite.
+const _auditChain = new Map<string, Promise<unknown>>();
+function withAuditLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = _auditChain.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  // Guardamos una versión "tragada" para que un fallo no rompa la cadena, pero
+  // devolvemos `next` para conservar el resultado/error real al llamador.
+  _auditChain.set(key, next.then(() => undefined, () => undefined));
+  return next;
+}
+
 /** Siembra los estados con la foto actual al iniciar una sesión, sin emitir eventos. */
 export async function seedDeviceState(opts: {
   gpsOn?: boolean;
@@ -37,26 +56,30 @@ export async function seedDeviceState(opts: {
 
 /** GPS encendido/apagado. Devuelve el evento emitido (o null si no hubo transición). */
 export async function auditGps(servicesOn: boolean): Promise<'gps_on' | 'gps_off' | null> {
-  const prev = await loadGpsState();
-  await storeGpsState(servicesOn);
-  if (prev === null || prev === servicesOn) return null;
-  const techId = await loadTechnicianId();
-  if (!techId) return null;
-  const ev = servicesOn ? 'gps_on' : 'gps_off';
-  await reportDeviceEvent(techId, ev);
-  return ev;
+  return withAuditLock('gps', async () => {
+    const prev = await loadGpsState();
+    await storeGpsState(servicesOn);
+    if (prev === null || prev === servicesOn) return null;
+    const techId = await loadTechnicianId();
+    if (!techId) return null;
+    const ev = servicesOn ? 'gps_on' : 'gps_off';
+    await reportDeviceEvent(techId, ev);
+    return ev;
+  });
 }
 
 /** Datos/Wi-Fi conectados o no. Devuelve el evento emitido (o null). */
 export async function auditNet(connected: boolean): Promise<'net_on' | 'net_off' | null> {
-  const prev = await loadNetState();
-  await storeNetState(connected);
-  if (prev === null || prev === connected) return null;
-  const techId = await loadTechnicianId();
-  if (!techId) return null;
-  const ev = connected ? 'net_on' : 'net_off';
-  await reportDeviceEvent(techId, ev);
-  return ev;
+  return withAuditLock('net', async () => {
+    const prev = await loadNetState();
+    await storeNetState(connected);
+    if (prev === null || prev === connected) return null;
+    const techId = await loadTechnicianId();
+    if (!techId) return null;
+    const ev = connected ? 'net_on' : 'net_off';
+    await reportDeviceEvent(techId, ev);
+    return ev;
+  });
 }
 
 /**
@@ -66,14 +89,16 @@ export async function auditNet(connected: boolean): Promise<'net_on' | 'net_off'
  * el llamador decide si invocarla.
  */
 export async function auditBatteryOpt(optimized: boolean): Promise<'battery_restricted' | 'battery_unrestricted' | null> {
-  const prev = await loadBattOptState();
-  await storeBattOptState(optimized);
-  if (prev === null || prev === optimized) return null;
-  const techId = await loadTechnicianId();
-  if (!techId) return null;
-  const ev = optimized ? 'battery_restricted' : 'battery_unrestricted';
-  await reportDeviceEvent(techId, ev);
-  return ev;
+  return withAuditLock('battopt', async () => {
+    const prev = await loadBattOptState();
+    await storeBattOptState(optimized);
+    if (prev === null || prev === optimized) return null;
+    const techId = await loadTechnicianId();
+    if (!techId) return null;
+    const ev = optimized ? 'battery_restricted' : 'battery_unrestricted';
+    await reportDeviceEvent(techId, ev);
+    return ev;
+  });
 }
 
 /**
@@ -84,16 +109,18 @@ export async function auditBatteryOpt(optimized: boolean): Promise<'battery_rest
  * Cambios entre partial/none no se reportan (ya no había rastreo de fondo).
  */
 export async function auditPermission(level: PermLevel): Promise<'perm_revoked' | 'perm_granted' | null> {
-  const prev = await loadPermState();
-  await storePermState(level);
-  if (prev === null || prev === level) return null;
-  const techId = await loadTechnicianId();
-  if (!techId) return null;
-  const wasFull = prev === 'full';
-  const isFull  = level === 'full';
-  if (wasFull && !isFull) { await reportDeviceEvent(techId, 'perm_revoked'); return 'perm_revoked'; }
-  if (!wasFull && isFull) { await reportDeviceEvent(techId, 'perm_granted'); return 'perm_granted'; }
-  return null;
+  return withAuditLock('perm', async () => {
+    const prev = await loadPermState();
+    await storePermState(level);
+    if (prev === null || prev === level) return null;
+    const techId = await loadTechnicianId();
+    if (!techId) return null;
+    const wasFull = prev === 'full';
+    const isFull  = level === 'full';
+    if (wasFull && !isFull) { await reportDeviceEvent(techId, 'perm_revoked'); return 'perm_revoked'; }
+    if (!wasFull && isFull) { await reportDeviceEvent(techId, 'perm_granted'); return 'perm_granted'; }
+    return null;
+  });
 }
 
 // Hueco mínimo sin fixes para considerar que el rastreo se INTERRUMPIÓ (no un
