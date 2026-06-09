@@ -17,13 +17,15 @@ export interface RouteFilterPoint {
 const MAX_PLAUSIBLE_KMH = 150
 const MIN_SPIKE_JUMP_M  = 150  // ignora micro-ruido; solo evalúa saltos grandes
 
-// ── Colapso de "deriva" GPS estando detenido ──────────────────────────────────
+// ── "Pegado" (snap) de la deriva GPS estando detenido ─────────────────────────
 // Con el teléfono quieto, los fixes se dispersan 10-50 m alrededor del punto real
 // y la polilínea dibuja "líneas aleatorias" de movimiento que nunca ocurrió.
-// Descartamos los puntos que están a menos de DRIFT_COLLAPSE_M del anterior Y
-// reportan velocidad ~0 (la deriva trae speed 0/null; caminar reporta ~4 km/h y
-// no se toca). Cubre datos históricos y APKs viejos; los APKs nuevos ya anclan
-// la posición en el dispositivo y ni siquiera suben la deriva.
+// IMPORTANTE: los puntos quietos NO se eliminan — se conservan con su hora pero
+// pegados a la posición del punto anterior. Así el historial/reproductor sigue
+// cubriendo el periodo detenido (se ve al técnico parqueado ahí, minuto a
+// minuto) sin dibujar movimiento falso ni sumar distancia fantasma. Aplica a un
+// punto con velocidad ~0 a menos de DRIFT_COLLAPSE_M del anterior (la deriva
+// trae speed 0/null; caminar reporta ~4 km/h y no se toca).
 const DRIFT_COLLAPSE_M    = 25
 const DRIFT_MAX_SPEED_KMH = 1
 
@@ -53,20 +55,24 @@ export function dropSpikes<T extends RouteFilterPoint>(pts: T[]): T[] {
   return out
 }
 
-export function collapseDrift<T extends RouteFilterPoint>(pts: T[]): T[] {
+export function snapDrift<T extends RouteFilterPoint>(pts: T[]): T[] {
   if (pts.length < 2) return pts
   const out: T[] = [pts[0]]
   for (let i = 1; i < pts.length; i++) {
     const prev = out[out.length - 1]
     const p    = pts[i]
     if (p.speed_kmh < DRIFT_MAX_SPEED_KMH &&
-        distM(prev.lat, prev.lng, p.lat, p.lng) < DRIFT_COLLAPSE_M) continue
-    out.push(p)
+        distM(prev.lat, prev.lng, p.lat, p.lng) < DRIFT_COLLAPSE_M) {
+      // Deriva: conservar el punto (y su hora) pegado a la posición anterior.
+      out.push({ ...p, lat: prev.lat, lng: prev.lng })
+    } else {
+      out.push(p)
+    }
   }
   return out
 }
 
-/** Limpieza estándar de una ruta: descarta saltos imposibles y colapsa deriva. */
+/** Limpieza estándar de una ruta: descarta saltos imposibles y pega la deriva. */
 export function cleanRoute<T extends RouteFilterPoint>(pts: T[]): T[] {
-  return collapseDrift(dropSpikes(pts))
+  return snapDrift(dropSpikes(pts))
 }

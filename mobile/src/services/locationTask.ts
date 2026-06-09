@@ -50,7 +50,14 @@ const BATTERY_TTL_MS       = 60_000;   // refrescar batería como mucho cada 60 
 // fuera del radio.
 const DRIFT_RADIUS_M      = 30;   // dispersión típica de la deriva con Accuracy.High
 const DRIFT_EXIT_FIXES    = 2;    // fixes consecutivos fuera del radio = movimiento real
-const DRIFT_EXIT_SPEED_MS = 1.5;  // la deriva casi nunca supera 1.5 m/s; conducir sí
+const DRIFT_EXIT_SPEED_MS = 1.2;  // un solo fix confiable a este ritmo = se mueve seguro
+// Caminata lenta DENTRO del sitio (2-3 km/h, sin salir del radio de 30 m): la
+// velocidad no llega a DRIFT_EXIT_SPEED_MS ni la distancia al radio, y sin esta
+// salida el ancla se "comía" todo el movimiento interno (el líder no veía ningún
+// recorrido del técnico en el sitio). N fixes seguidos confiables por encima del
+// umbral de "detenido" = caminata real, no deriva (la deriva con buena precisión
+// casi nunca repite velocidades > 0.7 m/s en fixes consecutivos).
+const WALK_EXIT_FIXES     = 2;
 
 // ── Envío por lotes (batch) ───────────────────────────────────────────────────
 // En vez de un INSERT por cada fix (cada 5 s en movimiento → la radio celular
@@ -70,6 +77,7 @@ let _lastMovingTs  = Date.now();
 let _lastFlushTs   = 0;
 let _anchor: { lat: number; lng: number } | null = null;
 let _driftExitCount = 0;
+let _walkExitCount  = 0;
 
 async function getBatteryCached(): Promise<number | null> {
   const now = Date.now();
@@ -165,10 +173,22 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       // dispersión soltaría el ancla con posiciones basura.
       const trustedFix = accuracy == null || accuracy <= ACCURACY_MAX_M;
       const driftDist = haversineM(_anchor.lat, _anchor.lng, latitude, longitude);
-      if (trustedFix) _driftExitCount = driftDist >= DRIFT_RADIUS_M ? _driftExitCount + 1 : 0;
-      if (trustedFix && (speedMs > DRIFT_EXIT_SPEED_MS || _driftExitCount >= DRIFT_EXIT_FIXES)) {
+      if (trustedFix) {
+        _driftExitCount = driftDist >= DRIFT_RADIUS_M ? _driftExitCount + 1 : 0;
+        _walkExitCount  = speedMs > STATIONARY_SPEED_MS ? _walkExitCount + 1 : 0;
+      }
+      const realMove = trustedFix && (
+        speedMs > DRIFT_EXIT_SPEED_MS ||        // velocidad franca: un solo fix basta
+        _walkExitCount  >= WALK_EXIT_FIXES ||   // caminata lenta sostenida (en el sitio)
+        _driftExitCount >= DRIFT_EXIT_FIXES     // desplazamiento sin velocidad fiable
+      );
+      if (realMove) {
         _anchor = null;            // movimiento real confirmado → soltar el ancla
         _driftExitCount = 0;
+        _walkExitCount  = 0;
+        // Subir de una vez a tier MOVING (5 s) para capturar el recorrido en el
+        // sitio con buena densidad aunque la velocidad cruda sea baja.
+        _lastMovingTs = now;
       } else {
         upLat = _anchor.lat;
         upLng = _anchor.lng;
@@ -194,6 +214,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
           ? { lat: lastUp.lat, lng: lastUp.lng }
           : { lat: latitude, lng: longitude };
         _driftExitCount = 0;
+        _walkExitCount  = 0;
       }
       void applyTrackingTier('STATIONARY');
     }
@@ -244,7 +265,12 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       speed:         upSpeed,
       altitude:      altitude ?? null,
       bearing:       heading ?? null,
-      accuracy:      accuracy ?? null,
+      // Anclado, la coordenada subida es la del ANCLA (confiable), no la del fix:
+      // reportar la precisión cruda del fix (60-100 m bajo techo) haría que las
+      // consultas del historial (filtro accuracy < 30 m) descartaran el punto y
+      // el técnico quieto "desapareciera" del recorrido. null = posición confiable
+      // sin radio de error aplicable.
+      accuracy:      snapped ? null : (accuracy ?? null),
       battery_level: await getBatteryCached(),
       charging:      await getChargingCached(),
     };
