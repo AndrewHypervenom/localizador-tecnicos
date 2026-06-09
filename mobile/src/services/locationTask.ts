@@ -30,14 +30,31 @@ export const LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 // dejando que caminar cuente como movimiento (sirve tanto a pie como en vehículo).
 const STATIONARY_SPEED_MS  = 0.7;
 const MIN_MOVE_M           = 15;       // distancia mínima para subir estando lento
-const STATIONARY_UPLOAD_MS = 30_000;   // heartbeat estando detenido
+// En tier STATIONARY los fixes llegan cada ~30 s: el throttle debe ser MENOR que
+// ese intervalo, o el jitter (un fix que llega a los 29.8 s) lo descartaría y la
+// cadencia real en el servidor se duplicaría a 60 s (y el líder vería parpadeos).
+const STATIONARY_UPLOAD_MS = 25_000;
 const STATIONARY_AFTER_MS  = 120_000;  // tiempo detenido antes de bajar a tier STATIONARY
 const ACCURACY_MAX_M       = 50;       // descartar fixes con radio de error mayor (causan "saltos")
 const BATTERY_TTL_MS       = 60_000;   // refrescar batería como mucho cada 60 s
 
+// ── Ancla anti-deriva ─────────────────────────────────────────────────────────
+// Con el teléfono quieto, el GPS "deriva": los fixes se dispersan 10-50 m
+// alrededor del punto real, pasan el filtro de precisión y el umbral de 15 m, y
+// el mapa del líder dibuja líneas aleatorias de movimiento que nunca ocurrió
+// (además la deriva trae velocidades falsas > 0.7 m/s que mantenían el tier
+// MOVING gastando batería). Al confirmarse detenido se fija un ANCLA: mientras
+// los fixes caigan dentro del radio se suben con las coordenadas del ancla y
+// speed 0 (punto fijo en el mapa, cero distancia fantasma en reportes). El ancla
+// se suelta solo con movimiento real: velocidad franca o varios fixes seguidos
+// fuera del radio.
+const DRIFT_RADIUS_M      = 30;   // dispersión típica de la deriva con Accuracy.High
+const DRIFT_EXIT_FIXES    = 2;    // fixes consecutivos fuera del radio = movimiento real
+const DRIFT_EXIT_SPEED_MS = 1.5;  // la deriva casi nunca supera 1.5 m/s; conducir sí
+
 // ── Envío por lotes (batch) ───────────────────────────────────────────────────
-// En vez de un INSERT por cada fix (cada 3 s en movimiento → la radio celular
-// nunca duerme y se generan ~48k paquetes por jornada), los puntos se acumulan
+// En vez de un INSERT por cada fix (cada 5 s en movimiento → la radio celular
+// nunca duerme y se generan ~29k paquetes por jornada), los puntos se acumulan
 // en la cola local y se drenan en un solo envío cada BATCH_INTERVAL_MS, o antes
 // si se juntan BATCH_MAX_PENDING. Recorta los envíos de red ~10× y baja el
 // consumo de CPU y de wake locks, sin perder puntos (solo se difiere su envío).
@@ -51,6 +68,8 @@ let _charging: boolean | null = null;
 let _chargingTs    = 0;
 let _lastMovingTs  = Date.now();
 let _lastFlushTs   = 0;
+let _anchor: { lat: number; lng: number } | null = null;
+let _driftExitCount = 0;
 
 async function getBatteryCached(): Promise<number | null> {
   const now = Date.now();
@@ -132,13 +151,36 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     const speedMs = validSpeed ?? 0;
     const now = Date.now();
 
-    detectMotionFromGPS(speedMs, heading ?? 0);
+    // ── Ancla anti-deriva: ¿este fix es deriva o movimiento real? ──
+    // Mientras esté anclado, el punto se sube con las coordenadas del ancla y
+    // speed 0, y la velocidad falsa de la deriva NO cuenta para el tier ni para
+    // los eventos de conducción.
+    let upLat = latitude, upLng = longitude;
+    let upSpeed = validSpeed;
+    let effSpeedMs = speedMs;
+    if (_anchor) {
+      const driftDist = haversineM(_anchor.lat, _anchor.lng, latitude, longitude);
+      _driftExitCount = driftDist >= DRIFT_RADIUS_M ? _driftExitCount + 1 : 0;
+      if (speedMs > DRIFT_EXIT_SPEED_MS || _driftExitCount >= DRIFT_EXIT_FIXES) {
+        _anchor = null;            // movimiento real confirmado → soltar el ancla
+        _driftExitCount = 0;
+      } else {
+        upLat = _anchor.lat;
+        upLng = _anchor.lng;
+        upSpeed = 0;
+        effSpeedMs = 0;
+      }
+    }
+
+    detectMotionFromGPS(effSpeedMs, heading ?? 0);
 
     // ── Ajustar nivel de captura GPS (con histéresis para no oscilar) ──
-    if (speedMs > STATIONARY_SPEED_MS) {
+    if (effSpeedMs > STATIONARY_SPEED_MS) {
       _lastMovingTs = now;
       void applyTrackingTier('MOVING');
     } else if (now - _lastMovingTs >= STATIONARY_AFTER_MS) {
+      // Confirmado detenido: fijar el ancla en la posición actual (si no estaba)
+      if (!_anchor) { _anchor = { lat: latitude, lng: longitude }; _driftExitCount = 0; }
       void applyTrackingTier('STATIONARY');
     }
 
@@ -174,13 +216,14 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
     if (accuracy != null && accuracy > ACCURACY_MAX_M) return;
 
     // ── Throttle: si está detenido y ya envió hace poco, no subir el punto nuevo ──
-    if (!(await shouldUpload(latitude, longitude, speedMs, now))) return;
+    // (con ancla activa upLat/upLng = ancla → dist 0, solo manda la cadencia de 25 s)
+    if (!(await shouldUpload(upLat, upLng, effSpeedMs, now))) return;
 
     const row: LocationRow = {
       technician_id: technicianId,
       ts:            new Date(loc.timestamp).toISOString(),
-      location:      `POINT(${longitude} ${latitude})`,
-      speed:         validSpeed,
+      location:      `POINT(${upLng} ${upLat})`,
+      speed:         upSpeed,
       altitude:      altitude ?? null,
       bearing:       heading ?? null,
       accuracy:      accuracy ?? null,
@@ -190,8 +233,8 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
 
     // Siempre encolar: el envío real ocurre en el flush por lotes de arriba.
     // (Antes se insertaba aquí mismo en cada fix, lo que mantenía la radio
-    // despierta cada 3 s. Ahora el punto se difiere y viaja junto con los demás.)
+    // despierta en cada captura. Ahora el punto se difiere y viaja con los demás.)
     await enqueueLocation(row);
-    await storeLastUploaded({ lat: latitude, lng: longitude, ts: now });
+    await storeLastUploaded({ lat: upLat, lng: upLng, ts: now });
   }
 );

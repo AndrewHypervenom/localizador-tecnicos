@@ -6,10 +6,13 @@ import { immer } from 'zustand/middleware/immer'
 export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'no_signal' | 'offline' | 'accident'
 
 // Thresholds for determining technician status based on time since last GPS event.
-// The mobile app sends every 2s, so these catch app stops / connection loss quickly.
+// La app móvil captura cada 5 s en movimiento y cada ~30 s detenida, y sube los
+// puntos en lotes cada 30 s: el punto más reciente puede llegar con hasta ~35 s
+// (en movimiento) o ~65 s (detenida) de antigüedad SIN que nada esté mal. Los
+// umbrales deben cubrir ese desfase para no parpadear entre estados.
 export const STATUS_THRESHOLDS = {
-  MOVING_FRESH_S:    30,    // speed > 1 km/h only counts as "moving" if data is < 30s old
-  IDLE_S:            60,    // < 1 min since last event → idle (active but not moving)
+  MOVING_FRESH_S:    45,    // captura 5s + flush 30s + latencia → 45s evita parpadeo verde→ámbar
+  IDLE_S:            150,   // captura 30s + flush 30s + un fix perdido → sigue "Inactivo", no "Detenido"
   STOPPED_S:         900,   // < 15 min → stopped (sin movimiento, pero visto hace poco)
   // Tras 15 min sin punto GPS: si la app sigue latiendo (heartbeat fresco dentro
   // de este lapso) → 'no_signal' (app viva sin señal); si no → 'offline' (muerta).
@@ -136,6 +139,20 @@ interface HeartbeatPayload {
 
 const MAX_TRAIL_POINTS = 200
 
+// Deriva GPS: detenido, los fixes se dispersan 10-50 m. Un punto a velocidad ~0
+// y a menos de este radio del último punto del trail es deriva, no movimiento.
+const DRIFT_COLLAPSE_M    = 25
+const DRIFT_MAX_SPEED_KMH = 1
+
+function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 6_371_000
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(s))
+}
+
 function computeStatus(
   lastSeen: string | undefined,
   lastSpeed: number | undefined,
@@ -260,11 +277,21 @@ export const useTrackingStore = create<TrackingStore>()(
         tech.battery    = payload.battery_level
         tech.status     = status
 
-        // Agregar al trail
+        // Agregar al trail — colapsando la "deriva" GPS: con el técnico detenido
+        // los fixes se dispersan 10-50 m y dibujarían líneas aleatorias de
+        // movimiento que nunca ocurrió. Si el punto reporta velocidad ~0 y cae a
+        // menos de DRIFT_COLLAPSE_M del último punto del trail, no se agrega
+        // (el marcador sí se actualiza arriba; solo se omite la línea).
         if (payload.lat && payload.lng) {
-          tech.trail.push([payload.lat, payload.lng])
-          if (tech.trail.length > MAX_TRAIL_POINTS) {
-            tech.trail.splice(0, tech.trail.length - MAX_TRAIL_POINTS)
+          const last = tech.trail[tech.trail.length - 1]
+          const isDrift = last !== undefined
+            && (payload.speed ?? 0) * 3.6 < DRIFT_MAX_SPEED_KMH
+            && haversineM(last[0], last[1], payload.lat, payload.lng) < DRIFT_COLLAPSE_M
+          if (!isDrift) {
+            tech.trail.push([payload.lat, payload.lng])
+            if (tech.trail.length > MAX_TRAIL_POINTS) {
+              tech.trail.splice(0, tech.trail.length - MAX_TRAIL_POINTS)
+            }
           }
         }
       }),

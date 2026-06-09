@@ -116,9 +116,11 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
 
 
   // Sondeo periódico del GPS y permisos (no tienen listener nativo directo).
+  // 10 s basta para la auditoría de transiciones; sondear más rápido solo gasta
+  // batería en primer plano.
   useEffect(() => {
     loadDeviceStatus();
-    const interval = setInterval(loadDeviceStatus, 4_000);
+    const interval = setInterval(loadDeviceStatus, 10_000);
     return () => clearInterval(interval);
   }, [loadDeviceStatus]);
 
@@ -163,7 +165,7 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
 
   useEffect(() => {
     loadDiagnostics();
-    const interval = setInterval(loadDiagnostics, 10_000);
+    const interval = setInterval(loadDiagnostics, 20_000);
     return () => clearInterval(interval);
   }, [loadDiagnostics]);
 

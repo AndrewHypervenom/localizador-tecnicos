@@ -2,7 +2,7 @@
   "expo": {
     "name": "Localizador PositivoS+",
     "slug": "localizador-positivos",
-    "version": "1.2.4",
+    "version": "1.2.5",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
@@ -13,11 +13,11 @@
     },
     "android": {
       "package": "com.empresa.localizador",
-      "versionCode": 2,
+      "versionCode": 3,
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#00D632"
+        "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundColor": "#11D452"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",

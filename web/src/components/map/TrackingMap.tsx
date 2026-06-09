@@ -196,6 +196,29 @@ function dropSpikes(pts: RoutePoint[]): RoutePoint[] {
   return out
 }
 
+// ── Colapso de "deriva" GPS estando detenido ──────────────────────────────────
+// Con el teléfono quieto, los fixes se dispersan 10-50 m alrededor del punto real
+// y la polilínea dibuja "líneas aleatorias" de movimiento que nunca ocurrió.
+// Descartamos los puntos que están a menos de DRIFT_COLLAPSE_M del anterior Y
+// reportan velocidad ~0 (la deriva trae speed 0/null; caminar reporta ~4 km/h y
+// no se toca). Cubre datos históricos y APKs viejos; los APKs nuevos ya anclan
+// la posición en el dispositivo y ni siquiera suben la deriva.
+const DRIFT_COLLAPSE_M     = 25
+const DRIFT_MAX_SPEED_KMH  = 1
+
+function collapseDrift(pts: RoutePoint[]): RoutePoint[] {
+  if (pts.length < 2) return pts
+  const out: RoutePoint[] = [pts[0]]
+  for (let i = 1; i < pts.length; i++) {
+    const prev = out[out.length - 1]
+    const p    = pts[i]
+    if (p.speed_kmh < DRIFT_MAX_SPEED_KMH &&
+        distM(prev.lat, prev.lng, p.lat, p.lng) < DRIFT_COLLAPSE_M) continue
+    out.push(p)
+  }
+  return out
+}
+
 function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
   if (pts.length < 2) return pts
   let start = 0
@@ -241,8 +264,9 @@ function LiveTrackPlayer({ date }: { date: string }) {
         )
         if (cancelled) return
         // Solo filtrar sesión activa cuando es hoy (datos en vivo); en todos los
-        // casos descartamos saltos GPS antes de dibujar el recorrido.
-        const pts = dropSpikes(isToday ? filterCurrentSession(res.data) : res.data)
+        // casos descartamos saltos GPS y colapsamos la deriva de estar detenido
+        // antes de dibujar el recorrido.
+        const pts = collapseDrift(dropSpikes(isToday ? filterCurrentSession(res.data) : res.data))
         setPoints(pts)
         if (!silent || atEndRef.current) {
           const end = Math.max(pts.length - 1, 0)

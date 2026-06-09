@@ -14,7 +14,10 @@ export type TrackingTier = 'MOVING' | 'STATIONARY';
 const TIER_OPTIONS: Record<TrackingTier, Location.LocationTaskOptions> = {
   MOVING: {
     accuracy:         Location.Accuracy.High,
-    timeInterval:     3_000,
+    // 5 s alinea con los reportes: la ruta de viaje agrupa en buckets de 5 s,
+    // así que capturar más rápido (antes 3 s) solo quemaba batería sin sumar
+    // detalle visible en el mapa ni en las distancias.
+    timeInterval:     5_000,
     distanceInterval: 0,
   },
   STATIONARY: {
@@ -22,7 +25,10 @@ const TIER_OPTIONS: Record<TrackingTier, Location.LocationTaskOptions> = {
     // speed=0 y posiciones imprecisas, rompiendo la velocidad al reanudar.
     // El ahorro real de batería viene del intervalo, no de bajar la precisión.
     accuracy:         Location.Accuracy.High,
-    timeInterval:     10_000,
+    // 30 s: antes (10 s) el throttle de subida descartaba 2 de cada 3 fixes —
+    // el GPS trabajaba 3× para nada. Con 30 s cada fix capturado se sube
+    // (cadencia en el servidor: igual que antes, ~1 punto/30 s detenido).
+    timeInterval:     30_000,
     distanceInterval: 0,
   },
 };
@@ -111,6 +117,12 @@ export async function applyTrackingTier(tier: TrackingTier): Promise<void> {
   if (!running) return;
   _currentTier = tier;
   await Location.startLocationUpdatesAsync(LOCATION_TASK, tierConfig(tier));
+  // Acelerómetro solo cuando hay desplazamiento: parado no hay choque/frenada
+  // que detectar y el sensor a 10 lecturas/seg consume todo el día. Ventana
+  // ciega asumida: los primeros segundos al arrancar, hasta el primer fix en
+  // movimiento. startAccelerometer es idempotente (guard interno).
+  if (tier === 'STATIONARY') stopAccelerometer();
+  else startAccelerometer();
 }
 
 export async function stopTracking(): Promise<void> {
@@ -138,17 +150,18 @@ export async function isTracking(): Promise<boolean> {
 
 // Si con sesión activa y GPS encendido no entra un fix en este lapso, el request
 // nativo está "vivo pero mudo" (caso típico: el técnico apagó y volvió a encender
-// el GPS) y hay que re-suscribir. En STATIONARY el heartbeat llega cada ~10 s, así
-// que 60 s deja margen de varios fixes perdidos antes de actuar (bajado de 90→60
-// para re-enganchar más rápido y que "nunca toque reiniciar el celular").
-const STALE_FIX_MS = 60_000;
+// el GPS) y hay que re-suscribir. En STATIONARY los fixes llegan cada ~30 s, así
+// que 90 s (3× el intervalo) tolera un fix perdido sin reiniciar el servicio en
+// falso. La recuperación rápida del caso "apagó/encendió GPS" sigue cubierta por
+// la transición gps_on que dispara ensureTrackingHealthy desde HomeScreen.
+const STALE_FIX_MS = 90_000;
 
 /**
  * Re-suscribe el servicio de ubicación (stop + start). Es necesario cuando el
  * request nativo sigue "iniciado" pero dejó de entregar fixes: un
  * startLocationUpdatesAsync por sí solo NO reengancha la petición vieja; hay que
- * detenerla y volver a arrancarla. A diferencia de startTracking, no reinicia
- * acelerómetro ni re-guarda el técnico: la sesión ya está en curso.
+ * detenerla y volver a arrancarla. A diferencia de startTracking, no re-guarda
+ * el técnico: la sesión ya está en curso.
  */
 export async function restartTracking(): Promise<void> {
   try {
@@ -157,6 +170,9 @@ export async function restartTracking(): Promise<void> {
     }
   } catch { /* el servicio ya no estaba; seguimos a arrancar */ }
   _currentTier = 'MOVING';
+  // El tier vuelve a MOVING sin pasar por applyTrackingTier (que es quien
+  // gestiona el acelerómetro según tier): re-armarlo aquí explícitamente.
+  startAccelerometer();
   await Location.startLocationUpdatesAsync(LOCATION_TASK, tierConfig('MOVING'));
 }
 
