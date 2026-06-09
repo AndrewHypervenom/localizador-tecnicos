@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 const LOC_QUEUE_KEY     = '@localizador/location_queue';
 const MOTION_QUEUE_KEY  = '@localizador/motion_queue';
 const TECH_ID_KEY       = '@localizador/technician_id';
+const TECH_NAME_KEY     = '@localizador/technician_name';
 const LAST_ERROR_KEY    = '@localizador/last_error';
 const LAST_SENT_KEY     = '@localizador/last_sent';
 const LAST_UPLOADED_KEY = '@localizador/last_uploaded';
@@ -141,6 +142,25 @@ export async function loadTechnicianId(): Promise<string | null> {
 
 export async function removeTechnicianId() {
   await AsyncStorage.removeItem(TECH_ID_KEY);
+}
+
+// ── Nombre del técnico (cache local de respaldo) ───────────────────────────
+// Se guarda cada vez que una lectura en vivo de `technicians` confirma el
+// vínculo de este device_id. Sirve para mostrar el nombre cuando la consulta
+// a Supabase falla (sesión vencida, RLS o red), en lugar de un falso
+// "No registrado". Solo se borra ante una respuesta AUTORITATIVA del servidor
+// que confirma que el dispositivo ya no está vinculado.
+
+export async function storeTechnicianName(name: string) {
+  await AsyncStorage.setItem(TECH_NAME_KEY, name);
+}
+
+export async function loadTechnicianName(): Promise<string | null> {
+  return AsyncStorage.getItem(TECH_NAME_KEY);
+}
+
+export async function removeTechnicianName() {
+  await AsyncStorage.removeItem(TECH_NAME_KEY);
 }
 
 // ── Location queue ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
-import { MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, useMap } from 'react-leaflet'
+import { MapBaseLayer } from '@/components/map/MapBaseLayer'
 import L from 'leaflet'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link, useNavigate } from 'react-router-dom'
@@ -1509,11 +1510,7 @@ export function Zones() {
           attributionControl={false}
           doubleClickZoom={false}
         >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution="© OpenStreetMap contributors, © CARTO"
-            maxZoom={19}
-          />
+          <MapBaseLayer />
           <AutoCenter />
           <MapFitEffect coords={fitCoords} />
           <ZonesDisplay

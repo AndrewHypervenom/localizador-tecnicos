@@ -42,6 +42,9 @@ import {
   clearLastError,
   clearBackoff,
   loadTechnicianId,
+  loadTechnicianName,
+  storeTechnicianName,
+  removeTechnicianName,
 } from '../services/offlineQueue';
 
 function timeAgo(isoStr: string): string {
@@ -99,6 +102,34 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
     return () => clearInterval(interval);
   }, [loadDeviceStatus]);
 
+  // Refresca el nombre del técnico desde el servidor, distinguiendo una lectura
+  // fallida (conserva el nombre en cache) de una respuesta autoritativa que
+  // confirma que el dispositivo ya no está vinculado.
+  const refreshTechName = useCallback(async () => {
+    if (!deviceId) return;
+    try {
+      await ensureAuth();
+      const { data, error } = await supabase
+        .from('technicians')
+        .select('name')
+        .eq('device_id', deviceId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) {
+        await storeTechnicianName(data.name);
+        setTechName(data.name);
+      } else {
+        await removeTechnicianName();
+        setTechName(null);
+      }
+    } catch (e: any) {
+      // No se pudo verificar: mantener el último nombre conocido.
+      const cached = await loadTechnicianName();
+      if (cached) setTechName(cached);
+      console.warn('[refreshTechName]', e?.message);
+    }
+  }, [deviceId]);
+
   const loadDiagnostics = useCallback(async () => {
     const [count, sent, err] = await Promise.all([
       getQueueCount(),
@@ -141,42 +172,56 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
     if (!deviceId) return;
 
     async function init() {
+      // Mostrar de inmediato el último nombre conocido (si lo hay) para no
+      // arrancar con "No registrado" mientras se confirma con el servidor.
+      const cachedName = await loadTechnicianName();
+      if (cachedName) setTechName(cachedName);
+
       try {
         const active = await isTracking();
         if (active) {
           setTracking(true);
           setLoading(false);
+          // Aun rastreando, refrescar el nombre desde el servidor en segundo
+          // plano (no bloquea la UI).
+          void refreshTechName();
           return;
         }
 
-        // Auto-arranque silencioso: solo si permisos ya concedidos y había sesión
-        const storedTechId = await loadTechnicianId();
-        if (storedTechId && await hasAllPermissions()) {
-          const { data: tech } = await supabase
-            .from('technicians')
-            .select('id, name')
-            .eq('device_id', deviceId)
-            .maybeSingle();
+        // Asegurar sesión válida ANTES de leer (igual que App.tsx). Sin esto,
+        // una sesión anónima vencida hacía que la lectura devolviera vacío y
+        // se mostrara un falso "No registrado".
+        await ensureAuth();
 
-          if (tech) {
-            await startTracking(tech.id);
-            await registerWatchdog();
-            setTechName(tech.name);
-            setTracking(true);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Sin auto-arranque: cargar nombre y esperar acción manual
-        const { data } = await supabase
+        const { data: tech, error } = await supabase
           .from('technicians')
-          .select('name')
+          .select('id, name')
           .eq('device_id', deviceId)
           .maybeSingle();
-        setTechName(data?.name ?? null);
+
+        if (error) throw error; // lectura fallida → conservar nombre en cache
+
+        if (tech) {
+          // Confirmado por el servidor: vinculado.
+          await storeTechnicianName(tech.name);
+          setTechName(tech.name);
+
+          // Auto-arranque silencioso: solo si permisos ya concedidos.
+          const storedTechId = await loadTechnicianId();
+          if (storedTechId && await hasAllPermissions()) {
+            await startTracking(tech.id);
+            await registerWatchdog();
+            setTracking(true);
+          }
+        } else {
+          // Respuesta autoritativa: este device_id NO está vinculado.
+          await removeTechnicianName();
+          setTechName(null);
+        }
       } catch (e: any) {
-        console.error('[init]', e?.message);
+        // No se pudo verificar (red/RLS/sesión). Conservar el nombre en cache
+        // —ya aplicado arriba— en vez de mostrar "No registrado".
+        console.warn('[init]', e?.message);
       } finally {
         setLoading(false);
       }
@@ -316,11 +361,18 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadDiagnostics(), loadDeviceStatus()]);
+    await Promise.all([loadDiagnostics(), loadDeviceStatus(), refreshTechName()]);
     setRefreshing(false);
-  }, [loadDiagnostics, loadDeviceStatus]);
+  }, [loadDiagnostics, loadDeviceStatus, refreshTechName]);
 
   const hasError   = !!lastError;
+
+  // Con el envío por lotes, en operación normal SIEMPRE hay unos pocos puntos en
+  // cola entre un flush y el siguiente (se vacía cada ~30 s). Eso NO es un
+  // problema, así que solo avisamos cuando la cola crece mucho más de lo normal
+  // —señal de un backlog real (sin red o servidor caído)— o cuando hubo un error.
+  const QUEUE_BACKLOG_THRESHOLD = 50;
+  const queueBacklog = queueCount > QUEUE_BACKLOG_THRESHOLD;
 
   // ¿El rastreo está activo pero algo lo está saboteando? (GPS off, sin permiso o sin red)
   const gpsBad   = gpsOn === false;
@@ -443,8 +495,8 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
 
           <View style={styles.diagRow}>
             <Text style={styles.diagLabel}>Cola pendiente</Text>
-            <Text style={[styles.diagValue, queueCount > 0 && styles.diagWarn]}>
-              {queueCount > 0 ? `${queueCount} eventos` : 'Vacía'}
+            <Text style={[styles.diagValue, queueBacklog && styles.diagWarn]}>
+              {queueCount > 0 ? `${queueCount} eventos` : 'Al día'}
             </Text>
           </View>
 
@@ -457,8 +509,9 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
           )}
         </View>
 
-        {/* Botón force sync */}
-        {(queueCount > 0 || hasError) && (
+        {/* Botón force sync: solo ante un backlog real o un error, no por los
+            pocos puntos que el envío por lotes mantiene en cola normalmente. */}
+        {(queueBacklog || hasError) && (
           <TouchableOpacity
             style={[styles.button, styles.btnSync]}
             onPress={handleForceSync}

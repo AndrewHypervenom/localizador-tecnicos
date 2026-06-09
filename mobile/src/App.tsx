@@ -3,6 +3,12 @@ import { ActivityIndicator, AppState as RNAppState, StyleSheet, View } from 'rea
 import { StatusBar } from 'expo-status-bar';
 import { useDeviceId } from './hooks/useDeviceId';
 import { supabase, ensureAuth } from './lib/supabase';
+import {
+  loadTechnicianId,
+  loadTechnicianName,
+  storeTechnicianName,
+  removeTechnicianName,
+} from './services/offlineQueue';
 import HomeScreen from './screens/HomeScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import TermsScreen, { hasAcceptedTerms } from './screens/TermsScreen';
@@ -52,24 +58,55 @@ export default function App() {
   // Paso 2: verificar registro del dispositivo una vez que los términos están ok.
   // Si el device_id no está enlazado a ningún técnico, se exige escanear el QR
   // de nuevo (evita inconsistencias de sincronización con un enlace incorrecto).
+  //
+  // IMPORTANTE: distinguir "el servidor confirma que NO está registrado" de
+  // "no pude verificar" (sesión vencida, RLS, sin red). Un fallo de lectura NO
+  // debe mandar al técnico a re-escanear el QR ni mostrar "No registrado" si ya
+  // estaba vinculado: en ese caso confiamos en el cache local.
   useEffect(() => {
     if (!termsOk || !deviceId) return;
 
-    ensureAuth().then(() =>
-      supabase
-        .from('technicians')
-        .select('id, name')
-        .eq('device_id', deviceId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            setTechName(data.name);
-            setAppState('home');
-          } else {
-            setAppState('register');
-          }
-        })
-    );
+    async function verifyRegistration() {
+      try {
+        await ensureAuth();
+        const { data, error } = await supabase
+          .from('technicians')
+          .select('id, name')
+          .eq('device_id', deviceId)
+          .maybeSingle();
+
+        if (error) throw error; // lectura fallida → caer al fallback de cache
+
+        if (data) {
+          // Confirmado por el servidor: vinculado.
+          await storeTechnicianName(data.name);
+          setTechName(data.name);
+          setAppState('home');
+        } else {
+          // Respuesta autoritativa: este device_id NO está vinculado.
+          await removeTechnicianName();
+          setAppState('register');
+        }
+      } catch (e: any) {
+        // No se pudo verificar. Si el dispositivo ya estaba registrado
+        // (hay id/nombre en cache), entrar al Home con el último nombre
+        // conocido en vez de exigir un QR nuevo por un hipo transitorio.
+        console.warn('[verifyRegistration]', e?.message);
+        const [cachedId, cachedName] = await Promise.all([
+          loadTechnicianId(),
+          loadTechnicianName(),
+        ]);
+        if (cachedId || cachedName) {
+          setTechName(cachedName);
+          setAppState('home');
+        } else {
+          // Nunca estuvo registrado en este teléfono: pedir QR.
+          setAppState('register');
+        }
+      }
+    }
+
+    verifyRegistration();
   }, [termsOk, deviceId]);
 
   // El bloqueo por ubicación falsa tiene prioridad sobre cualquier pantalla.

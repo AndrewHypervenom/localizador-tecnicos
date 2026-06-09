@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet'
+import { MapContainer, Polyline, useMap } from 'react-leaflet'
+import { MapBaseLayer } from '@/components/map/MapBaseLayer'
 import { supabase } from '@/lib/supabase'
 import api from '@/lib/api'
 import { ElevationChart } from '@/components/charts/ElevationChart'
@@ -454,7 +455,7 @@ export function LeaderHistory() {
                 <MapContainer center={[14.0723, -87.2061]} zoom={12}
                   style={{ height: '100%', width: '100%' }}
                   zoomControl={false} attributionControl={false}>
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                  <MapBaseLayer />
                   {routePoints.length > 0 && <RoutePlayback key={selectedTrip.id} points={routePoints} />}
                 </MapContainer>
               </div>

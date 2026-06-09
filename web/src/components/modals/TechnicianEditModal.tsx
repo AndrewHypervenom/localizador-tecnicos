@@ -5,7 +5,8 @@ import {
   FolderOpen, FileText, Navigation, Search, Home, Locate, Mail,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet'
+import { MapContainer, Marker, Circle } from 'react-leaflet'
+import { MapBaseLayer } from '@/components/map/MapBaseLayer'
 import L from 'leaflet'
 import { supabase } from '@/lib/supabase'
 import { reverseGeocode, geocodeAddress, geocodeWithClaude, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
@@ -533,7 +534,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                     attributionControl={false}
                     style={{ height: '100%', width: '100%' }}
                   >
-                    <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+                    <MapBaseLayer />
                     <Circle
                       center={[homeLat, homeLng]}
                       radius={homeRadius}

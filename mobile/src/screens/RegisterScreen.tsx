@@ -10,6 +10,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useDeviceId } from '../hooks/useDeviceId';
 import { supabase } from '../lib/supabase';
+import { storeTechnicianName } from '../services/offlineQueue';
 
 const QR_PREFIX = 'localizador:register:';
 
@@ -75,6 +76,9 @@ export default function RegisterScreen({ onRegistered, onCancel }: Props) {
         return;
       }
 
+      // Guardar el nombre en cache local: respaldo para mostrarlo si una
+      // futura lectura en vivo de `technicians` falla (sesión/RLS/red).
+      if (result.name) await storeTechnicianName(result.name);
       setTechName(result.name ?? '');
       setScanState('success');
     } catch (err: any) {

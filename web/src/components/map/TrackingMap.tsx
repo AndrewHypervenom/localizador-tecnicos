@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, useMap, Polyline } from 'react-leaflet'
+import { MapContainer, useMap, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import api from '@/lib/api'
 import { format } from 'date-fns'
@@ -8,6 +8,7 @@ import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { SpeedHeatmap } from './SpeedHeatmap'
 import { ZonesLayer } from './ZonesLayer'
 import { AssignmentRouteLayer } from './AssignmentRouteLayer'
+import { MapBaseLayer } from './MapBaseLayer'
 
 interface RoutePoint {
   ts: string
@@ -373,11 +374,7 @@ export function TrackingMap({ className, date }: TrackingMapProps) {
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution="© OpenStreetMap contributors, © CARTO"
-          maxZoom={19}
-        />
+        <MapBaseLayer />
 
         <MapSizeInvalidator />
         <ZonesLayer />

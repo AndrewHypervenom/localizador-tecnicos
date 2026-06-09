@@ -1,7 +1,7 @@
 import * as Battery from 'expo-battery';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { ensureAuth, supabase } from '../lib/supabase';
+import { ensureAuth } from '../lib/supabase';
 import {
   enqueueLocation,
   flushLocationQueue,
@@ -11,9 +11,7 @@ import {
   loadLastUploaded,
   loadTechnicianId,
   storeLastError,
-  storeLastSent,
   storeLastUploaded,
-  clearLastError,
   type LocationRow,
 } from './offlineQueue';
 import { applyTrackingTier } from './locationService';
@@ -34,10 +32,20 @@ const STATIONARY_AFTER_MS  = 120_000;  // tiempo detenido antes de bajar a tier 
 const ACCURACY_MAX_M       = 50;       // descartar fixes con radio de error mayor (causan "saltos")
 const BATTERY_TTL_MS       = 60_000;   // refrescar batería como mucho cada 60 s
 
+// ── Envío por lotes (batch) ───────────────────────────────────────────────────
+// En vez de un INSERT por cada fix (cada 3 s en movimiento → la radio celular
+// nunca duerme y se generan ~48k paquetes por jornada), los puntos se acumulan
+// en la cola local y se drenan en un solo envío cada BATCH_INTERVAL_MS, o antes
+// si se juntan BATCH_MAX_PENDING. Recorta los envíos de red ~10× y baja el
+// consumo de CPU y de wake locks, sin perder puntos (solo se difiere su envío).
+const BATCH_INTERVAL_MS = 30_000;  // cada cuánto se vacía la cola hacia el servidor
+const BATCH_MAX_PENDING = 25;      // o antes, si se acumulan tantos puntos sin enviar
+
 // ── Estado a nivel de módulo (sobrevive entre invocaciones en el mismo hilo JS) ─
 let _batteryLevel: number | null = null;
 let _batteryTs     = 0;
 let _lastMovingTs  = Date.now();
+let _lastFlushTs   = 0;
 
 async function getBatteryCached(): Promise<number | null> {
   const now = Date.now();
@@ -108,13 +116,23 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       void applyTrackingTier('STATIONARY');
     }
 
-    // ── Drenar backlog SIEMPRE (respeta red, backoff y cola vacía) ──
-    try {
-      await ensureAuth();
-      await flushLocationQueue();
-      await flushMotionQueue();
-    } catch (e: any) {
-      await storeLastError(e?.message ?? 'Error desconocido');
+    // ── Flush por lotes: drenar la cola hacia el servidor solo cada
+    // BATCH_INTERVAL_MS (o si ya se acumularon demasiados puntos), en lugar de un
+    // INSERT por cada fix. Así la radio celular duerme entre envíos y bajan CPU
+    // y wake locks. Estando offline, drainQueue no hace nada (lo verifica dentro).
+    const timeToFlush    = now - _lastFlushTs >= BATCH_INTERVAL_MS;
+    const tooManyPending = !timeToFlush && (await getQueueCount()) >= BATCH_MAX_PENDING;
+    if (timeToFlush || tooManyPending) {
+      _lastFlushTs = now;
+      try {
+        if (await isOnline()) {
+          await ensureAuth();
+          await flushLocationQueue();
+          await flushMotionQueue();
+        }
+      } catch (e: any) {
+        await storeLastError(e?.message ?? 'Error desconocido');
+      }
     }
 
     // ── Descartar fixes imprecisos: son la causa de los "saltos" en el mapa ──
@@ -136,28 +154,10 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       battery_level: await getBatteryCached(),
     };
 
-    try {
-      if (!(await isOnline())) {
-        await enqueueLocation(row);
-        await storeLastUploaded({ lat: latitude, lng: longitude, ts: now });
-        return;
-      }
-      // Si quedó backlog (flush parcial por backoff/error), encolar para preservar el orden FIFO.
-      if (await getQueueCount() > 0) {
-        await enqueueLocation(row);
-      } else {
-        const { error: err } = await supabase.from('location_events').insert(row);
-        if (err) throw new Error(err.message);
-        await storeLastSent();
-        await clearLastError();
-      }
-      await storeLastUploaded({ lat: latitude, lng: longitude, ts: now });
-    } catch (e: any) {
-      const msg = e?.message ?? 'Error desconocido';
-      console.error('[LocationTask] fallo al enviar:', msg);
-      await storeLastError(msg);
-      await enqueueLocation(row);
-      await storeLastUploaded({ lat: latitude, lng: longitude, ts: now });
-    }
+    // Siempre encolar: el envío real ocurre en el flush por lotes de arriba.
+    // (Antes se insertaba aquí mismo en cada fix, lo que mantenía la radio
+    // despierta cada 3 s. Ahora el punto se difiere y viaja junto con los demás.)
+    await enqueueLocation(row);
+    await storeLastUploaded({ lat: latitude, lng: longitude, ts: now });
   }
 );
