@@ -39,6 +39,8 @@ npm-debug.log*
 # Supabase
 supabase/
 
+mobile/
+
 # Documentos de pricing y costos
 *.pdf
 *.docx

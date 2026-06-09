@@ -7,6 +7,7 @@ import api from '@/lib/api'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart } from '@/components/charts/SpeedChart'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { cleanRoute } from '@/lib/routeFilters'
 import {
   Play, Pause, SkipBack,
   Route, Gauge, Clock, AlertTriangle, TrendingUp,
@@ -261,7 +262,10 @@ export function LeaderHistory() {
           params: { from: trip.started_at, to },
         }),
       ])
-      setRoutePoints(routeRes.data)
+      // Limpiar saltos GPS y deriva de estar detenido ANTES de dibujar: sin esto
+      // el mapa del viaje muestra "líneas aleatorias" alrededor de cada parada y
+      // la distancia en vivo (liveRouteStats) suma kilómetros fantasma.
+      setRoutePoints(cleanRoute(routeRes.data))
       setElevData(elevRes.data)
     } catch (e) { console.error(e) }
     setLoading(false)
