@@ -29,7 +29,7 @@ interface TechStatus {
 
 const STATUS_CFG: Record<string, { labelKey: string; dot: string; text: string }> = {
   moving:   { labelKey: 'adminTech.status.moving',   dot: 'bg-success animate-pulse', text: 'text-success' },
-  idle:     { labelKey: 'adminTech.status.idle',     dot: 'bg-warning',               text: 'text-warning' },
+  idle:     { labelKey: 'adminTech.status.idle',     dot: 'bg-success',               text: 'text-success' },
   stopped:  { labelKey: 'adminTech.status.stopped',  dot: 'bg-text-muted',            text: 'text-text-muted' },
   // 'no_signal' = app viva (heartbeat) sin punto GPS fresco (quieto + ahorro de
   // batería). Sin este caso caía al fallback 'offline' y se veía rojo en falso.

@@ -34,7 +34,9 @@ L.Icon.Default.mergeOptions({
 
 const STATUS_COLORS: Record<string, string> = {
   moving:    '#10B981',
-  idle:      '#F59E0B',
+  // 'idle' (quieto pero activo) = verde como 'moving': todo bien, NO ámbar. En el
+  // mapa se distingue de 'moving' por la flecha de rumbo que solo dibuja 'moving'.
+  idle:      '#10B981',
   stopped:   '#64748B',
   no_signal: '#F97316',
   offline:   '#1E1E30',

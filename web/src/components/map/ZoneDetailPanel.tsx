@@ -46,7 +46,7 @@ function areaKm2(coords: [number, number][]): number {
 
 const STATUS_DOT: Record<string, string> = {
   moving:   'bg-success animate-pulse',
-  idle:     'bg-warning',
+  idle:     'bg-success',
   stopped:  'bg-text-muted',
   offline:  'bg-danger',
   accident: 'bg-danger animate-pulse',
@@ -213,7 +213,7 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
                 <span className="text-xs text-text-primary font-medium truncate flex-1">{tech.name}</span>
                 <span className={cn(
                   'text-[10px] flex-shrink-0',
-                  tech.status === 'moving' ? 'text-success' : tech.status === 'idle' ? 'text-warning' : 'text-text-muted',
+                  tech.status === 'moving' || tech.status === 'idle' ? 'text-success' : 'text-text-muted',
                 )}>
                   {t(STATUS_LABEL_KEY[tech.status] ?? 'status.offline')}
                 </span>

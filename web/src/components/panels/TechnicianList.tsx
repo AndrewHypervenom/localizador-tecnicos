@@ -22,7 +22,10 @@ export const STATUS_LABEL_KEYS: Record<TechnicianStatus, string> = {
 
 const STATUS_COLORS: Record<TechnicianStatus, string> = {
   moving:    'text-success',
-  idle:      'text-warning',
+  // 'idle' = quieto pero con GPS/app al día (todo bien). Verde, NO ámbar: el ámbar
+  // lo reservamos para estados de atención (no_signal/stopped) y los líderes lo
+  // confundían con "desconectado". Se distingue de 'moving' por el punto sin parpadeo.
+  idle:      'text-success',
   stopped:   'text-warning/60',
   no_signal: 'text-amber-500',
   offline:   'text-text-muted',
@@ -30,8 +33,8 @@ const STATUS_COLORS: Record<TechnicianStatus, string> = {
 }
 
 const STATUS_DOT: Record<TechnicianStatus, string> = {
-  moving:    'bg-success',
-  idle:      'bg-warning',
+  moving:    'bg-success animate-pulse',
+  idle:      'bg-success',
   stopped:   'bg-warning/50',
   no_signal: 'bg-amber-500',
   offline:   'bg-surface-raised',

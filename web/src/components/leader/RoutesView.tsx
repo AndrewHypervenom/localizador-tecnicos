@@ -274,7 +274,7 @@ export function RoutesView() {
                 >
                   <div className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0',
                     route.techStatus === 'moving'    ? 'bg-success animate-pulse' :
-                    route.techStatus === 'idle'      ? 'bg-warning' :
+                    route.techStatus === 'idle'      ? 'bg-success' :
                     route.techStatus === 'no_signal' ? 'bg-amber-500' :
                     route.techStatus === 'stopped'   ? 'bg-text-muted' : 'bg-border'
                   )} />
@@ -312,7 +312,7 @@ export function RoutesView() {
 
                   <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0 hidden md:inline-flex',
                     route.techStatus === 'moving'    ? 'bg-success/10 text-success border-success/20' :
-                    route.techStatus === 'idle'      ? 'bg-warning/10 text-warning border-warning/20' :
+                    route.techStatus === 'idle'      ? 'bg-success/10 text-success border-success/20' :
                     route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                     route.techStatus === 'stopped'   ? 'bg-text-muted/10 text-text-muted border-border' :
                     'bg-surface-raised text-text-muted border-border'

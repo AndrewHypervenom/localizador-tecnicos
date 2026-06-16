@@ -20,7 +20,9 @@ type Tech = TechnicianEditable & {
 
 const STATUS_CFG: Record<string, { dot: string; labelKey: string; text: string }> = {
   moving:    { dot: 'bg-success animate-pulse', labelKey: 'status.moving',            text: 'text-success' },
-  idle:      { dot: 'bg-warning',               labelKey: 'detail.inactive',         text: 'text-warning' },
+  // 'idle' = quieto pero con app/GPS al día: verde (todo bien), no ámbar. El ámbar
+  // queda para estados de atención (no_signal/offline) que el líder sí debe revisar.
+  idle:      { dot: 'bg-success',               labelKey: 'status.idle',             text: 'text-success' },
   stopped:   { dot: 'bg-text-muted',            labelKey: 'zone.statusStopped',      text: 'text-text-muted' },
   // 'no_signal' = la app sigue viva (heartbeat fresco) pero sin punto GPS reciente:
   // típico al quedarse quieto (GPS a 30s + Doze en segundo plano). NO es desconexión.
