@@ -10,36 +10,36 @@ import {
 import { cn } from '@/lib/utils'
 import { EnablePushButton } from '@/components/EnablePushButton'
 import { formatDistanceToNow, startOfDay, isEqual, isBefore, format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
 import { persistZoneAlertAck } from '@/hooks/useZoneEvents'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 // ── Alertas de movimiento ──────────────────────────────────────────
-const MOTION_CONFIG: Record<string, { icon: any; label: string; color: string; bg: string }> = {
-  accident:    { icon: AlertTriangle,  label: 'Accidente',           color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  sos:         { icon: Siren,          label: 'SOS — Emergencia',    color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  hard_brake:  { icon: CornerDownLeft, label: 'Frenada brusca',      color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  rapid_accel: { icon: Zap,            label: 'Aceleración rápida',  color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  harsh_turn:  { icon: RotateCcw,      label: 'Giro brusco',         color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
-  offline:     { icon: WifiOff,        label: 'Técnico sin señal',   color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  battery_low: { icon: BatteryLow,     label: 'Batería baja',        color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  home_enter:  { icon: Home,           label: 'Llegó a casa',        color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  home_exit:   { icon: DoorOpen,       label: 'Salió de casa',       color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+const MOTION_CONFIG: Record<string, { icon: any; labelKey: string; color: string; bg: string }> = {
+  accident:    { icon: AlertTriangle,  labelKey: 'alert.type.accident',    color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  sos:         { icon: Siren,          labelKey: 'alert.type.sos',         color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  hard_brake:  { icon: CornerDownLeft, labelKey: 'alert.type.hard_brake',  color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  rapid_accel: { icon: Zap,            labelKey: 'alert.type.rapid_accel', color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  harsh_turn:  { icon: RotateCcw,      labelKey: 'alert.type.harsh_turn',  color: 'text-primary', bg: 'bg-primary/10 border-primary/30' },
+  offline:     { icon: WifiOff,        labelKey: 'alert.type.offline',     color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  battery_low: { icon: BatteryLow,     labelKey: 'alert.type.battery_low', color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  home_enter:  { icon: Home,           labelKey: 'alert.type.home_enter',  color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  home_exit:   { icon: DoorOpen,       labelKey: 'alert.type.home_exit',   color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
   // Bitácora de dispositivo: evidencia de sabotaje al rastreo.
-  gps_off:        { icon: MapPinOff,   label: 'Apagó el GPS',        color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  gps_on:         { icon: MapPin,      label: 'Reactivó el GPS',     color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  mock_on:        { icon: Ghost,       label: 'Ubicación falsa (Fake GPS)', color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  mock_off:       { icon: ShieldCheck, label: 'Cesó ubicación falsa', color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  tracking_start: { icon: Play,        label: 'Inició la localización', color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  tracking_stop:  { icon: Square,      label: 'Detuvo la localización', color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
-  net_off:              { icon: WifiOff,        label: 'Apagó datos / Wi-Fi',          color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  net_on:               { icon: Wifi,           label: 'Reactivó datos / Wi-Fi',       color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  battery_restricted:   { icon: BatteryWarning, label: 'Restringió la batería de la app', color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  battery_unrestricted: { icon: Battery,        label: 'Quitó la restricción de batería', color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  tracking_killed:      { icon: Power,          label: 'Cerró la app a la fuerza',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  perm_revoked:         { icon: ShieldOff,      label: 'Quitó "Permitir siempre"',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
-  perm_granted:         { icon: ShieldCheck,    label: 'Restauró "Permitir siempre"',  color: 'text-success', bg: 'bg-success/10 border-success/30' },
-  clock_skew:           { icon: Clock,          label: 'Reloj del teléfono alterado',  color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  gps_off:        { icon: MapPinOff,   labelKey: 'alert.type.gps_off',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  gps_on:         { icon: MapPin,      labelKey: 'alert.type.gps_on',      color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  mock_on:        { icon: Ghost,       labelKey: 'alert.type.mock_on',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  mock_off:       { icon: ShieldCheck, labelKey: 'alert.type.mock_off',    color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_start: { icon: Play,        labelKey: 'alert.type.tracking_start', color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_stop:  { icon: Square,      labelKey: 'alert.type.tracking_stop',  color: 'text-warning', bg: 'bg-warning/10 border-warning/30' },
+  net_off:              { icon: WifiOff,        labelKey: 'alert.type.net_off',     color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  net_on:               { icon: Wifi,           labelKey: 'alert.type.net_on',      color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  battery_restricted:   { icon: BatteryWarning, labelKey: 'alert.type.battery_restricted',   color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  battery_unrestricted: { icon: Battery,        labelKey: 'alert.type.battery_unrestricted', color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  tracking_killed:      { icon: Power,          labelKey: 'alert.type.tracking_killed', color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  perm_revoked:         { icon: ShieldOff,      labelKey: 'alert.type.perm_revoked',    color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
+  perm_granted:         { icon: ShieldCheck,    labelKey: 'alert.type.perm_granted',    color: 'text-success', bg: 'bg-success/10 border-success/30' },
+  clock_skew:           { icon: Clock,          labelKey: 'alert.type.clock_skew',      color: 'text-danger',  bg: 'bg-danger/10 border-danger/30' },
 }
 
 // Eventos de casa: viven en motion_events pero se muestran como su propia
@@ -55,13 +55,14 @@ const DEVICE_TYPES = new Set([
 ])
 
 const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ alert }, ref) => {
+  const { t, lang } = useI18n()
   const { acknowledgeAlert } = useTrackingStore()
   const cfg  = MOTION_CONFIG[alert.type] ?? MOTION_CONFIG['hard_brake']
   // "Sin señal" sin causa declarada (severidad 70 del backend): el técnico se
   // quedó mudo SIN apagar GPS/datos ni detener el rastreo → probable force-stop.
   const isUnexplainedOffline = alert.type === 'offline' && alert.severity >= 70
   const Icon  = isUnexplainedOffline ? Power : cfg.icon
-  const label = isUnexplainedOffline ? 'Sin señal — sin causa declarada' : cfg.label
+  const label = isUnexplainedOffline ? t('alert.unexplainedOffline') : t(cfg.labelKey)
   const color = isUnexplainedOffline ? 'text-danger' : cfg.color
   const bg    = isUnexplainedOffline ? 'bg-danger/10 border-danger/30' : cfg.bg
 
@@ -88,12 +89,12 @@ const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ al
         <div className={cn('font-semibold', color)}>{label}</div>
         <div className="text-text-secondary truncate">{alert.technicianName}</div>
         <div className="text-text-muted mt-0.5">
-          {formatDistanceToNow(new Date(alert.ts), { addSuffix: true, locale: es })}
+          {formatDistanceToNow(new Date(alert.ts), { addSuffix: true, locale: getDateLocale(lang) })}
         </div>
       </div>
       <button
         onClick={handleAck}
-        title={alert.acknowledged ? 'Vista' : 'Marcar como vista'}
+        title={alert.acknowledged ? t('alert.seen') : t('alert.markSeen')}
         className={cn(
           'flex-shrink-0 transition-colors rounded-md p-0.5',
           alert.acknowledged
@@ -113,6 +114,7 @@ const MotionAlertItem = forwardRef<HTMLDivElement, { alert: MotionAlert }>(({ al
 
 // ── Alertas de zona ────────────────────────────────────────────────
 const ZoneAlertItem = forwardRef<HTMLDivElement, { alert: ZoneAlert }>(({ alert }, ref) => {
+  const { t, lang } = useI18n()
   const { acknowledgeZoneAlert } = useTrackingStore()
   const isEnter = alert.eventType === 'enter'
 
@@ -150,7 +152,7 @@ const ZoneAlertItem = forwardRef<HTMLDivElement, { alert: ZoneAlert }>(({ alert 
 
       <div className="flex-1 min-w-0">
         <div className="font-semibold flex items-center gap-1" style={{ color: alert.zoneColor }}>
-          {isEnter ? 'Entró a zona' : 'Salió de zona'}
+          {isEnter ? t('alert.zoneEnter') : t('alert.zoneExit')}
           <span
             className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-xs"
             style={{ background: alert.zoneColor + '20', color: alert.zoneColor }}
@@ -161,7 +163,7 @@ const ZoneAlertItem = forwardRef<HTMLDivElement, { alert: ZoneAlert }>(({ alert 
         </div>
         <div className="text-text-secondary truncate mt-0.5">{alert.technicianName}</div>
         <div className="text-text-muted mt-0.5">
-          {formatDistanceToNow(new Date(alert.ts), { addSuffix: true, locale: es })}
+          {formatDistanceToNow(new Date(alert.ts), { addSuffix: true, locale: getDateLocale(lang) })}
         </div>
       </div>
 
@@ -172,7 +174,7 @@ const ZoneAlertItem = forwardRef<HTMLDivElement, { alert: ZoneAlert }>(({ alert 
             console.error('[AlertsPanel] Error al marcar zone_event:', err)
           )
         }}
-        title={alert.acknowledged ? 'Vista' : 'Marcar como vista'}
+        title={alert.acknowledged ? t('alert.seen') : t('alert.markSeen')}
         className={cn(
           'flex-shrink-0 transition-colors rounded-md p-0.5',
           alert.acknowledged
@@ -209,6 +211,7 @@ interface AlertsPanelProps {
 }
 
 export function AlertsPanel({ className }: AlertsPanelProps) {
+  const { t, lang } = useI18n()
   const { alerts, zoneAlerts, acknowledgeAllAlerts } = useTrackingStore()
   const [dateFilter, setDateFilter] = useState<DateFilter>('today')
   const [customDate, setCustomDate] = useState<string>('')
@@ -261,7 +264,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
   const deviceUnacked = alerts.filter((a) => !a.acknowledged && DEVICE_TYPES.has(a.type)).length
   const motionUnacked = alerts.filter((a) => !a.acknowledged && !HOME_TYPES.has(a.type) && !DEVICE_TYPES.has(a.type)).length
 
-  const todayLabel = format(today, "d MMM", { locale: es })
+  const todayLabel = format(today, 'd MMM', { locale: getDateLocale(lang) })
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -269,7 +272,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
       <div className="px-4 py-3 border-b border-border-soft">
         <div className="flex items-center justify-between mb-2">
           <h2 className="font-bold text-text-primary text-sm flex items-center gap-2">
-            Alertas
+            {t('dashboard.alerts')}
             {unackedCount > 0 && (
               <span className="bg-danger text-white text-xs font-bold px-1.5 py-0.5 rounded-full animate-pulse">
                 {unackedCount}
@@ -293,11 +296,11 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
                     if (error) console.error('[AlertsPanel] Error al marcar todas zone_events:', error)
                   }
                 }}
-                title="Marcar todas como vistas"
+                title={t('alert.markAllSeen')}
                 className="flex items-center gap-1 text-xs text-text-muted hover:text-success transition-colors px-1.5 py-1 rounded-lg hover:bg-success/10"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
-                Todas vistas
+                {t('alert.allSeen')}
               </button>
             )}
           </div>
@@ -309,25 +312,25 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
             <div className={cn('font-mono font-bold text-base', motionUnacked > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
               {motionUnacked}
             </div>
-            <div className="text-xs text-text-muted">Conducción</div>
+            <div className="text-xs text-text-muted">{t('alert.driving')}</div>
           </div>
           <div className="bg-success/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', homeUnacked > 0 ? 'text-success' : 'text-text-muted')}>
               {homeUnacked}
             </div>
-            <div className="text-xs text-text-muted">Casa</div>
+            <div className="text-xs text-text-muted">{t('alert.home')}</div>
           </div>
           <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', deviceUnacked > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
               {deviceUnacked}
             </div>
-            <div className="text-xs text-text-muted">Disp.</div>
+            <div className="text-xs text-text-muted">{t('alert.device')}</div>
           </div>
           <div className="bg-primary/10 rounded-lg px-2 py-1.5 text-center">
             <div className={cn('font-mono font-bold text-base', zoneUnacked > 0 ? 'text-primary' : 'text-text-muted')}>
               {zoneUnacked}
             </div>
-            <div className="text-xs text-text-muted">Zonas</div>
+            <div className="text-xs text-text-muted">{t('alert.zones')}</div>
           </div>
         </div>
 
@@ -343,7 +346,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
             )}
           >
             <Clock className="w-3 h-3" />
-            Hoy
+            {t('history.today')}
           </button>
           <button
             onClick={() => { setDateFilter('expired'); setCustomDate('') }}
@@ -355,7 +358,7 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
             )}
           >
             <CalendarX className="w-3 h-3" />
-            Vencidos
+            {t('alert.expired')}
           </button>
         </div>
 
@@ -403,9 +406,9 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
                 : 'border-border-soft'
             )}
           >
-            <option value="all">Todos los técnicos</option>
-            {technicianOptions.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+            <option value="all">{t('alert.allTechs')}</option>
+            {technicianOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>{opt.name}</option>
             ))}
           </select>
         </div>
@@ -414,11 +417,11 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
         <div className="flex items-center gap-1.5 mt-2">
           <Filter className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
           {([
-            { key: 'all' as const,    label: 'Todas' },
-            { key: 'motion' as const, label: 'Conducción' },
-            { key: 'home' as const,   label: 'Casa' },
-            { key: 'device' as const, label: 'Disp.' },
-            { key: 'zone' as const,   label: 'Zonas' },
+            { key: 'all' as const,    label: t('alert.filterAll') },
+            { key: 'motion' as const, label: t('alert.driving') },
+            { key: 'home' as const,   label: t('alert.home') },
+            { key: 'device' as const, label: t('alert.device') },
+            { key: 'zone' as const,   label: t('alert.zones') },
           ]).map((opt) => (
             <button
               key={opt.key}
@@ -437,28 +440,28 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
 
         {/* Etiqueta del filtro activo */}
         <div className="mt-1.5 text-xs text-text-muted flex items-center gap-1">
-          <span>Mostrando:</span>
+          <span>{t('history.showing')}</span>
           <span className={cn(
             'font-medium',
             dateFilter === 'today'   && 'text-primary',
             dateFilter === 'expired' && 'text-warning',
             dateFilter === 'custom'  && 'text-text-secondary',
           )}>
-            {dateFilter === 'today'   && `hoy (${todayLabel})`}
-            {dateFilter === 'expired' && 'días anteriores'}
-            {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
+            {dateFilter === 'today'   && t('history.todayLabel', { date: todayLabel })}
+            {dateFilter === 'expired' && t('alert.previousDays')}
+            {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: getDateLocale(lang) })}
           </span>
           {hasActiveFilter && (
             <button
               onClick={() => { setTechFilter('all'); setKindFilter('all') }}
               className="flex items-center gap-0.5 text-primary hover:text-primary/80 transition-colors"
-              title="Limpiar filtros"
+              title={t('alert.clearFilters')}
             >
               <X className="w-3 h-3" />
-              filtros
+              {t('alert.filters')}
             </button>
           )}
-          <span className="ml-auto text-text-muted">{unified.length} alertas</span>
+          <span className="ml-auto text-text-muted">{t('alert.alertsCount', { n: unified.length })}</span>
         </div>
       </div>
 
@@ -469,11 +472,11 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
             <BellOff className="w-8 h-8 mb-2 opacity-30" />
             <span className="text-sm">
               {hasActiveFilter
-                ? 'Sin alertas con estos filtros'
+                ? t('alert.noneWithFilters')
                 : <>
-                    {dateFilter === 'today'   && 'Sin alertas hoy'}
-                    {dateFilter === 'expired' && 'Sin alertas vencidas'}
-                    {dateFilter === 'custom'  && 'Sin alertas en este día'}
+                    {dateFilter === 'today'   && t('alert.noneToday')}
+                    {dateFilter === 'expired' && t('alert.noneExpired')}
+                    {dateFilter === 'custom'  && t('alert.noneThisDay')}
                   </>}
             </span>
           </div>

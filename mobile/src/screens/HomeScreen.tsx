@@ -36,8 +36,13 @@ import {
   ensureBatteryOptimizationExempt,
   getBatteryGuard,
   dismissBatteryGuard,
+  reRaiseBatteryGuard,
   openBatterySettings,
+  getAutostartGuide,
+  dismissAutostartGuide,
+  openAutostartSettings,
   type BatteryGuard,
+  type AutostartGuide,
 } from '../services/batteryOptimization';
 import { reportSosEvent, reportDeviceEvent } from '../services/sensorService';
 import { auditGps, auditNet, auditBatteryOpt, auditTrackingKilled, auditPermission } from '../services/deviceAudit';
@@ -81,6 +86,7 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
   const [gpsOn,    setGpsOn]    = useState<boolean | null>(null);
   const [permLevel, setPermLevel] = useState<'full' | 'partial' | 'none' | null>(null);
   const [battery,  setBattery]  = useState<BatteryGuard | null>(null);
+  const [autostart, setAutostart] = useState<AutostartGuide | null>(null);
   const [net,      setNet]      = useState<{ connected: boolean; type: string }>({ connected: true, type: 'unknown' });
 
   // Lee el estado del GPS y de los permisos de ubicación (sin abrir Ajustes ni diálogos).
@@ -109,6 +115,8 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
       // SO mate el servicio). Solo en Android no-Xiaomi: en Xiaomi la capa MIUI no
       // es legible, y ahí needsAttention == optimized.
       if (!guard.xiaomi) void auditBatteryOpt(guard.needsAttention);
+
+      setAutostart(await getAutostartGuide());
     } catch (e: any) {
       console.error('[deviceStatus]', e?.message);
     }
@@ -259,8 +267,13 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
         // El servicio NO está corriendo en un arranque en frío. Si había una
         // sesión activa y hubo un hueco real sin fixes, el proceso fue terminado
         // (force-stop, swipe de recientes o el SO por memoria): dejar evidencia
-        // (tracking_killed) antes de revivir el rastreo más abajo.
-        void auditTrackingKilled(false);
+        // (tracking_killed) antes de revivir el rastreo más abajo. Si se cayó, la
+        // exención de batería no bastó → re-mostrar el aviso (Xiaomi) para que el
+        // técnico lo deje en "Sin restricciones".
+        if (await auditTrackingKilled(false)) {
+          await reRaiseBatteryGuard();
+          setBattery(await getBatteryGuard());
+        }
 
         // Asegurar sesión válida ANTES de leer (igual que App.tsx). Sin esto,
         // una sesión anónima vencida hacía que la lectura devolviera vacío y
@@ -480,10 +493,45 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
   }
 
   // En Xiaomi no podemos leer la capa MIUI; el técnico confirma que ya lo dejó
-  // en "Sin restricciones" y el banner se oculta.
+  // en "Sin restricciones". Pedimos confirmación explícita (es la causa #1 de que
+  // el rastreo se caiga) y avisamos que el banner volverá si el servicio muere.
   async function handleBatteryDone() {
-    await dismissBatteryGuard();
-    setBattery(await getBatteryGuard());
+    Alert.alert(
+      '¿Ya quedó en "Sin restricciones"?',
+      'Confirma SOLO si dejaste la app en "Sin restricciones" (no "Ahorro de batería").\n\n' +
+        'Si el rastreo se cae igual, este aviso volverá a aparecer.',
+      [
+        { text: 'Volver', style: 'cancel' },
+        {
+          text: 'Sí, ya está',
+          onPress: async () => { await dismissBatteryGuard(); setBattery(await getBatteryGuard()); },
+        },
+      ],
+    );
+  }
+
+  // Abre la pantalla de "Inicio automático" del fabricante con los pasos exactos.
+  async function handleOpenAutostart() {
+    Alert.alert(
+      'Activar el inicio automático',
+      `${autostart?.steps ?? ''}\n\nSe abrirá la pantalla de tu teléfono.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Abrir',
+          onPress: async () => {
+            const ok = await openAutostartSettings();
+            if (!ok) Alert.alert('No se pudo abrir', 'Ábrela a mano: Ajustes › Batería / Permisos › Inicio automático, y activa "Localizador".');
+          },
+        },
+      ],
+    );
+  }
+
+  // El técnico confirma que ya activó el inicio automático (oculta el banner).
+  async function handleAutostartDone() {
+    await dismissAutostartGuide();
+    setAutostart(await getAutostartGuide());
   }
 
   function handleReRegister() {
@@ -637,6 +685,31 @@ export default function HomeScreen({ onReRegister }: { onReRegister?: () => void
                     <Text style={styles.permDoneText}>Ya está configurado</Text>
                   </TouchableOpacity>
                 )}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Banner de INICIO AUTOMÁTICO: en Xiaomi/Huawei/OPPO/vivo/Samsung el
+            sistema corta el rastreo en segundo plano si la app no tiene activado
+            el "Inicio automático" (sin API: solo se puede abrir la pantalla y
+            guiar). Es una configuración de una sola vez; se oculta con "Ya lo
+            activé". */}
+        {autostart?.needed && !autostart.dismissed && (
+          <View style={styles.permBanner}>
+            <WarningTriangle size={22} color="#fbbf24" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.permTitle}>ACTIVA EL "INICIO AUTOMÁTICO"</Text>
+              <Text style={styles.permMsg}>
+                {`En ${autostart.brand} el teléfono corta el rastreo en segundo plano si la app no tiene "Inicio automático".\n\n${autostart.steps}`}
+              </Text>
+              <View style={styles.permBtnRow}>
+                <TouchableOpacity style={[styles.permFixBtn, { marginTop: 0 }]} onPress={handleOpenAutostart}>
+                  <Text style={styles.permFixText}>ABRIR AJUSTES</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.permDoneBtn} onPress={handleAutostartDone}>
+                  <Text style={styles.permDoneText}>Ya lo activé</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </View>

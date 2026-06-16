@@ -14,25 +14,28 @@ import { LeaderHistory } from '@/components/leader/LeaderHistory'
 import { LeaderReports } from '@/components/leader/LeaderReports'
 import { LeaderAlerts } from '@/components/leader/LeaderAlerts'
 import { LeaderSettings } from '@/components/leader/LeaderSettings'
+import { useI18n } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 export type LeaderPanelView =
   | 'stats' | 'upload' | 'routes' | 'technicians'
   | 'campaigns'
   | 'history' | 'reports' | 'alerts' | 'settings'
   | null
 
-const PANEL_TITLES: Record<NonNullable<LeaderPanelView>, string> = {
-  stats:       'Resumen del día',
-  upload:      'Cargar rutas',
-  routes:      'Ver rutas',
-  technicians: 'Técnicos',
-  campaigns:   'Campañas',
-  history:     'Historial de viajes',
-  reports:     'Reportes',
-  alerts:      'Centro de alertas',
-  settings:    'Ajustes',
+const PANEL_TITLE_KEYS: Record<NonNullable<LeaderPanelView>, string> = {
+  stats:       'leaderPanel.title.stats',
+  upload:      'leaderPanel.title.upload',
+  routes:      'leaderPanel.title.routes',
+  technicians: 'leaderPanel.title.technicians',
+  campaigns:   'leaderPanel.title.campaigns',
+  history:     'leaderPanel.title.history',
+  reports:     'leaderPanel.title.reports',
+  alerts:      'leaderPanel.title.alerts',
+  settings:    'leaderPanel.title.settings',
 }
 
 export function LeaderPanel() {
+  const { t } = useI18n()
   const [openPanel, setOpenPanel]             = useState<LeaderPanelView>(null)
   const [userEmail, setUserEmail]             = useState('')
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
@@ -100,17 +103,18 @@ export function LeaderPanel() {
 
           <div className="flex items-center gap-1.5 bg-warning/10 border border-warning/20 text-warning text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0">
             <Users2 className="w-3 h-3" />
-            Panel de Líder
+            {t('leaderPanel.badge')}
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
             {userEmail && (
               <span className="hidden lg:block text-text-muted text-xs truncate max-w-48">{userEmail}</span>
             )}
+            <LanguageSwitcher />
             <button
               onClick={handleLogout}
               className="text-text-muted hover:text-danger transition-colors p-1.5 rounded-lg hover:bg-danger/10"
-              title="Cerrar sesión"
+              title={t('common.logout')}
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -141,7 +145,7 @@ export function LeaderPanel() {
                 <X className="w-4 h-4" />
               </button>
               <h2 className="font-semibold text-text-primary text-sm">
-                {openPanel ? PANEL_TITLES[openPanel] : ''}
+                {openPanel ? t(PANEL_TITLE_KEYS[openPanel]) : ''}
               </h2>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -180,7 +184,7 @@ export function LeaderPanel() {
                   <X className="w-4 h-4" />
                 </button>
                 <h2 className="font-semibold text-text-primary text-sm">
-                  {openPanel ? PANEL_TITLES[openPanel] : ''}
+                  {openPanel ? t(PANEL_TITLE_KEYS[openPanel]) : ''}
                 </h2>
               </div>
               {openPanel === 'history' ? (

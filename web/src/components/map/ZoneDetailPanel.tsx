@@ -10,9 +10,9 @@ import { pointInPolygon } from '@/lib/geoUtils'
 import { reverseGeocode } from '@/lib/geocoding'
 import { cn } from '@/lib/utils'
 import type { Zone } from '@/types/zones'
-import { ZONE_TYPE_LABELS } from '@/types/zones'
+import { ZONE_TYPE_LABEL_KEYS } from '@/types/zones'
 import { format, parseISO, formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface ZoneEvent {
   id:             string
@@ -51,12 +51,12 @@ const STATUS_DOT: Record<string, string> = {
   offline:  'bg-danger',
   accident: 'bg-danger animate-pulse',
 }
-const STATUS_LABEL: Record<string, string> = {
-  moving:   'En movimiento',
-  idle:     'Activo',
-  stopped:  'Detenido',
-  offline:  'Desconectado',
-  accident: '¡Accidente!',
+const STATUS_LABEL_KEY: Record<string, string> = {
+  moving:   'status.moving',
+  idle:     'status.idle',
+  stopped:  'zone.statusStopped',
+  offline:  'status.offline',
+  accident: 'zone.statusAccident',
 }
 
 interface Props {
@@ -67,6 +67,7 @@ interface Props {
 }
 
 export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
+  const { t, lang } = useI18n()
   const technicians    = useTrackingStore(s => Object.values(s.technicians))
   const [address, setAddress]             = useState<string | null>(null)
   const [addressLoading, setAddressLoading] = useState(true)
@@ -74,8 +75,8 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
   const [eventsLoading, setEventsLoading] = useState(true)
 
   const techsInside = technicians.filter(
-    t => t.lat != null && t.lng != null && t.status !== 'offline' &&
-    pointInPolygon(t.lat!, t.lng!, zone.coordinates)
+    tech => tech.lat != null && tech.lng != null && tech.status !== 'offline' &&
+    pointInPolygon(tech.lat!, tech.lng!, zone.coordinates)
   )
 
   const [cLat, cLng] = centroid(zone.coordinates)
@@ -117,7 +118,7 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
         setEvents(
           (data ?? []).map((row: any) => ({
             id:             row.id,
-            technicianName: row.technicians?.name ?? 'Técnico',
+            technicianName: row.technicians?.name ?? t('common.technician'),
             eventType:      row.event_type as 'enter' | 'exit',
             ts:             row.ts,
           }))
@@ -152,7 +153,7 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
             className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md mt-0.5 inline-block"
             style={{ background: zone.color + '22', color: zone.color }}
           >
-            {ZONE_TYPE_LABELS[zone.type]}
+            {t(ZONE_TYPE_LABEL_KEYS[zone.type])}
           </span>
           {zone.description && (
             <p className="text-xs text-text-muted mt-1 leading-relaxed line-clamp-2">{zone.description}</p>
@@ -174,7 +175,7 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
         ) : address ? (
           <p className="text-xs text-text-secondary leading-relaxed flex-1">{address}</p>
         ) : (
-          <p className="text-xs text-text-muted/50 flex-1">Dirección no disponible</p>
+          <p className="text-xs text-text-muted/50 flex-1">{t('zone.addressUnavailable')}</p>
         )}
         {area > 0.0001 && (
           <span className="text-[10px] text-text-muted flex items-center gap-1 flex-shrink-0 ml-1">
@@ -190,7 +191,7 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
       <div className="px-4 py-2.5 border-b border-border-soft">
         <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
           <Users className="w-3 h-3" />
-          Técnicos en la zona
+          {t('zone.techsInZone')}
           <span
             className={cn(
               'ml-1 text-xs font-bold px-1.5 py-0.5 rounded-full',
@@ -203,22 +204,22 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
           </span>
         </p>
         {techsInside.length === 0 ? (
-          <p className="text-xs text-text-muted/60">Ningún técnico activo dentro de esta zona ahora</p>
+          <p className="text-xs text-text-muted/60">{t('zone.noTechsInZone')}</p>
         ) : (
           <div className="space-y-1.5">
-            {techsInside.map(t => (
-              <div key={t.id} className="flex items-center gap-2 bg-base/50 rounded-lg px-2.5 py-1.5">
-                <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', STATUS_DOT[t.status] ?? 'bg-text-muted')} />
-                <span className="text-xs text-text-primary font-medium truncate flex-1">{t.name}</span>
+            {techsInside.map(tech => (
+              <div key={tech.id} className="flex items-center gap-2 bg-base/50 rounded-lg px-2.5 py-1.5">
+                <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', STATUS_DOT[tech.status] ?? 'bg-text-muted')} />
+                <span className="text-xs text-text-primary font-medium truncate flex-1">{tech.name}</span>
                 <span className={cn(
                   'text-[10px] flex-shrink-0',
-                  t.status === 'moving' ? 'text-success' : t.status === 'idle' ? 'text-warning' : 'text-text-muted',
+                  tech.status === 'moving' ? 'text-success' : tech.status === 'idle' ? 'text-warning' : 'text-text-muted',
                 )}>
-                  {STATUS_LABEL[t.status]}
+                  {t(STATUS_LABEL_KEY[tech.status] ?? 'status.offline')}
                 </span>
-                {t.lastSpeed != null && t.lastSpeed > 0.5 && (
+                {tech.lastSpeed != null && tech.lastSpeed > 0.5 && (
                   <span className="text-[10px] text-warning font-mono flex-shrink-0 ml-1">
-                    {(t.lastSpeed * 3.6).toFixed(0)} km/h
+                    {(tech.lastSpeed * 3.6).toFixed(0)} km/h
                   </span>
                 )}
               </div>
@@ -231,14 +232,14 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
       <div className="px-4 py-2.5 border-b border-border-soft">
         <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
           <Clock className="w-3 h-3" />
-          Actividad reciente
+          {t('zone.recentActivity')}
         </p>
         {eventsLoading ? (
           <div className="space-y-1.5">
             {[1, 2].map(i => <div key={i} className="h-3 bg-surface-raised rounded animate-pulse" />)}
           </div>
         ) : events.length === 0 ? (
-          <p className="text-xs text-text-muted/60">Sin registros de entradas o salidas</p>
+          <p className="text-xs text-text-muted/60">{t('zone.noEvents')}</p>
         ) : (
           <div className="space-y-1.5">
             {events.map(ev => (
@@ -251,10 +252,10 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
                   'text-[10px] flex-shrink-0 font-medium',
                   ev.eventType === 'enter' ? 'text-success' : 'text-warning',
                 )}>
-                  {ev.eventType === 'enter' ? 'Entró' : 'Salió'}
+                  {ev.eventType === 'enter' ? t('zone.entered') : t('zone.exited')}
                 </span>
                 <span className="text-[10px] text-text-muted/60 flex-shrink-0 ml-0.5">
-                  {formatDistanceToNow(parseISO(ev.ts), { addSuffix: true, locale: es })}
+                  {formatDistanceToNow(parseISO(ev.ts), { addSuffix: true, locale: getDateLocale(lang) })}
                 </span>
               </div>
             ))}
@@ -266,12 +267,12 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
       <div className="px-4 py-2 flex items-center gap-2 bg-base/20">
         <Calendar className="w-3 h-3 text-text-muted flex-shrink-0" />
         <p className="text-[10px] text-text-muted">
-          Creada el {format(parseISO(zone.createdAt), "d 'de' MMMM yyyy", { locale: es })}
+          {t('zone.createdOn', { date: format(parseISO(zone.createdAt), "d 'de' MMMM yyyy", { locale: getDateLocale(lang) }) })}
         </p>
         {zone.companyId && (
           <span className="ml-auto flex items-center gap-1 text-[10px] text-text-muted/60">
             <Smartphone className="w-2.5 h-2.5" />
-            Empresa
+            {t('zone.company')}
           </span>
         )}
       </div>

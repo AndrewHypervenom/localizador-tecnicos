@@ -3,7 +3,7 @@ import { RefreshCw, Filter } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 
 interface LogEntry {
   id: string
@@ -16,12 +16,12 @@ interface LogEntry {
   created_at: string
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  create_user: 'Crear usuario',
-  delete_user: 'Eliminar usuario',
-  change_role: 'Cambiar rol',
-  register_technician: 'Registrar técnico',
-  login: 'Inicio de sesión',
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  create_user: 'adminLog.action.create_user',
+  delete_user: 'adminLog.action.delete_user',
+  change_role: 'adminLog.action.change_role',
+  register_technician: 'adminLog.action.register_technician',
+  login: 'adminLog.action.login',
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -32,8 +32,9 @@ const ACTION_COLORS: Record<string, string> = {
   login:                'bg-text-muted/10 text-text-muted border-border',
 }
 
-function getActionLabel(action: string) {
-  return ACTION_LABELS[action] ?? action
+function getActionLabel(t: TFunc, action: string) {
+  const key = ACTION_LABEL_KEYS[action]
+  return key ? t(key) : action
 }
 
 function getActionColor(action: string) {
@@ -52,6 +53,7 @@ function getDetails(entry: LogEntry): string {
 const ALL_ACTIONS = ['create_user', 'delete_user', 'change_role', 'register_technician', 'login']
 
 export function ActivityLog() {
+  const { t, lang } = useI18n()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +66,7 @@ export function ActivityLog() {
       const { data } = await api.get<LogEntry[]>('/api/admin/logs')
       setLogs(data)
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al cargar registros')
+      setError(err?.response?.data?.error ?? t('adminLog.loadError'))
     } finally {
       setLoading(false)
     }
@@ -79,7 +81,7 @@ export function ActivityLog() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-text-primary font-semibold text-sm">Registro de Actividad</h2>
+        <h2 className="text-text-primary font-semibold text-sm">{t('adminLog.title')}</h2>
         <div className="flex items-center gap-1.5 ml-auto">
           <Filter className="w-3.5 h-3.5 text-text-muted" />
           <select
@@ -87,14 +89,14 @@ export function ActivityLog() {
             onChange={e => setFilterAction(e.target.value)}
             className="bg-surface-raised border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary"
           >
-            <option value="all">Todas las acciones</option>
+            <option value="all">{t('adminLog.allActions')}</option>
             {ALL_ACTIONS.map(a => (
-              <option key={a} value={a}>{getActionLabel(a)}</option>
+              <option key={a} value={a}>{getActionLabel(t, a)}</option>
             ))}
           </select>
           <button
             onClick={load}
-            title="Actualizar"
+            title={t('common.refresh')}
             className="text-text-muted hover:text-text-primary transition-colors ml-1"
           >
             <RefreshCw className="w-4 h-4" />
@@ -112,17 +114,17 @@ export function ActivityLog() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-text-muted text-sm">
-          No hay registros de actividad
+          {t('adminLog.empty')}
         </div>
       ) : (
         <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft">
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Fecha y hora</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Usuario</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Acción</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Detalle</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colDateTime')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colUser')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colAction')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colDetail')}</th>
               </tr>
             </thead>
             <tbody>
@@ -135,7 +137,7 @@ export function ActivityLog() {
                   )}
                 >
                   <td className="px-4 py-3 text-text-muted text-xs whitespace-nowrap">
-                    {format(parseISO(entry.created_at), "dd MMM yyyy HH:mm", { locale: es })}
+                    {format(parseISO(entry.created_at), "dd MMM yyyy HH:mm", { locale: getDateLocale(lang) })}
                   </td>
                   <td className="px-4 py-3 text-text-secondary text-xs">
                     {entry.user_email || '—'}
@@ -145,7 +147,7 @@ export function ActivityLog() {
                       'text-xs px-2 py-0.5 rounded-full border font-medium',
                       getActionColor(entry.action),
                     )}>
-                      {getActionLabel(entry.action)}
+                      {getActionLabel(t, entry.action)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-text-muted text-xs">
@@ -157,7 +159,7 @@ export function ActivityLog() {
           </table>
           <div className="px-4 py-2 border-t border-border-soft">
             <p className="text-text-muted text-xs">
-              Mostrando {filtered.length} de {logs.length} entradas (máximo 200)
+              {t('adminLog.showing', { filtered: filtered.length, total: logs.length })}
             </p>
           </div>
         </div>

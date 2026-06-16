@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { cn } from '@/lib/utils'
 import { format, subDays, addDays } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import {
   exportLeaderPdf, exportLeaderExcel, aggregateHours, hm, DEVICE_TAMPER_TYPES,
   type HoursDaily, type HoursAgg, type RouteStat, type ReportMeta, type TrackStat,
@@ -57,6 +57,8 @@ function SummaryCard({ icon: Icon, label, value, sub, color }: {
 }
 
 export function LeaderReports() {
+  const { t: tr, lang } = useI18n()
+  const es = getDateLocale(lang)
   const todayStr   = format(new Date(), 'yyyy-MM-dd')
   const defaultFrom = format(subDays(new Date(), 6), 'yyyy-MM-dd')
 
@@ -245,7 +247,7 @@ export function LeaderReports() {
           if (!s) {
             const info = nameMap.get(id)
             s = {
-              techId: id, name: info?.name ?? 'Técnico', company: info?.company ?? null,
+              techId: id, name: info?.name ?? tr('common.technician'), company: info?.company ?? null,
               km: 0, trips: 0, durationMin: 0, avgSpeed: 0, maxSpeed: 0,
               zoneEnters: 0, zoneExits: 0, incidents: 0, deviceTampers: 0,
             }
@@ -285,7 +287,7 @@ export function LeaderReports() {
           const info = nameMap.get(m.technician_id)
           devRows.push({
             techId:  m.technician_id,
-            name:    info?.name ?? 'Técnico',
+            name:    info?.name ?? tr('common.technician'),
             company: info?.company ?? null,
             ts:      m.ts,
             type:    m.event_type,
@@ -314,7 +316,7 @@ export function LeaderReports() {
   }
 
   function exportCSV() {
-    const headers = ['Técnico', 'Asignadas', 'Completadas', 'En progreso', 'Fallidas', '%']
+    const headers = [tr('common.technician'), tr('leaderReports.assigned'), tr('leaderReports.completed'), tr('leaderReports.inProgress'), tr('leaderReports.failed'), '%']
     const sorted = [...rows].sort((a, b) => pct(b.completed, b.assigned) - pct(a.completed, a.assigned))
     const csvRows = [
       headers.join(','),
@@ -337,8 +339,8 @@ export function LeaderReports() {
   }
 
   const companyName = selectedCompanyId
-    ? (companies.find(c => c.id === selectedCompanyId)?.name ?? 'Empresa')
-    : 'Todas las empresas'
+    ? (companies.find(c => c.id === selectedCompanyId)?.name ?? tr('leaderReports.companyFallback'))
+    : tr('leaderReports.allCompanies')
   const reportMeta: ReportMeta = { from: dateFrom, to: dateTo, companyName }
 
   function handlePdf()   { exportLeaderPdf(reportMeta, track, rows as RouteStat[], hoursAgg, deviceEvents) }
@@ -386,12 +388,12 @@ export function LeaderReports() {
       {/* Header + filters */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <h2 className="text-text-primary font-semibold text-base">Reportes</h2>
+          <h2 className="text-text-primary font-semibold text-base">{tr('dashboard.reports')}</h2>
           <p className="text-text-muted text-xs mt-0.5">{fromLabel} — {toLabel}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap ml-auto">
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-text-muted">Desde</label>
+            <label className="text-xs text-text-muted">{tr('leaderReports.from')}</label>
             <input
               type="date"
               value={dateFrom}
@@ -401,7 +403,7 @@ export function LeaderReports() {
             />
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-text-muted">Hasta</label>
+            <label className="text-xs text-text-muted">{tr('leaderReports.to')}</label>
             <input
               type="date"
               value={dateTo}
@@ -417,14 +419,14 @@ export function LeaderReports() {
               onChange={e => setSelectedCompanyId(e.target.value)}
               className="bg-surface-raised border border-border rounded-xl px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary transition-colors"
             >
-              <option value="">Todas las empresas</option>
+              <option value="">{tr('leaderReports.allCompanies')}</option>
               {companies.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           )}
           <button onClick={loadReport} disabled={loading}
-            title="Actualizar"
+            title={tr('common.refresh')}
             className="p-1.5 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-surface-raised disabled:opacity-50">
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
           </button>
@@ -462,35 +464,35 @@ export function LeaderReports() {
         <div className="space-y-3">
           <div>
             <h3 className="text-text-primary font-semibold text-base flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-primary" /> Tracking de técnicos
+              <Navigation className="w-4 h-4 text-primary" /> {tr('leaderReports.tracking')}
             </h3>
-            <p className="text-text-muted text-xs mt-0.5">Distancias, viajes, entradas/salidas de zonas e incidentes en el período.</p>
+            <p className="text-text-muted text-xs mt-0.5">{tr('leaderReports.trackingDesc')}</p>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-            <SummaryCard icon={Navigation} label="Km recorridos"  value={`${trackTotals.km.toFixed(1)} km`} color="bg-primary/10 text-primary" />
-            <SummaryCard icon={Route}      label="Viajes"          value={trackTotals.trips} color="bg-accent/10 text-accent" />
-            <SummaryCard icon={MapPin}     label="Entradas a zona" value={trackTotals.enters} sub={`${trackTotals.exits} salidas`} color="bg-success/10 text-success" />
-            <SummaryCard icon={MapPin}     label="Salidas de zona" value={trackTotals.exits} color="bg-warning/10 text-warning" />
-            <SummaryCard icon={AlertTriangle} label="Incidentes"   value={trackTotals.inc} color={trackTotals.inc > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
-            <SummaryCard icon={ShieldAlert} label="Sabotajes"      value={trackTotals.tampers} sub="al rastreo" color={trackTotals.tampers > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
+            <SummaryCard icon={Navigation} label={tr('leaderReports.kmTraveled')}  value={`${trackTotals.km.toFixed(1)} km`} color="bg-primary/10 text-primary" />
+            <SummaryCard icon={Route}      label={tr('reports.trips')}          value={trackTotals.trips} color="bg-accent/10 text-accent" />
+            <SummaryCard icon={MapPin}     label={tr('leaderReports.zoneEnters')} value={trackTotals.enters} sub={tr('leaderReports.exitsSub', { n: trackTotals.exits })} color="bg-success/10 text-success" />
+            <SummaryCard icon={MapPin}     label={tr('leaderReports.zoneExits')} value={trackTotals.exits} color="bg-warning/10 text-warning" />
+            <SummaryCard icon={AlertTriangle} label={tr('reports.incidents')}   value={trackTotals.inc} color={trackTotals.inc > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
+            <SummaryCard icon={ShieldAlert} label={tr('leaderReports.tampers')}      value={trackTotals.tampers} sub={tr('leaderReports.tampersSub')} color={trackTotals.tampers > 0 ? 'bg-danger/10 text-danger' : 'bg-surface-raised text-text-muted'} />
           </div>
 
           <div className="bg-surface border border-border-soft rounded-2xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border-soft bg-surface-raised">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Técnico</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Km</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Viajes</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Tiempo en ruta</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Vel. prom.</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Vel. máx.</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Entradas</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Salidas</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Incidentes</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Sabotajes</th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider" title="Drenaje de batería del equipo por hora, sin cargar, mientras rastreaba">Batería %/h</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('common.technician')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('reports.km')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('reports.trips')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colTimeOnRoute')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('reports.col.avgSpeed')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('reports.col.maxSpeed')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colEnters')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colExits')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('reports.incidents')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.tampers')}</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider" title={tr('leaderReports.colBatteryTitle')}>{tr('leaderReports.colBattery')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
@@ -528,33 +530,33 @@ export function LeaderReports() {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <SummaryCard
             icon={TrendingUp}
-            label="Asignadas"
+            label={tr('leaderReports.assigned')}
             value={totals.assigned}
             color="bg-primary/10 text-primary"
           />
           <SummaryCard
             icon={CheckCircle2}
-            label="Completadas"
+            label={tr('leaderReports.completed')}
             value={totals.completed}
             color="bg-success/10 text-success"
           />
           <SummaryCard
             icon={Clock}
-            label="En progreso"
+            label={tr('leaderReports.inProgress')}
             value={totals.in_progress}
             color="bg-warning/10 text-warning"
           />
           <SummaryCard
             icon={XCircle}
-            label="Fallidas"
+            label={tr('leaderReports.failed')}
             value={totals.failed}
             color="bg-danger/10 text-danger"
           />
           <SummaryCard
             icon={AlertTriangle}
-            label="Completado"
+            label={tr('leaderReports.completion')}
             value={completionPct !== null ? `${completionPct}%` : '—'}
-            sub={totals.assigned > 0 ? `${totals.completed} de ${totals.assigned}` : undefined}
+            sub={totals.assigned > 0 ? tr('leaderReports.ofTotal', { done: totals.completed, total: totals.assigned }) : undefined}
             color={
               completionPct !== null && completionPct >= 80
                 ? 'bg-success/10 text-success'
@@ -574,19 +576,19 @@ export function LeaderReports() {
       ) : sortedRows.length === 0 ? (
         <div className="bg-surface border border-border-soft rounded-2xl p-12 text-center">
           <TrendingUp className="w-10 h-10 mx-auto mb-3 text-text-muted/30" />
-          <p className="text-text-primary font-medium">Sin datos para el período seleccionado</p>
-          <p className="text-text-muted text-xs mt-1">Ajusta el rango de fechas o la empresa.</p>
+          <p className="text-text-primary font-medium">{tr('reports.noDataPeriod')}</p>
+          <p className="text-text-muted text-xs mt-1">{tr('leaderReports.adjustRange')}</p>
         </div>
       ) : (
         <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft bg-surface-raised">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Técnico</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Asignadas</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Completadas</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">En progreso</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Fallidas</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('common.technician')}</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.assigned')}</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.completed')}</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.inProgress')}</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.failed')}</th>
                 <th
                   className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary transition-colors select-none"
                   onClick={() => setSortDesc(v => !v)}
@@ -636,10 +638,10 @@ export function LeaderReports() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-text-primary font-semibold text-base flex items-center gap-2">
-                <Timer className="w-4 h-4 text-primary" /> Horas trabajadas
+                <Timer className="w-4 h-4 text-primary" /> {tr('leaderReports.workedHours')}
               </h3>
               <p className="text-text-muted text-xs mt-0.5">
-                Tiempo activo según GPS. <span className="text-warning">Extra</span> = fuera del horario laboral de la empresa o en fin de semana.
+                {tr('leaderReports.hoursDescA')}<span className="text-warning">{tr('leaderReports.hoursExtra')}</span>{tr('leaderReports.hoursDescB')}
               </p>
             </div>
           </div>
@@ -648,37 +650,34 @@ export function LeaderReports() {
             <div className="bg-warning/10 border border-warning/30 rounded-2xl p-4 text-sm text-warning flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>
-                El cálculo de horas requiere una migración en la base de datos
-                (<code className="font-mono text-xs">leader_work_hours</code>). Ejecuta
-                <code className="font-mono text-xs"> supabase/migrations/20260603_leader_work_hours.sql</code> en el SQL Editor para activarlo.
-                El resto del reporte y los exports funcionan igual.
+                {tr('leaderReports.migrationWarnA')}<code className="font-mono text-xs">leader_work_hours</code>{tr('leaderReports.migrationWarnB')}<code className="font-mono text-xs">supabase/migrations/20260603_leader_work_hours.sql</code>{tr('leaderReports.migrationWarnC')}
               </span>
             </div>
           ) : hoursAgg.length === 0 ? (
             <div className="bg-surface border border-border-soft rounded-2xl p-8 text-center">
               <Hourglass className="w-8 h-8 mx-auto mb-2 text-text-muted/30" />
-              <p className="text-text-secondary text-sm">Sin horas registradas en el período.</p>
+              <p className="text-text-secondary text-sm">{tr('leaderReports.noHours')}</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <SummaryCard icon={Timer}      label="Horas trabajadas" value={hm(hoursTotals.worked)}   color="bg-primary/10 text-primary" />
-                <SummaryCard icon={Clock}      label="Horas regulares"  value={hm(hoursTotals.regular)}  color="bg-success/10 text-success" />
-                <SummaryCard icon={Hourglass}  label="Horas extra"      value={hm(hoursTotals.overtime)} color="bg-warning/10 text-warning" />
-                <SummaryCard icon={AlertTriangle} label="Técnicos con extra" value={hoursTotals.withOt} sub={`de ${hoursAgg.length}`} color="bg-warning/10 text-warning" />
+                <SummaryCard icon={Timer}      label={tr('leaderReports.workedHours')} value={hm(hoursTotals.worked)}   color="bg-primary/10 text-primary" />
+                <SummaryCard icon={Clock}      label={tr('leaderReports.regularHours')}  value={hm(hoursTotals.regular)}  color="bg-success/10 text-success" />
+                <SummaryCard icon={Hourglass}  label={tr('leaderReports.overtimeHours')}      value={hm(hoursTotals.overtime)} color="bg-warning/10 text-warning" />
+                <SummaryCard icon={AlertTriangle} label={tr('leaderReports.techsWithOt')} value={hoursTotals.withOt} sub={tr('leaderReports.ofN', { n: hoursAgg.length })} color="bg-warning/10 text-warning" />
               </div>
 
               <div className="bg-surface border border-border-soft rounded-2xl overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border-soft bg-surface-raised">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">Técnico</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Días</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Trabajadas</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Regulares</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Extra</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Fin de semana</th>
-                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">Prom. h/día</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('common.technician')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colDays')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colWorked')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colRegular')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colExtra')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colWeekend')}</th>
+                      <th className="px-3 py-3 text-center text-xs font-semibold text-text-muted uppercase tracking-wider">{tr('leaderReports.colAvgPerDay')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-soft">

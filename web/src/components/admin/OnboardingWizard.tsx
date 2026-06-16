@@ -12,11 +12,12 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
+import { useI18n } from '@/lib/i18n/i18n'
 
 const STATUS_CFG = {
-  active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },
-  paused:    { label: 'Pausado',    cls: 'bg-warning/10 text-warning border-warning/20' },
-  completed: { label: 'Finalizado', cls: 'bg-text-muted/10 text-text-muted border-border' },
+  active:    { labelKey: 'adminProjects.status.active',    cls: 'bg-success/10 text-success border-success/20' },
+  paused:    { labelKey: 'adminProjects.status.paused',    cls: 'bg-warning/10 text-warning border-warning/20' },
+  completed: { labelKey: 'adminProjects.status.completed', cls: 'bg-text-muted/10 text-text-muted border-border' },
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -53,13 +54,14 @@ const inp = cn(
 // ── Step indicator ────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, label: 'Cliente',  Icon: Building2    },
-  { id: 2, label: 'Proyecto', Icon: FolderOpen   },
-  { id: 3, label: 'Técnico',  Icon: UserPlus     },
-  { id: 4, label: 'Listo',    Icon: CheckCircle2 },
+  { id: 1, labelKey: 'wizard.step.client',     Icon: Building2    },
+  { id: 2, labelKey: 'wizard.step.project',    Icon: FolderOpen   },
+  { id: 3, labelKey: 'wizard.step.technician', Icon: UserPlus     },
+  { id: 4, labelKey: 'wizard.step.done',       Icon: CheckCircle2 },
 ]
 
 function StepIndicator({ current }: { current: number }) {
+  const { t } = useI18n()
   return (
     <div className="flex items-center justify-center gap-0 px-6 py-4 border-b border-border-soft">
       {STEPS.map((s, i) => {
@@ -83,7 +85,7 @@ function StepIndicator({ current }: { current: number }) {
               <span className={cn(
                 'text-xs font-medium transition-colors',
                 active ? 'text-primary' : done ? 'text-text-secondary' : 'text-text-muted'
-              )}>{s.label}</span>
+              )}>{t(s.labelKey)}</span>
             </div>
             {i < STEPS.length - 1 && (
               <div className={cn(
@@ -114,14 +116,15 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
   form: { name: string; country: string; notes: string }
   setForm: (f: any) => void
 }) {
+  const { t } = useI18n()
   const [search, setSearch] = useState('')
   const filtered = clients.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-text-primary">¿Para qué empresa trabajan?</h2>
-        <p className="text-sm text-text-muted mt-0.5">Selecciona un cliente existente o crea uno nuevo</p>
+        <h2 className="text-lg font-bold text-text-primary">{t('wizard.clientQ')}</h2>
+        <p className="text-sm text-text-muted mt-0.5">{t('wizard.clientSub')}</p>
       </div>
 
       {loading ? (
@@ -134,7 +137,7 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                 <input
                   type="text" value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar cliente…"
+                  placeholder={t('wizard.searchClient')}
                   className="w-full bg-base border border-border-soft rounded-xl pl-8 pr-3 py-2 text-sm placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
@@ -160,7 +163,7 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
                         )}
                         {c.projects && (
                           <p className="text-xs text-text-muted/70 mt-1">
-                            {c.projects.length} {c.projects.length === 1 ? 'proyecto' : 'proyectos'}
+                            {t(c.projects.length === 1 ? 'adminProjects.projectsCount_one' : 'adminProjects.projectsCount_other', { n: c.projects.length })}
                           </p>
                         )}
                       </div>
@@ -174,7 +177,7 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
                   </button>
                 ))}
                 {filtered.length === 0 && (
-                  <p className="col-span-2 text-center text-xs text-text-muted py-4">Sin resultados</p>
+                  <p className="col-span-2 text-center text-xs text-text-muted py-4">{t('wizard.noResults')}</p>
                 )}
               </div>
             </>
@@ -198,7 +201,7 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
               )}>
                 <Plus className={cn('w-3.5 h-3.5', showForm ? 'text-primary' : 'text-text-muted')} />
               </div>
-              {clients.length === 0 ? 'Crear primer cliente' : 'Crear nuevo cliente'}
+              {clients.length === 0 ? t('wizard.createFirstClient') : t('wizard.createNewClient')}
             </button>
 
             <AnimatePresence>
@@ -213,25 +216,25 @@ function StepClient({ clients, loading, selectedId, onSelect, showForm, onToggle
                   <div className="px-4 pb-4 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
-                        <label className="block text-xs text-text-muted font-medium mb-1">Nombre de la empresa *</label>
+                        <label className="block text-xs text-text-muted font-medium mb-1">{t('onboarding.companyName')}</label>
                         <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                          placeholder="Empresa ABC" className={inp} autoFocus />
+                          placeholder={t('campaigns.companyPlaceholder')} className={inp} autoFocus />
                       </div>
                       <div className="col-span-2 sm:col-span-1">
-                        <label className="block text-xs text-text-muted font-medium mb-1">País</label>
+                        <label className="block text-xs text-text-muted font-medium mb-1">{t('techForm.country')}</label>
                         <div className="relative">
                           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                           <select value={form.country} onChange={e => setForm({ ...form, country: e.target.value })}
                             className={cn(inp, 'pl-8 appearance-none cursor-pointer')}>
-                            <option value="">Sin especificar</option>
+                            <option value="">{t('editTech.unspecified')}</option>
                             {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
                       </div>
                       <div className="col-span-2 sm:col-span-1">
-                        <label className="block text-xs text-text-muted font-medium mb-1">Notas</label>
+                        <label className="block text-xs text-text-muted font-medium mb-1">{t('techForm.sectionNotes')}</label>
                         <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                          placeholder="Información adicional…" className={inp} />
+                          placeholder={t('techForm.notesPlaceholderShort')} className={inp} />
                       </div>
                     </div>
                   </div>
@@ -253,10 +256,11 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
   form: { name: string; description: string; status: 'active' | 'paused' | 'completed' }
   setForm: (f: any) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-text-primary">¿En qué proyecto?</h2>
+        <h2 className="text-lg font-bold text-text-primary">{t('wizard.projectQ')}</h2>
         <p className="text-sm text-text-muted mt-0.5 flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5 text-primary" />
           <span className="text-primary font-medium">{clientName}</span>
@@ -290,12 +294,12 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
                         )}
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className={cn('text-xs px-2 py-0.5 rounded-full border font-medium', cfg.cls)}>
-                            {cfg.label}
+                            {t(cfg.labelKey)}
                           </span>
                           {p.technicians && (
                             <span className="text-xs text-text-muted flex items-center gap-1">
                               <Users className="w-3 h-3" />
-                              {p.technicians.length} {p.technicians.length === 1 ? 'técnico' : 'técnicos'}
+                              {t(p.technicians.length === 1 ? 'wizard.techCount_one' : 'wizard.techCount_other', { n: p.technicians.length })}
                             </span>
                           )}
                         </div>
@@ -327,7 +331,7 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
               <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center', showForm ? 'bg-primary/20' : 'bg-surface-raised')}>
                 <Plus className={cn('w-3.5 h-3.5', showForm ? 'text-primary' : 'text-text-muted')} />
               </div>
-              {projects.length === 0 ? 'Crear primer proyecto' : 'Crear nuevo proyecto'}
+              {projects.length === 0 ? t('wizard.createFirstProject') : t('wizard.createNewProject')}
             </button>
 
             <AnimatePresence>
@@ -336,18 +340,18 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
                   exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                   <div className="px-4 pb-4 space-y-3">
                     <div>
-                      <label className="block text-xs text-text-muted font-medium mb-1">Nombre del proyecto *</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('wizard.projectName')}</label>
                       <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                        placeholder="Instalación Zona Norte" className={inp} autoFocus />
+                        placeholder={t('campaigns.campaignPlaceholder')} className={inp} autoFocus />
                     </div>
                     <div>
-                      <label className="block text-xs text-text-muted font-medium mb-1">Descripción</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('zonesPage.descLabel')}</label>
                       <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                        placeholder="Detalles adicionales del proyecto…" rows={2}
+                        placeholder={t('wizard.projectDescPlaceholder')} rows={2}
                         className={cn(inp, 'resize-none leading-relaxed')} />
                     </div>
                     <div>
-                      <label className="block text-xs text-text-muted font-medium mb-1">Estado inicial</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('wizard.initialStatus')}</label>
                       <div className="flex gap-2">
                         {(Object.entries(STATUS_CFG) as [string, typeof STATUS_CFG['active']][]).map(([key, cfg]) => (
                           <button
@@ -359,7 +363,7 @@ function StepProject({ projects, loading, selectedId, clientName, onSelect, show
                               form.status === key ? cfg.cls + ' ring-1 ring-offset-0' : 'border-border-soft text-text-muted hover:border-border'
                             )}
                           >
-                            {cfg.label}
+                            {t(cfg.labelKey)}
                           </button>
                         ))}
                       </div>
@@ -383,13 +387,14 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
   form: { name: string; phone: string; country: string; city: string; shiftStart: string; shiftEnd: string }; setForm: (f: any) => void
   clientCountry?: string | null
 }) {
+  const { t } = useI18n()
   const [search, setSearch] = useState('')
-  const filtered = techs.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
+  const filtered = techs.filter(tch => tch.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-text-primary">¿Quién trabajará aquí?</h2>
+        <h2 className="text-lg font-bold text-text-primary">{t('wizard.techQ')}</h2>
         <p className="text-sm text-text-muted mt-0.5 flex items-center gap-1.5">
           <FolderOpen className="w-3.5 h-3.5 text-primary" />
           <span className="text-primary font-medium">{projectName}</span>
@@ -405,14 +410,14 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                 <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Buscar técnico…"
+                  placeholder={t('wizard.searchTech')}
                   className="w-full bg-base border border-border-soft rounded-xl pl-8 pr-3 py-2 text-sm placeholder:text-text-muted focus:outline-none focus:border-primary transition-colors" />
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {filtered.map(t => {
-                  const sel = selectedIds.has(t.id)
+                {filtered.map(tch => {
+                  const sel = selectedIds.has(tch.id)
                   return (
-                    <button key={t.id} onClick={() => onToggle(t.id)}
+                    <button key={tch.id} onClick={() => onToggle(tch.id)}
                       className={cn(
                         'w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all text-left',
                         sel ? 'border-primary bg-primary/5' : 'border-border-soft bg-base hover:border-primary/40 hover:bg-surface'
@@ -425,17 +430,17 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                         {sel && <Check className="w-3 h-3 text-base" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-text-primary truncate">{t.name}</p>
+                        <p className="text-sm font-medium text-text-primary truncate">{tch.name}</p>
                         <p className="text-xs text-text-muted truncate">
-                          {t.phone ?? ''}
-                          {t.project && <span className="ml-1 text-warning">· actualmente en {t.project.name}</span>}
+                          {tch.phone ?? ''}
+                          {tch.project && <span className="ml-1 text-warning">{t('wizard.currentlyIn', { project: tch.project.name })}</span>}
                         </p>
                       </div>
                     </button>
                   )
                 })}
                 {filtered.length === 0 && (
-                  <p className="text-center text-xs text-text-muted py-4">Sin resultados</p>
+                  <p className="text-center text-xs text-text-muted py-4">{t('wizard.noResults')}</p>
                 )}
               </div>
             </>
@@ -454,7 +459,7 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
               <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center', showForm ? 'bg-primary/20' : 'bg-surface-raised')}>
                 <UserPlus className={cn('w-3.5 h-3.5', showForm ? 'text-primary' : 'text-text-muted')} />
               </div>
-              {techs.length === 0 ? 'Crear primer técnico' : 'Crear nuevo técnico'}
+              {techs.length === 0 ? t('wizard.createFirstTech') : t('wizard.createNewTech')}
             </button>
 
             <AnimatePresence>
@@ -463,18 +468,18 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                   exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                   <div className="px-4 pb-4 grid grid-cols-2 gap-3">
                     <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs text-text-muted font-medium mb-1">Nombre completo *</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('wizard.fullName')}</label>
                       <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                        placeholder="Carlos Ramírez" className={inp} autoFocus />
+                        placeholder={t('wizard.namePlaceholder')} className={inp} autoFocus />
                     </div>
                     <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs text-text-muted font-medium mb-1">Teléfono</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('techForm.phone')}</label>
                       <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                        placeholder="+504 9999-0001" className={inp} />
+                        placeholder={t('wizard.phonePlaceholder')} className={inp} />
                     </div>
                     {/* País y ciudad del técnico */}
                     <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs text-text-muted font-medium mb-1">País</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('techForm.country')}</label>
                       <div className="relative">
                         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                         <select
@@ -486,13 +491,13 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                           }}
                           className={cn(inp, 'pl-8 appearance-none cursor-pointer')}
                         >
-                          <option value="">Sin especificar</option>
+                          <option value="">{t('editTech.unspecified')}</option>
                           {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
                     <div className="col-span-2 sm:col-span-1">
-                      <label className="block text-xs text-text-muted font-medium mb-1">Ciudad</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1">{t('techForm.city')}</label>
                       <div className="relative">
                         <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                         <select
@@ -501,20 +506,20 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
                           disabled={!form.country}
                           className={cn(inp, 'pl-8 appearance-none cursor-pointer', !form.country && 'opacity-40 cursor-not-allowed')}
                         >
-                          <option value="">{form.country ? 'Seleccionar ciudad' : 'Selecciona país primero'}</option>
+                          <option value="">{form.country ? t('techForm.selectCity') : t('techForm.selectCountryFirst')}</option>
                           {(CITIES_BY_COUNTRY[form.country] ?? []).map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
                     </div>
                     {/* Horario */}
                     <div className="col-span-2">
-                      <label className="block text-xs text-text-muted font-medium mb-1.5">Horario de trabajo</label>
+                      <label className="block text-xs text-text-muted font-medium mb-1.5">{t('techForm.workSchedule')}</label>
                       <div className="flex items-center gap-2">
                         <TimeSelect value={form.shiftStart} onChange={v => setForm({ ...form, shiftStart: v })}
-                          placeholder="Inicio" className="flex-1" />
-                        <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
+                          placeholder={t('techForm.shiftStart')} className="flex-1" />
+                        <span className="text-text-muted text-xs font-medium flex-shrink-0">{t('techForm.until')}</span>
                         <TimeSelect value={form.shiftEnd} onChange={v => setForm({ ...form, shiftEnd: v })}
-                          placeholder="Fin" className="flex-1" />
+                          placeholder={t('techForm.shiftEnd')} className="flex-1" />
                       </div>
                     </div>
                   </div>
@@ -526,9 +531,9 @@ function StepTechnician({ techs, loading, selectedIds, onToggle, projectName, sh
           {(selectedIds.size > 0 || (showForm && form.name.trim())) && (
             <p className="text-xs text-text-muted flex items-center gap-1">
               <Check className="w-3 h-3 text-success" />
-              {selectedIds.size > 0 && `${selectedIds.size} técnico${selectedIds.size > 1 ? 's' : ''} seleccionado${selectedIds.size > 1 ? 's' : ''}`}
+              {selectedIds.size > 0 && t(selectedIds.size === 1 ? 'wizard.selectedCount_one' : 'wizard.selectedCount_other', { n: selectedIds.size })}
               {selectedIds.size > 0 && showForm && form.name.trim() && ' · '}
-              {showForm && form.name.trim() && '1 nuevo a crear'}
+              {showForm && form.name.trim() && t('wizard.oneNewToCreate')}
             </p>
           )}
         </>
@@ -544,6 +549,7 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
   newTechName: string | null; qrToken: string | null
   onAddAnother: () => void; onFinish: () => void
 }) {
+  const { t } = useI18n()
   const qrValue = qrToken ? `localizador:register:${qrToken}` : ''
   const total = assignedCount + (newTechName ? 1 : 0)
 
@@ -555,8 +561,8 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
           <CheckCircle2 className="w-5 h-5 text-success" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-text-primary">¡Todo listo!</h2>
-          <p className="text-sm text-text-muted">La configuración se completó correctamente</p>
+          <h2 className="text-lg font-bold text-text-primary">{t('onboarding.allReady')}</h2>
+          <p className="text-sm text-text-muted">{t('wizard.setupComplete')}</p>
         </div>
       </div>
 
@@ -575,10 +581,10 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
           {total > 0 ? (
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />
-              {total} técnico{total > 1 ? 's' : ''} asignado{total > 1 ? 's' : ''}
+              {t(total === 1 ? 'wizard.assignedCount_one' : 'wizard.assignedCount_other', { n: total })}
             </span>
           ) : (
-            <span>Sin técnicos aún</span>
+            <span>{t('wizard.noTechsYet')}</span>
           )}
         </div>
       </div>
@@ -586,13 +592,13 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
       {/* QR for new technician */}
       {qrToken && newTechName && (
         <div className="bg-surface border border-border-soft rounded-xl p-4 flex flex-col items-center gap-3">
-          <p className="text-sm font-semibold text-text-primary">QR de registro — {newTechName}</p>
+          <p className="text-sm font-semibold text-text-primary">{t('wizard.qrTitle', { name: newTechName })}</p>
           <div className="bg-white p-3 rounded-xl shadow-inner">
             <QRCodeSVG value={qrValue} size={160} level="M" bgColor="#ffffff" fgColor="#0f172a" />
           </div>
           <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-xl px-3 py-2 text-xs text-success">
             <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-            Válido 24h · Un solo uso · El técnico lo escanea con la app
+            {t('wizard.qrValid')}
           </div>
         </div>
       )}
@@ -601,12 +607,12 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
         <button onClick={onAddAnother}
           className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
           <UserPlus className="w-4 h-4" />
-          Añadir otro técnico
+          {t('wizard.addAnother')}
         </button>
         <button onClick={onFinish}
           className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2">
           <Check className="w-4 h-4" />
-          Finalizar
+          {t('zonesPage.finish')}
         </button>
       </div>
     </div>
@@ -616,6 +622,7 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
 // ── Main Wizard ───────────────────────────────────────────────────────────────
 
 export function OnboardingWizard({ open, onOpenChange, onComplete, initialClientId, initialProjectId }: Props) {
+  const { t } = useI18n()
   const [step, setStep]       = useState(1)
   const [direction, setDir]   = useState(1)
   const [saving, setSaving]   = useState(false)
@@ -725,7 +732,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
       if (step === 1) {
         let clientId = selectedClientId
         if (showClientForm) {
-          if (!clientForm.name.trim()) { setError('El nombre del cliente es obligatorio'); setSaving(false); return }
+          if (!clientForm.name.trim()) { setError(t('wizard.errClientName')); setSaving(false); return }
           const { data, error: err } = await supabase
             .from('clients')
             .insert({ name: clientForm.name.trim(), country: clientForm.country || null, notes: clientForm.notes.trim() || null })
@@ -737,13 +744,13 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
           setShowClientForm(false)
           setClientForm({ name: '', country: '', notes: '' })
         }
-        if (!clientId) { setError('Selecciona o crea un cliente'); setSaving(false); return }
+        if (!clientId) { setError(t('wizard.errSelectClient')); setSaving(false); return }
         go(2, 1)
       }
       else if (step === 2) {
         let projectId = selectedProjectId
         if (showProjectForm) {
-          if (!projectForm.name.trim()) { setError('El nombre del proyecto es obligatorio'); setSaving(false); return }
+          if (!projectForm.name.trim()) { setError(t('wizard.errProjectName')); setSaving(false); return }
           const { data, error: err } = await supabase
             .from('projects')
             .insert({ client_id: selectedClientId!, name: projectForm.name.trim(), description: projectForm.description.trim() || null, status: projectForm.status })
@@ -754,13 +761,13 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
           setShowProjectForm(false)
           setProjectForm({ name: '', description: '', status: 'active' })
         }
-        if (!projectId) { setError('Selecciona o crea un proyecto'); setSaving(false); return }
+        if (!projectId) { setError(t('wizard.errSelectProject')); setSaving(false); return }
         go(3, 1)
       }
       else if (step === 3) {
         const hasExisting = selectedTechIds.size > 0
         const hasNew = showTechForm && techForm.name.trim()
-        if (!hasExisting && !hasNew) { setError('Selecciona o crea al menos un técnico'); setSaving(false); return }
+        if (!hasExisting && !hasNew) { setError(t('wizard.errSelectTech')); setSaving(false); return }
 
         let count = 0
 
@@ -819,7 +826,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
         go(4, 1)
       }
     } catch (err: any) {
-      setError(err.message ?? 'Error al guardar')
+      setError(err.message ?? t('wizard.saveError'))
     } finally {
       setSaving(false)
     }
@@ -878,7 +885,7 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
         <div className="flex items-center justify-between px-6 pt-4 pb-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-bold text-text-primary">Nuevo proyecto</span>
+            <span className="text-sm font-bold text-text-primary">{t('admin.newProject')}</span>
           </div>
           <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
             <X className="w-4 h-4" />
@@ -963,11 +970,11 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
               <button onClick={handleBack} disabled={saving}
                 className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors px-4 py-2.5 rounded-xl border border-border-soft hover:bg-surface-raised disabled:opacity-50">
                 <ArrowLeft className="w-4 h-4" />
-                Atrás
+                {t('onboarding.back')}
               </button>
             ) : (
               <button onClick={handleClose} className="px-4 py-2.5 rounded-xl border border-border-soft text-sm text-text-secondary hover:text-text-primary transition-colors hover:bg-surface-raised">
-                Cancelar
+                {t('common.cancel')}
               </button>
             )}
             <button
@@ -976,8 +983,8 @@ export function OnboardingWizard({ open, onOpenChange, onComplete, initialClient
               className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Guardando…</>
-                : <>{step === 3 ? 'Asignar y continuar' : 'Continuar'} <ChevronRight className="w-4 h-4" /></>
+                ? <><Loader2 className="w-4 h-4 animate-spin" />{t('editTech.saving')}</>
+                : <>{step === 3 ? t('wizard.assignContinue') : t('wizard.continue')} <ChevronRight className="w-4 h-4" /></>
               }
             </button>
           </div>

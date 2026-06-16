@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import api from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/lib/i18n/i18n'
 
 interface Stats {
   totalUsers: number
@@ -41,6 +42,7 @@ function StatCard({
 }
 
 export function StatsOverview() {
+  const { t } = useI18n()
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,37 +52,37 @@ export function StatsOverview() {
   const [deletingRoutes, setDeletingRoutes] = useState(false)
 
   async function handleDeleteAllZones() {
-    if (!window.confirm('¿Borrar TODAS las zonas? Esta acción no se puede deshacer.')) return
+    if (!window.confirm(t('adminStats.confirmZones'))) return
     setDeletingZones(true)
     try {
       const { error } = await supabase.from('zones').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       if (error) throw error
-      toast.success('Todas las zonas fueron eliminadas')
+      toast.success(t('adminStats.zonesDeleted'))
       load()
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al borrar zonas')
+      toast.error(err.message ?? t('adminStats.zonesError'))
     } finally {
       setDeletingZones(false)
     }
   }
 
   async function handleDeleteAllAlerts() {
-    if (!window.confirm('¿Borrar TODAS las alertas (motion_events)? Esta acción no se puede deshacer.')) return
+    if (!window.confirm(t('adminStats.confirmAlerts'))) return
     setDeletingAlerts(true)
     try {
       const { error } = await supabase.from('motion_events').delete().neq('id', 0)
       if (error) throw error
-      toast.success('Todas las alertas fueron eliminadas')
+      toast.success(t('adminStats.alertsDeleted'))
       load()
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al borrar alertas')
+      toast.error(err.message ?? t('adminStats.alertsError'))
     } finally {
       setDeletingAlerts(false)
     }
   }
 
   async function handleDeleteAllRoutes() {
-    if (!window.confirm('¿Borrar TODAS las rutas e instalaciones cargadas? Esto borrará route_items y technician_routes. Esta acción no se puede deshacer.')) return
+    if (!window.confirm(t('adminStats.confirmRoutes'))) return
     setDeletingRoutes(true)
     try {
       // route_items tiene FK a technician_routes — borrar primero los items
@@ -88,10 +90,10 @@ export function StatsOverview() {
       if (e1) throw e1
       const { error: e2 } = await supabase.from('technician_routes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       if (e2) throw e2
-      toast.success('Todas las rutas e instalaciones fueron eliminadas')
+      toast.success(t('adminStats.routesDeleted'))
       load()
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al borrar rutas')
+      toast.error(err.message ?? t('adminStats.routesError'))
     } finally {
       setDeletingRoutes(false)
     }
@@ -109,7 +111,7 @@ export function StatsOverview() {
       if (statsRes.status === 'fulfilled') {
         setStats(statsRes.value.data)
       } else {
-        throw new Error((statsRes.reason as any)?.response?.data?.error ?? 'Error al cargar estadísticas')
+        throw new Error((statsRes.reason as any)?.response?.data?.error ?? t('adminStats.loadError'))
       }
 
       setBackendOk(healthRes.status === 'fulfilled')
@@ -138,7 +140,7 @@ export function StatsOverview() {
           onClick={load}
           className="text-xs text-text-muted hover:text-text-primary flex items-center gap-1.5 transition-colors"
         >
-          <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+          <RefreshCw className="w-3.5 h-3.5" /> {t('common.retry')}
         </button>
       </div>
     )
@@ -148,7 +150,7 @@ export function StatsOverview() {
     <div className="space-y-6">
       {/* Estado del sistema */}
       <div className="flex items-center gap-3">
-        <h2 className="text-text-primary font-semibold text-sm">Estado del Sistema</h2>
+        <h2 className="text-text-primary font-semibold text-sm">{t('adminStats.systemStatus')}</h2>
         <div className="flex items-center gap-2">
           <div className={cn(
             'flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border',
@@ -157,12 +159,12 @@ export function StatsOverview() {
               : 'bg-danger/10 border-danger/30 text-danger',
           )}>
             <Activity className="w-3 h-3" />
-            Backend {backendOk ? 'online' : 'offline'}
+            {backendOk ? t('adminStats.backendOnline') : t('adminStats.backendOffline')}
           </div>
         </div>
         <button
           onClick={load}
-          title="Actualizar"
+          title={t('common.refresh')}
           className="ml-auto text-text-muted hover:text-text-primary transition-colors"
         >
           <RefreshCw className="w-4 h-4" />
@@ -173,47 +175,47 @@ export function StatsOverview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           icon={Shield}
-          label="Usuarios del sitio"
+          label={t('adminStats.totalUsers')}
           value={stats?.totalUsers ?? 0}
           color="bg-primary/10 text-primary"
         />
         <StatCard
           icon={Wrench}
-          label="Técnicos activos ahora"
+          label={t('adminStats.activeTechs')}
           value={stats?.activeTechnicians ?? 0}
           color="bg-success/10 text-success"
-          sub={`de ${stats?.totalTechnicians ?? 0} registrados`}
+          sub={t('adminStats.ofRegistered', { n: stats?.totalTechnicians ?? 0 })}
         />
         <StatCard
           icon={Users}
-          label="Total técnicos registrados"
+          label={t('adminStats.totalTechs')}
           value={stats?.totalTechnicians ?? 0}
           color="bg-text-muted/10 text-text-muted"
         />
         <StatCard
           icon={Route}
-          label="Viajes completados hoy"
+          label={t('adminStats.tripsToday')}
           value={stats?.tripsToday ?? 0}
           color="bg-warning/10 text-warning"
         />
         <StatCard
           icon={AlertTriangle}
-          label="Alertas sin reconocer (24h)"
+          label={t('adminStats.unackAlerts')}
           value={stats?.unacknowledgedAlerts ?? 0}
           color="bg-danger/10 text-danger"
         />
       </div>
 
       <p className="text-text-muted text-xs">
-        Datos actualizados al cargar la página. Usa el botón de actualizar para refrescar.
+        {t('adminStats.dataNote')}
       </p>
 
       {/* Zona de peligro — limpieza de pruebas */}
       <div className="border border-danger/25 rounded-2xl overflow-hidden">
         <div className="bg-danger/5 px-4 py-3 border-b border-danger/20 flex items-center gap-2">
           <Trash2 className="w-4 h-4 text-danger" />
-          <p className="text-sm font-semibold text-danger">Limpieza de datos</p>
-          <span className="text-xs text-text-muted ml-1">— para uso en pruebas</span>
+          <p className="text-sm font-semibold text-danger">{t('adminStats.cleanup')}</p>
+          <span className="text-xs text-text-muted ml-1">{t('adminStats.cleanupNote')}</span>
         </div>
         <div className="p-4 flex flex-wrap gap-3">
           <button
@@ -222,7 +224,7 @@ export function StatsOverview() {
             className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
           >
             {deletingZones ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
-            Borrar todas las zonas
+            {t('adminStats.btnZones')}
           </button>
           <button
             onClick={handleDeleteAllAlerts}
@@ -230,7 +232,7 @@ export function StatsOverview() {
             className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
           >
             {deletingAlerts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5" />}
-            Borrar todas las alertas
+            {t('adminStats.btnAlerts')}
           </button>
           <button
             onClick={handleDeleteAllRoutes}
@@ -238,7 +240,7 @@ export function StatsOverview() {
             className="flex items-center gap-2 text-xs bg-danger/10 hover:bg-danger/20 text-danger border border-danger/30 font-semibold px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
           >
             {deletingRoutes ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ClipboardList className="w-3.5 h-3.5" />}
-            Borrar rutas e instalaciones
+            {t('adminStats.btnRoutes')}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Mountain } from 'lucide-react'
+import { useI18n } from '@/lib/i18n/i18n'
 
 interface ElevationPoint {
   ts: string
@@ -29,12 +30,13 @@ function CustomTooltip({ active, payload }: any) {
 }
 
 export function ElevationChart({ data, className }: ElevationChartProps) {
+  const { t } = useI18n()
   if (!data.length) {
     return (
       <div className={`flex items-center justify-center h-full text-text-muted ${className ?? ''}`}>
         <div className="text-center">
           <Mountain className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <span className="text-sm">Sin datos de elevación</span>
+          <span className="text-sm">{t('chart.noElevation')}</span>
         </div>
       </div>
     )
@@ -49,15 +51,15 @@ export function ElevationChart({ data, className }: ElevationChartProps) {
       {/* Stats rápidas */}
       <div className="flex gap-4 mb-3 text-xs">
         <div>
-          <span className="text-text-muted">Min </span>
+          <span className="text-text-muted">{t('chart.min')} </span>
           <span className="font-mono text-success">{minAlt.toFixed(0)}m</span>
         </div>
         <div>
-          <span className="text-text-muted">Max </span>
+          <span className="text-text-muted">{t('chart.max')} </span>
           <span className="font-mono text-warning">{maxAlt.toFixed(0)}m</span>
         </div>
         <div>
-          <span className="text-text-muted">Prom </span>
+          <span className="text-text-muted">{t('chart.avg')} </span>
           <span className="font-mono text-primary">{avgAlt.toFixed(0)}m</span>
         </div>
       </div>

@@ -21,6 +21,14 @@ export const ZONE_TYPE_LABELS: Record<ZoneType, string> = {
   checkpoint:   'Punto de control',
 }
 
+// Claves i18n para los tipos de zona (usar con t(...) en la UI).
+export const ZONE_TYPE_LABEL_KEYS: Record<ZoneType, string> = {
+  service_area: 'zone.type.service_area',
+  restricted:   'zone.type.restricted',
+  home_base:    'zone.type.home_base',
+  checkpoint:   'zone.type.checkpoint',
+}
+
 export const ZONE_TYPE_COLORS: Record<ZoneType, string> = {
   service_area: '#00D632',
   restricted:   '#EF4444',

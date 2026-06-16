@@ -6,13 +6,13 @@ import {
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { OnboardingWizard } from './OnboardingWizard'
 
 const STATUS_CFG = {
-  active:    { label: 'Activo',     cls: 'bg-success/10 text-success border-success/20' },
-  paused:    { label: 'Pausado',    cls: 'bg-warning/10 text-warning border-warning/20' },
-  completed: { label: 'Finalizado', cls: 'bg-text-muted/10 text-text-muted border-border' },
+  active:    { labelKey: 'adminProjects.status.active',    cls: 'bg-success/10 text-success border-success/20' },
+  paused:    { labelKey: 'adminProjects.status.paused',    cls: 'bg-warning/10 text-warning border-warning/20' },
+  completed: { labelKey: 'adminProjects.status.completed', cls: 'bg-text-muted/10 text-text-muted border-border' },
 } as const
 
 interface Client {
@@ -32,6 +32,7 @@ const inp = cn(
 // ── Inline edit for project status ────────────────────────────────────────────
 
 function StatusToggle({ status, onChange }: { status: string; onChange: (s: string) => void }) {
+  const { t } = useI18n()
   return (
     <div className="flex gap-1">
       {(Object.entries(STATUS_CFG) as [string, typeof STATUS_CFG['active']][]).map(([key, cfg]) => (
@@ -40,7 +41,7 @@ function StatusToggle({ status, onChange }: { status: string; onChange: (s: stri
             'text-xs px-2.5 py-1 rounded-lg border font-medium transition-all',
             status === key ? cfg.cls : 'border-border-soft text-text-muted hover:border-border'
           )}>
-          {cfg.label}
+          {t(cfg.labelKey)}
         </button>
       ))}
     </div>
@@ -63,6 +64,7 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
   const [editStatus, setEditStatus] = useState<string>(project.status)
   const [saving, setSaving]     = useState(false)
   const [loadingTechs, setLoadingTechs] = useState(false)
+  const { t, lang } = useI18n()
 
   async function loadTechs() {
     setLoadingTechs(true)
@@ -113,7 +115,7 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
             <div className="space-y-2">
               <input value={editName} onChange={e => setEditName(e.target.value)} className={cn(inp, 'py-1.5 text-sm')} />
               <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
-                placeholder="Descripción…" className={cn(inp, 'py-1.5 text-xs')} />
+                placeholder={t('adminProjects.descPlaceholder')} className={cn(inp, 'py-1.5 text-xs')} />
               <StatusToggle status={editStatus} onChange={setEditStatus} />
             </div>
           ) : (
@@ -121,13 +123,13 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
               <div className="flex items-center gap-2 flex-wrap">
                 <FolderOpen className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                 <p className="text-sm font-semibold text-text-primary">{project.name}</p>
-                <span className={cn('text-xs px-2 py-0.5 rounded-full border font-medium', cfg.cls)}>{cfg.label}</span>
+                <span className={cn('text-xs px-2 py-0.5 rounded-full border font-medium', cfg.cls)}>{t(cfg.labelKey)}</span>
               </div>
               {project.description && (
                 <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{project.description}</p>
               )}
               <p className="text-xs text-text-muted/60 mt-0.5">
-                Creado {format(parseISO(project.created_at), 'dd MMM yyyy', { locale: es })}
+                {t('adminProjects.created', { date: format(parseISO(project.created_at), 'dd MMM yyyy', { locale: getDateLocale(lang) }) })}
               </p>
             </>
           )}
@@ -149,10 +151,10 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
             <>
               <button
                 onClick={() => onAddTechnicians(project.client_id, project.id)}
-                title="Añadir técnico"
+                title={t('adminProjects.addTech')}
                 className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 px-2 py-1 rounded-lg hover:bg-primary/10 transition-colors"
               >
-                <Plus className="w-3 h-3" /> Técnico
+                <Plus className="w-3 h-3" /> {t('common.technician')}
               </button>
               <button onClick={() => setEditing(true)}
                 className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors">
@@ -177,15 +179,15 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
           ) : techs.length === 0 ? (
             <div className="flex items-center gap-2 text-xs text-text-muted">
               <Users className="w-3.5 h-3.5" />
-              <span>Sin técnicos asignados · </span>
+              <span>{t('adminProjects.noTechsAssigned')}</span>
               <button onClick={() => onAddTechnicians(project.client_id, project.id)}
-                className="text-primary hover:underline">Añadir técnico</button>
+                className="text-primary hover:underline">{t('adminProjects.addTech')}</button>
             </div>
           ) : (
             <div className="space-y-1.5">
               <p className="text-xs text-text-muted font-medium mb-2 flex items-center gap-1.5">
                 <Users className="w-3 h-3" />
-                {techs.length} técnico{techs.length > 1 ? 's' : ''}
+                {t(techs.length === 1 ? 'adminProjects.techCount_one' : 'adminProjects.techCount_other', { n: techs.length })}
               </p>
               {techs.map(t => (
                 <div key={t.id} className="flex items-center gap-2 text-sm">
@@ -205,6 +207,7 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void }) {
+  const { t } = useI18n()
   const [clients, setClients]         = useState<Client[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [loading, setLoading]         = useState(true)
@@ -244,8 +247,8 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
     const client = clients.find(c => c.id === id)
     const cProjects = clientProjects(id)
     const msg = cProjects.length > 0
-      ? `¿Eliminar el cliente "${client?.name}"? Se eliminarán también sus ${cProjects.length} proyecto${cProjects.length > 1 ? 's' : ''} y los técnicos quedarán sin proyecto asignado.`
-      : `¿Eliminar el cliente "${client?.name}"?`
+      ? t(cProjects.length === 1 ? 'adminProjects.deleteClientWithProjects_one' : 'adminProjects.deleteClientWithProjects_other', { name: client?.name ?? '', n: cProjects.length })
+      : t('adminProjects.deleteClient', { name: client?.name ?? '' })
     if (!window.confirm(msg)) return
     setDeletingClientId(id)
     try {
@@ -264,7 +267,7 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
   }
 
   async function deleteProject(id: string) {
-    if (!window.confirm('¿Eliminar este proyecto? Los técnicos quedarán sin proyecto asignado.')) return
+    if (!window.confirm(t('adminProjects.deleteProject'))) return
     setDeletingId(id)
     try {
       await supabase.from('technicians').update({ project_id: null }).eq('project_id', id)
@@ -302,22 +305,22 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
       {/* Header */}
       <div className="flex items-center gap-3">
         <div>
-          <p className="text-text-primary font-semibold text-sm">Clientes y Proyectos</p>
+          <p className="text-text-primary font-semibold text-sm">{t('adminProjects.title')}</p>
           {!loading && (
             <p className="text-xs text-text-muted">
-              {clients.length} cliente{clients.length !== 1 ? 's' : ''} ·{' '}
-              {projects.length} proyecto{projects.length !== 1 ? 's' : ''}
+              {t(clients.length === 1 ? 'adminProjects.clientsCount_one' : 'adminProjects.clientsCount_other', { n: clients.length })} ·{' '}
+              {t(projects.length === 1 ? 'adminProjects.projectsCount_one' : 'adminProjects.projectsCount_other', { n: projects.length })}
             </p>
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={load} title="Actualizar"
+          <button onClick={load} title={t('common.refresh')}
             className="text-text-muted hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-raised">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button onClick={onOpenWizard}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Nuevo proyecto
+            <Plus className="w-3.5 h-3.5" /> {t('admin.newProject')}
           </button>
         </div>
       </div>
@@ -329,11 +332,11 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
       {clients.length === 0 ? (
         <div className="border border-dashed border-border-soft rounded-2xl px-6 py-16 text-center">
           <Building2 className="w-10 h-10 text-text-muted/40 mx-auto mb-3" />
-          <p className="text-text-muted text-sm font-medium">Sin clientes registrados</p>
-          <p className="text-text-muted/60 text-xs mt-1 mb-4">Usa el asistente para crear tu primer cliente y proyecto</p>
+          <p className="text-text-muted text-sm font-medium">{t('adminProjects.noClients')}</p>
+          <p className="text-text-muted/60 text-xs mt-1 mb-4">{t('adminProjects.noClientsHint')}</p>
           <button onClick={onOpenWizard}
             className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-base text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-            <Plus className="w-4 h-4" /> Comenzar configuración
+            <Plus className="w-4 h-4" /> {t('adminProjects.startSetup')}
           </button>
         </div>
       ) : (
@@ -366,7 +369,7 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
                           </span>
                         )}
                         <span className="text-xs text-text-muted">
-                          {cProjects.length} proyecto{cProjects.length !== 1 ? 's' : ''}
+                          {t(cProjects.length === 1 ? 'adminProjects.projectsCount_one' : 'adminProjects.projectsCount_other', { n: cProjects.length })}
                         </span>
                       </div>
                     </div>
@@ -375,7 +378,7 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
                   <button
                     onClick={() => deleteClient(client.id)}
                     disabled={deletingClientId === client.id}
-                    title="Eliminar cliente"
+                    title={t('adminProjects.deleteClientTitle')}
                     className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40 flex-shrink-0"
                   >
                     {deletingClientId === client.id
@@ -390,11 +393,11 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
                   <div className="border-t border-border-soft px-4 py-3 space-y-2">
                     {cProjects.length === 0 ? (
                       <div className="flex items-center justify-between py-2">
-                        <p className="text-xs text-text-muted">Sin proyectos en este cliente</p>
+                        <p className="text-xs text-text-muted">{t('adminProjects.noProjectsInClient')}</p>
                         <button
                           onClick={() => { setWizardClientId(client.id); setWizardProjectId(undefined); setWizardOpen(true) }}
                           className="text-xs text-primary hover:underline flex items-center gap-1">
-                          <Plus className="w-3 h-3" /> Crear proyecto
+                          <Plus className="w-3 h-3" /> {t('adminProjects.createProject')}
                         </button>
                       </div>
                     ) : (

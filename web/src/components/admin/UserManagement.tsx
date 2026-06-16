@@ -4,7 +4,7 @@ import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, C
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { supabase } from '@/lib/supabase'
 
 interface WebUser {
@@ -28,29 +28,31 @@ const ROLE_CYCLE: Record<string, 'user' | 'leader' | 'superadmin'> = {
   superadmin: 'user',
 }
 
-const ROLE_LABELS = { user: 'Usuario', leader: 'Líder', superadmin: 'Superadmin' }
-const ROLE_NEXT_LABELS = { user: 'Hacer Líder', leader: 'Hacer Superadmin', superadmin: 'Hacer Usuario' }
+const ROLE_LABEL_KEYS = { user: 'adminUsers.role.user', leader: 'adminUsers.role.leader', superadmin: 'adminUsers.role.superadmin' }
+const ROLE_NEXT_LABEL_KEYS = { user: 'adminUsers.makeLeader', leader: 'adminUsers.makeSuperadmin', superadmin: 'adminUsers.makeUser' }
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useI18n()
   if (role === 'superadmin') return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-primary/10 text-primary border-primary/20">
-      <Shield className="w-3 h-3" /> Superadmin
+      <Shield className="w-3 h-3" /> {t('adminUsers.role.superadmin')}
     </span>
   )
   if (role === 'leader') return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-warning/10 text-warning border-warning/20">
-      <Building2 className="w-3 h-3" /> Líder
+      <Building2 className="w-3 h-3" /> {t('adminUsers.role.leader')}
     </span>
   )
   return (
     <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium bg-text-muted/10 text-text-secondary border-border">
-      <User className="w-3 h-3" /> Usuario
+      <User className="w-3 h-3" /> {t('adminUsers.role.user')}
     </span>
   )
 }
 
 // ── Modal para crear usuario ──────────────────────────────────────────────────
 function CopyButton({ text }: { text: string }) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
   function handleCopy() {
     navigator.clipboard.writeText(text)
@@ -62,7 +64,7 @@ function CopyButton({ text }: { text: string }) {
       type="button"
       onClick={handleCopy}
       className="text-text-muted hover:text-primary transition-colors p-1 rounded"
-      title="Copiar"
+      title={t('adminUsers.copy')}
     >
       {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
@@ -78,6 +80,7 @@ function CreateUserModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  const { t } = useI18n()
   const [email, setEmail]   = useState('')
   const [role, setRole]     = useState<'user' | 'leader' | 'superadmin'>('user')
   const [loading, setLoading] = useState(false)
@@ -105,14 +108,14 @@ function CreateUserModal({
       const { data } = await api.post<{ email: string; tempPassword: string }>('/api/admin/users', { email, role })
       setCredentials({ email: data.email, password: data.tempPassword })
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al crear usuario')
+      setError(err?.response?.data?.error ?? t('adminUsers.createError'))
     } finally {
       setLoading(false)
     }
   }
 
   function handleCopyAll() {
-    navigator.clipboard.writeText(`Email: ${credentials!.email}\nContraseña temporal: ${credentials!.password}`)
+    navigator.clipboard.writeText(`Email: ${credentials!.email}\n${t('adminUsers.tempPassword')}: ${credentials!.password}`)
     setAllCopied(true)
     setTimeout(() => setAllCopied(false), 2000)
   }
@@ -138,20 +141,20 @@ function CreateUserModal({
                   <KeyRound className="w-4 h-4 text-success" />
                 </div>
                 <div>
-                  <p className="font-bold text-text-primary text-sm leading-none">Credenciales generadas</p>
-                  <p className="text-xs text-text-muted mt-0.5">Copia y envía al usuario</p>
+                  <p className="font-bold text-text-primary text-sm leading-none">{t('adminUsers.credentialsGenerated')}</p>
+                  <p className="text-xs text-text-muted mt-0.5">{t('adminUsers.copySendUser')}</p>
                 </div>
               </div>
             </div>
             <div className="px-6 py-5 space-y-4">
               <p className="text-text-muted text-xs">
-                Al primer inicio de sesión se le pedirá que cree su propia contraseña.
+                {t('adminUsers.firstLoginNote')}
               </p>
               <div className="space-y-3">
                 <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-text-muted mb-0.5">Email</p>
+                      <p className="text-xs text-text-muted mb-0.5">{t('adminUsers.email')}</p>
                       <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
                     </div>
                     <CopyButton text={credentials.email} />
@@ -160,7 +163,7 @@ function CreateUserModal({
                 <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                      <p className="text-xs text-text-muted mb-0.5">{t('adminUsers.tempPassword')}</p>
                       <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
                     </div>
                     <CopyButton text={credentials.password} />
@@ -174,14 +177,14 @@ function CreateUserModal({
                   className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
                 >
                   {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                  {allCopied ? 'Copiado' : 'Copiar todo'}
+                  {allCopied ? t('adminUsers.copied') : t('adminUsers.copyAll')}
                 </button>
                 <button
                   type="button"
                   onClick={handleDone}
                   className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors"
                 >
-                  Listo
+                  {t('qr.done')}
                 </button>
               </div>
             </div>
@@ -195,8 +198,8 @@ function CreateUserModal({
                   <Plus className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="font-bold text-text-primary text-sm leading-none">Nuevo usuario</p>
-                  <p className="text-xs text-text-muted mt-0.5">Se generará una contraseña temporal</p>
+                  <p className="font-bold text-text-primary text-sm leading-none">{t('adminUsers.newUser')}</p>
+                  <p className="text-xs text-text-muted mt-0.5">{t('adminUsers.willGenTemp')}</p>
                 </div>
               </div>
               <button onClick={handleClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
@@ -207,12 +210,12 @@ function CreateUserModal({
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-1 h-4 bg-primary rounded-full" />
-                  <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos del usuario</p>
+                  <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('adminUsers.userData')}</p>
                 </div>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs text-text-muted font-medium mb-1.5">
-                      Correo electrónico <span className="text-danger">*</span>
+                      {t('login.email')} <span className="text-danger">*</span>
                     </label>
                     <input
                       type="email"
@@ -220,21 +223,21 @@ function CreateUserModal({
                       onChange={e => setEmail(e.target.value)}
                       required
                       autoFocus
-                      placeholder="usuario@empresa.com"
+                      placeholder={t('adminUsers.emailPlaceholder')}
                       className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-text-muted font-medium mb-1.5">Rol</label>
+                    <label className="block text-xs text-text-muted font-medium mb-1.5">{t('adminUsers.roleLabel')}</label>
                     <div className="relative">
                       <select
                         value={role}
                         onChange={e => setRole(e.target.value as 'user' | 'leader' | 'superadmin')}
                         className="w-full appearance-none bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors pr-8"
                       >
-                        <option value="user">Usuario (acceso al dashboard)</option>
-                        <option value="leader">Líder (carga rutas y gestiona técnicos)</option>
-                        <option value="superadmin">Superadmin (acceso total)</option>
+                        <option value="user">{t('adminUsers.roleUserOpt')}</option>
+                        <option value="leader">{t('adminUsers.roleLeaderOpt')}</option>
+                        <option value="superadmin">{t('adminUsers.roleSuperadminOpt')}</option>
                       </select>
                       <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
                     </div>
@@ -251,7 +254,7 @@ function CreateUserModal({
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={handleClose}
                   className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -259,7 +262,7 @@ function CreateUserModal({
                   className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  {loading ? 'Creando…' : 'Crear usuario'}
+                  {loading ? t('adminUsers.creating') : t('adminUsers.createUser')}
                 </button>
               </div>
             </form>
@@ -279,10 +282,11 @@ function CredentialsModal({
   credentials: { email: string; password: string } | null
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [allCopied, setAllCopied] = useState(false)
 
   function handleCopyAll() {
-    navigator.clipboard.writeText(`Email: ${credentials!.email}\nContraseña temporal: ${credentials!.password}`)
+    navigator.clipboard.writeText(`Email: ${credentials!.email}\n${t('adminUsers.tempPassword')}: ${credentials!.password}`)
     setAllCopied(true)
     setTimeout(() => setAllCopied(false), 2000)
   }
@@ -303,8 +307,8 @@ function CredentialsModal({
               <KeyRound className="w-4 h-4 text-warning" />
             </div>
             <div>
-              <p className="font-bold text-text-primary text-sm leading-none">Contraseña reseteada</p>
-              <p className="text-xs text-text-muted mt-0.5">Envía estas credenciales al usuario</p>
+              <p className="font-bold text-text-primary text-sm leading-none">{t('adminUsers.passwordReset')}</p>
+              <p className="text-xs text-text-muted mt-0.5">{t('adminUsers.sendCredentials')}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
@@ -313,13 +317,13 @@ function CredentialsModal({
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-text-muted text-xs">
-            Al ingresar se le pedirá que cree su propia contraseña.
+            {t('adminUsers.loginNote')}
           </p>
           <div className="space-y-3">
             <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-text-muted mb-0.5">Email</p>
+                  <p className="text-xs text-text-muted mb-0.5">{t('adminUsers.email')}</p>
                   <p className="text-sm text-text-primary font-mono">{credentials.email}</p>
                 </div>
                 <CopyButton text={credentials.email} />
@@ -328,7 +332,7 @@ function CredentialsModal({
             <div className="bg-base border border-border-soft rounded-xl px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-text-muted mb-0.5">Contraseña temporal</p>
+                  <p className="text-xs text-text-muted mb-0.5">{t('adminUsers.tempPassword')}</p>
                   <p className="text-sm text-text-primary font-mono tracking-widest">{credentials.password}</p>
                 </div>
                 <CopyButton text={credentials.password} />
@@ -342,14 +346,14 @@ function CredentialsModal({
               className="flex-1 flex items-center justify-center gap-2 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
             >
               {allCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-              {allCopied ? 'Copiado' : 'Copiar todo'}
+              {allCopied ? t('adminUsers.copied') : t('adminUsers.copyAll')}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors"
             >
-              Listo
+              {t('qr.done')}
             </button>
           </div>
         </div>
@@ -361,6 +365,7 @@ function CredentialsModal({
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export function UserManagement() {
+  const { t, lang } = useI18n()
   const [users, setUsers]           = useState<WebUser[]>([])
   const [companies, setCompanies]   = useState<CompanyInfo[]>([])
   const [loading, setLoading]       = useState(true)
@@ -389,7 +394,7 @@ export function UserManagement() {
       setUsers(userData.filter(u => u.email))
       setCompanies(compData.map(c => ({ id: c.id, name: c.name, leaderId: c.leaderId })))
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al cargar usuarios')
+      setError(err?.response?.data?.error ?? t('adminUsers.loadError'))
     } finally {
       setLoading(false)
     }
@@ -400,7 +405,7 @@ export function UserManagement() {
   async function handleChangeRole(user: WebUser) {
     const newRole = ROLE_CYCLE[user.role] ?? 'user'
     const confirmed = window.confirm(
-      `¿Cambiar rol de "${user.email}" a ${ROLE_LABELS[newRole]}?`,
+      t('adminUsers.confirmChangeRole', { email: user.email, role: t(ROLE_LABEL_KEYS[newRole]) }),
     )
     if (!confirmed) return
     setChangingId(user.id)
@@ -408,7 +413,7 @@ export function UserManagement() {
       await api.patch(`/api/admin/users/${user.id}/role`, { role: newRole })
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u))
     } catch (err: any) {
-      alert(err?.response?.data?.error ?? 'Error al cambiar rol')
+      alert(err?.response?.data?.error ?? t('adminUsers.changeRoleError'))
     } finally {
       setChangingId(null)
     }
@@ -416,7 +421,7 @@ export function UserManagement() {
 
   async function handleResetPassword(user: WebUser) {
     const confirmed = window.confirm(
-      `¿Resetear la contraseña de "${user.email}"?\nSe generará una nueva contraseña temporal.`,
+      t('adminUsers.confirmReset', { email: user.email }),
     )
     if (!confirmed) return
     setResettingId(user.id)
@@ -424,7 +429,7 @@ export function UserManagement() {
       const { data } = await api.post<{ email: string; tempPassword: string }>(`/api/admin/users/${user.id}/reset-password`)
       setResetCredentials({ email: data.email, password: data.tempPassword })
     } catch (err: any) {
-      alert(err?.response?.data?.error ?? 'Error al resetear contraseña')
+      alert(err?.response?.data?.error ?? t('adminUsers.resetError'))
     } finally {
       setResettingId(null)
     }
@@ -432,7 +437,7 @@ export function UserManagement() {
 
   async function handleDelete(user: WebUser) {
     const confirmed = window.confirm(
-      `¿Eliminar el usuario "${user.email}"?\nEsta acción no se puede deshacer.`,
+      t('adminUsers.confirmDelete', { email: user.email }),
     )
     if (!confirmed) return
     setDeletingId(user.id)
@@ -440,7 +445,7 @@ export function UserManagement() {
       await api.delete(`/api/admin/users/${user.id}`)
       setUsers(prev => prev.filter(u => u.id !== user.id))
     } catch (err: any) {
-      alert(err?.response?.data?.error ?? 'Error al eliminar usuario')
+      alert(err?.response?.data?.error ?? t('adminUsers.deleteError'))
     } finally {
       setDeletingId(null)
     }
@@ -450,13 +455,13 @@ export function UserManagement() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <h2 className="text-text-primary font-semibold text-sm">
-          Usuarios del Sitio
+          {t('adminUsers.title')}
           {!loading && <span className="text-text-muted font-normal ml-2">({users.length})</span>}
         </h2>
         <div className="flex items-center gap-2 ml-auto">
           <button
             onClick={load}
-            title="Actualizar"
+            title={t('common.refresh')}
             className="text-text-muted hover:text-text-primary transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -465,7 +470,7 @@ export function UserManagement() {
             onClick={() => setCreateOpen(true)}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> Nuevo usuario
+            <Plus className="w-3.5 h-3.5" /> {t('adminUsers.newUser')}
           </button>
         </div>
       </div>
@@ -479,18 +484,18 @@ export function UserManagement() {
           {error}
         </div>
       ) : users.length === 0 ? (
-        <div className="text-center py-16 text-text-muted text-sm">No hay usuarios</div>
+        <div className="text-center py-16 text-text-muted text-sm">{t('adminUsers.empty')}</div>
       ) : (
         <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border-soft">
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Email</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">Rol</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden md:table-cell">Empresa</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">Creado</th>
-                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">Último acceso</th>
-                <th className="text-right text-xs text-text-muted font-medium px-4 py-3">Acciones</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminUsers.colEmail')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminUsers.colRole')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden md:table-cell">{t('adminUsers.colCompany')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">{t('adminUsers.colCreated')}</th>
+                <th className="text-left text-xs text-text-muted font-medium px-4 py-3 hidden lg:table-cell">{t('adminUsers.colLastAccess')}</th>
+                <th className="text-right text-xs text-text-muted font-medium px-4 py-3">{t('adminUsers.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -505,10 +510,10 @@ export function UserManagement() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-text-primary text-xs font-mono">{user.email}</span>
-                        {isSelf && <span className="text-xs text-primary">(tú)</span>}
+                        {isSelf && <span className="text-xs text-primary">{t('adminUsers.you')}</span>}
                         {user.mustChangePassword && (
-                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-warning/10 border border-warning/30 text-warning font-medium" title="Debe cambiar su contraseña en el próximo inicio de sesión">
-                            <KeyRound className="w-2.5 h-2.5" /> clave pendiente
+                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-warning/10 border border-warning/30 text-warning font-medium" title={t('adminUsers.mustChangeTitle')}>
+                            <KeyRound className="w-2.5 h-2.5" /> {t('adminUsers.pendingKey')}
                           </span>
                         )}
                       </div>
@@ -523,7 +528,7 @@ export function UserManagement() {
                             <span key={c.id} className="text-xs text-text-muted truncate max-w-[140px]">{c.name}</span>
                           ))}
                           {userCompanies.length > 2 && (
-                            <span className="text-xs text-text-muted/50">+{userCompanies.length - 2} más</span>
+                            <span className="text-xs text-text-muted/50">{t('adminUsers.moreCount', { n: userCompanies.length - 2 })}</span>
                           )}
                         </div>
                       ) : (
@@ -531,12 +536,12 @@ export function UserManagement() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-text-muted text-xs hidden lg:table-cell">
-                      {format(parseISO(user.createdAt), 'dd MMM yyyy', { locale: es })}
+                      {format(parseISO(user.createdAt), 'dd MMM yyyy', { locale: getDateLocale(lang) })}
                     </td>
                     <td className="px-4 py-3 text-text-muted text-xs hidden lg:table-cell">
                       {user.lastSignIn
-                        ? format(parseISO(user.lastSignIn), 'dd MMM yyyy HH:mm', { locale: es })
-                        : 'Nunca'}
+                        ? format(parseISO(user.lastSignIn), 'dd MMM yyyy HH:mm', { locale: getDateLocale(lang) })
+                        : t('adminUsers.never')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
@@ -545,17 +550,17 @@ export function UserManagement() {
                             <button
                               onClick={() => handleChangeRole(user)}
                               disabled={isChanging || isDeleting || isResetting}
-                              title={ROLE_NEXT_LABELS[user.role]}
+                              title={t(ROLE_NEXT_LABEL_KEYS[user.role])}
                               className="text-xs text-text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10 disabled:opacity-40 whitespace-nowrap"
                             >
                               {isChanging
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : ROLE_NEXT_LABELS[user.role]}
+                                : t(ROLE_NEXT_LABEL_KEYS[user.role])}
                             </button>
                             <button
                               onClick={() => handleResetPassword(user)}
                               disabled={isResetting || isChanging || isDeleting}
-                              title="Resetear contraseña"
+                              title={t('adminUsers.resetPwTitle')}
                               className="text-text-muted hover:text-warning transition-colors p-1 rounded-lg hover:bg-warning/10 disabled:opacity-40"
                             >
                               {isResetting
@@ -565,7 +570,7 @@ export function UserManagement() {
                             <button
                               onClick={() => handleDelete(user)}
                               disabled={isDeleting || isChanging || isResetting}
-                              title="Eliminar usuario"
+                              title={t('adminUsers.deleteUserTitle')}
                               className="text-text-muted hover:text-danger transition-colors p-1 rounded-lg hover:bg-danger/10 disabled:opacity-40"
                             >
                               {isDeleting

@@ -3,8 +3,8 @@ import {
   ResponsiveContainer, ReferenceArea, ReferenceLine,
 } from 'recharts'
 import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { Gauge } from 'lucide-react'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface SpeedPoint {
   ts: string
@@ -18,6 +18,7 @@ interface SpeedChartProps {
 }
 
 function CustomTooltip({ active, payload }: any) {
+  const { lang } = useI18n()
   if (!active || !payload?.length) return null
   const d = payload[0].payload as SpeedPoint
   const color = d.speed_band === 'high' ? '#EF4444'
@@ -28,19 +29,20 @@ function CustomTooltip({ active, payload }: any) {
         {d.speed_kmh.toFixed(1)} km/h
       </div>
       <div className="text-text-muted mt-1">
-        {format(new Date(d.ts), 'hh:mm:ss a', { locale: es })}
+        {format(new Date(d.ts), 'hh:mm:ss a', { locale: getDateLocale(lang) })}
       </div>
     </div>
   )
 }
 
 export function SpeedChart({ data, className }: SpeedChartProps) {
+  const { t, lang } = useI18n()
   if (!data.length) {
     return (
       <div className={`flex items-center justify-center h-full text-text-muted ${className ?? ''}`}>
         <div className="text-center">
           <Gauge className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <span className="text-sm">Sin datos de velocidad</span>
+          <span className="text-sm">{t('chart.noSpeed')}</span>
         </div>
       </div>
     )
@@ -57,15 +59,15 @@ export function SpeedChart({ data, className }: SpeedChartProps) {
       {/* Stats rápidas */}
       <div className="flex gap-4 mb-3 text-xs">
         <div>
-          <span className="text-text-muted">Máx </span>
+          <span className="text-text-muted">{t('chart.maxAccent')} </span>
           <span className="font-mono text-danger">{fmtSpeed(maxSpeed)} km/h</span>
         </div>
         <div>
-          <span className="text-text-muted">Prom </span>
+          <span className="text-text-muted">{t('chart.avg')} </span>
           <span className="font-mono text-warning">{fmtSpeed(avgSpeed)} km/h</span>
         </div>
         <div>
-          <span className="text-text-muted">Puntos </span>
+          <span className="text-text-muted">{t('chart.points')} </span>
           <span className="font-mono text-text-secondary">{data.length}</span>
         </div>
       </div>
@@ -80,7 +82,7 @@ export function SpeedChart({ data, className }: SpeedChartProps) {
           <ReferenceLine y={avgSpeed} stroke="#F59E0B" strokeDasharray="4 4" strokeOpacity={0.6} />
           <XAxis
             dataKey="ts"
-            tickFormatter={(v) => format(new Date(v), 'h:mm a', { locale: es })}
+            tickFormatter={(v) => format(new Date(v), 'h:mm a', { locale: getDateLocale(lang) })}
             tick={{ fill: '#64748B', fontSize: 10 }}
             axisLine={{ stroke: '#252540' }}
             tickLine={false}

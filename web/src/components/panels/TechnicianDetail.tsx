@@ -13,8 +13,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
-import { DEVICE_EVENT_LABELS, DEVICE_TAMPER_TYPES } from '@/lib/reportExports'
+import { DEVICE_TAMPER_TYPES } from '@/lib/reportExports'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 // Tipos de la bitácora de dispositivo (sabotaje + recuperaciones) para la línea
 // de tiempo. Los de DEVICE_TAMPER_TYPES se pintan en rojo (evidencia de mal uso).
@@ -63,14 +63,15 @@ function ActiveStatusCard({ isActive, isAccident, noSignal, hint }: {
   // 'no_signal' = la app SIGUE VIVA (latido fresco) pero sin señal GPS: ámbar,
   // distinto del gris "Inactivo/Desconectado". Es la refutación visual directa
   // del "la app no sirve": el líder ve que la app está activa.
+  const { t } = useI18n()
   const dotColor  = isAccident ? 'bg-danger animate-pulse' : isActive ? 'bg-success animate-pulse' : noSignal ? 'bg-amber-500 animate-pulse' : 'bg-text-muted'
   const textColor = isAccident ? 'text-danger' : isActive ? 'text-success' : noSignal ? 'text-amber-500' : 'text-text-muted'
-  const label     = isAccident ? 'Alerta' : isActive ? 'Activo' : noSignal ? 'App activa' : 'Inactivo'
+  const label     = isAccident ? t('detail.alert') : isActive ? t('status.idle') : noSignal ? t('detail.appActive') : t('detail.inactive')
   return (
     <div className="bg-surface-raised rounded-xl p-3 flex flex-col gap-1">
       <div className="flex items-center gap-1.5 text-text-muted">
         <Signal className="w-3.5 h-3.5" />
-        <span className="text-xs">Conexión</span>
+        <span className="text-xs">{t('detail.connection')}</span>
       </div>
       <div className={cn('font-bold text-xl leading-none flex items-center gap-2', textColor)}>
         <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', dotColor)} />
@@ -84,11 +85,12 @@ function ActiveStatusCard({ isActive, isAccident, noSignal, hint }: {
 function TripDurationCard({ secs, isActive, hasData }: {
   secs: number; isActive: boolean; hasData: boolean
 }) {
+  const { t } = useI18n()
   return (
     <div className="bg-surface-raised rounded-xl p-3 flex flex-col gap-1.5">
       <div className="flex items-center gap-1.5 text-text-muted">
         <Timer className="w-3.5 h-3.5" />
-        <span className="text-xs">Tiempo activo</span>
+        <span className="text-xs">{t('detail.activeTime')}</span>
       </div>
       <div className={cn(
         'font-mono font-bold text-xl leading-none',
@@ -103,7 +105,7 @@ function TripDurationCard({ secs, isActive, hasData }: {
             isActive ? 'bg-success animate-pulse' : 'bg-text-muted',
           )} />
           <span className={cn('text-[11px]', isActive ? 'text-success' : 'text-text-muted')}>
-            {isActive ? 'En curso' : 'Sesión finalizada'}
+            {isActive ? t('history.inProgress') : t('detail.sessionEnded')}
           </span>
         </div>
       )}
@@ -114,6 +116,7 @@ function TripDurationCard({ secs, isActive, hasData }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function TechnicianDetail() {
+  const { t, lang } = useI18n()
   const { selectedTechnicianId, technicians, selectTechnician, toggleHeatmap, showHeatmap, updateTechnicianMeta, alerts } = useTrackingStore()
   const [elevData,  setElevData]  = useState<any[]>([])
   const [speedData, setSpeedData] = useState<any[]>([])
@@ -319,7 +322,7 @@ export function TechnicianDetail() {
               <button
                 onClick={openEditModal}
                 disabled={loadingEdit}
-                title="Editar técnico"
+                title={t('detail.editTech')}
                 className="p-1.5 rounded-lg hover:bg-surface-raised text-text-muted hover:text-primary transition-colors disabled:opacity-50"
               >
                 {loadingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit2 className="w-4 h-4" />}
@@ -337,14 +340,14 @@ export function TechnicianDetail() {
           <div className="p-4 grid grid-cols-2 gap-2">
             <StatCard
               icon={Gauge}
-              label="Velocidad actual"
+              label={t('detail.currentSpeed')}
               value={tech.lastSpeed ? Math.round(tech.lastSpeed * 3.6) : 0}
               unit="km/h"
               color={tech.lastSpeed && tech.lastSpeed * 3.6 > 80 ? 'text-danger' : 'text-success'}
             />
             <StatCard
               icon={Battery}
-              label="Batería"
+              label={t('detail.battery')}
               value={tech.battery ?? '--'}
               unit="%"
               color={
@@ -356,14 +359,14 @@ export function TechnicianDetail() {
             />
             <StatCard
               icon={Mountain}
-              label="Altitud"
+              label={t('detail.altitude')}
               value={tech.altitude != null ? Math.round(tech.altitude) : '--'}
               unit="m"
               color="text-primary"
             />
             <StatCard
               icon={Navigation}
-              label="Dirección"
+              label={t('detail.heading')}
               value={tech.bearing != null ? Math.round(tech.bearing) : '--'}
               unit="°"
               color="text-text-secondary"
@@ -387,8 +390,8 @@ export function TechnicianDetail() {
                 : 'bg-text-muted',
               )} />
               {tech.lastSeen
-                ? `Actualizado ${formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: es })}`
-                : 'Sin datos recientes'}
+                ? t('detail.updated', { time: formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: getDateLocale(lang) }) })
+                : t('detail.noRecentData')}
             </div>
           </div>
 
@@ -403,14 +406,14 @@ export function TechnicianDetail() {
                   : 'bg-surface-raised border-border text-text-secondary hover:border-primary/30',
               )}
             >
-              {showHeatmap ? '🔥 Ocultar heatmap de velocidad' : '🔥 Mostrar heatmap de velocidad'}
+              {showHeatmap ? t('detail.hideHeatmap') : t('detail.showHeatmap')}
             </button>
           </div>
 
           {/* Gráfico de elevación */}
           <div className="px-4 pb-4">
             <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Mountain className="w-3.5 h-3.5" /> Perfil de Elevación (8h)
+              <Mountain className="w-3.5 h-3.5" /> {t('detail.elevationProfile')}
             </h4>
             {loading
               ? <div className="h-36 bg-surface-raised rounded-xl animate-pulse" />
@@ -421,7 +424,7 @@ export function TechnicianDetail() {
           {/* Gráfico de velocidad */}
           <div className="px-4 pb-4">
             <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Gauge className="w-3.5 h-3.5" /> Velocidad (8h)
+              <Gauge className="w-3.5 h-3.5" /> {t('detail.speed8h')}
             </h4>
             {loading
               ? <div className="h-36 bg-surface-raised rounded-xl animate-pulse" />
@@ -432,11 +435,11 @@ export function TechnicianDetail() {
           {/* Bitácora de dispositivo (evidencia de sabotaje al rastreo) */}
           <div className="px-4 pb-4">
             <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5" /> Bitácora del dispositivo
+              <ShieldAlert className="w-3.5 h-3.5" /> {t('detail.deviceLog')}
             </h4>
             {deviceLogLive.length === 0 ? (
               <div className="bg-surface-raised rounded-xl p-4 text-center text-xs text-text-muted">
-                Sin eventos de dispositivo registrados.
+                {t('detail.noDeviceEvents')}
               </div>
             ) : (
               <div className="bg-surface-raised rounded-xl divide-y divide-border-soft">
@@ -446,10 +449,10 @@ export function TechnicianDetail() {
                     <div key={e.id} className="flex items-center gap-2.5 px-3 py-2">
                       <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', isTamper ? 'bg-danger' : 'bg-success')} />
                       <span className={cn('text-xs flex-1 min-w-0 truncate', isTamper ? 'text-danger font-medium' : 'text-text-secondary')}>
-                        {DEVICE_EVENT_LABELS[e.type] ?? e.type}
+                        {t('audit.' + e.type)}
                       </span>
                       <span className="text-[11px] text-text-muted flex-shrink-0">
-                        {formatDistanceToNow(new Date(e.ts), { addSuffix: true, locale: es })}
+                        {formatDistanceToNow(new Date(e.ts), { addSuffix: true, locale: getDateLocale(lang) })}
                       </span>
                     </div>
                   )

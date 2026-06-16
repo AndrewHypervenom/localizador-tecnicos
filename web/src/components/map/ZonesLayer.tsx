@@ -3,9 +3,10 @@ import L from 'leaflet'
 import { useMap } from 'react-leaflet'
 import { useZonesStore } from '@/store/zonesStore'
 import type { Zone } from '@/types/zones'
-import { ZONE_TYPE_LABELS } from '@/types/zones'
+import { ZONE_TYPE_LABEL_KEYS } from '@/types/zones'
+import { useI18n, type TFunc } from '@/lib/i18n/i18n'
 
-function createZoneLayer(zone: Zone, selected: boolean): L.Polygon {
+function createZoneLayer(zone: Zone, selected: boolean, t: TFunc): L.Polygon {
   const fillOp = selected ? 0.25 : 0.12
   const weight  = selected ? 3 : 2
 
@@ -37,7 +38,7 @@ function createZoneLayer(zone: Zone, selected: boolean): L.Polygon {
         background:${zone.color};margin-right:6px;vertical-align:middle;
       "></span>
       <strong>${zone.name}</strong>
-      <span style="color:#64748B;margin-left:6px;font-size:11px">${ZONE_TYPE_LABELS[zone.type]}</span>
+      <span style="color:#64748B;margin-left:6px;font-size:11px">${t(ZONE_TYPE_LABEL_KEYS[zone.type])}</span>
     </div>`
 
   polygon.bindTooltip(labelHtml, { sticky: true, className: 'zone-tooltip', opacity: 1 })
@@ -51,6 +52,7 @@ function createZoneLayer(zone: Zone, selected: boolean): L.Polygon {
 }
 
 export function ZonesLayer() {
+  const { t } = useI18n()
   const { zones, showZones, selectedZoneId, selectZone } = useZonesStore()
   const map        = useMap()
   const layersRef  = useRef<Record<string, L.Polygon>>({})
@@ -78,12 +80,12 @@ export function ZonesLayer() {
       if (layersRef.current[zone.id]) {
         layersRef.current[zone.id].remove()
       }
-      const layer = createZoneLayer(zone, selected)
+      const layer = createZoneLayer(zone, selected, t)
       layer.on('click', () => selectZone(selectedZoneId === zone.id ? null : zone.id))
       layer.addTo(map)
       layersRef.current[zone.id] = layer
     })
-  }, [zones, showZones, selectedZoneId, map, selectZone])
+  }, [zones, showZones, selectedZoneId, map, selectZone, t])
 
   // Limpiar al desmontar
   useEffect(() => {

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, parseISO, addDays } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import L from 'leaflet'
 
 type DateFilter = 'today' | 'expired' | 'custom'
@@ -174,6 +174,8 @@ function StatBadge({ icon: Icon, value, label, color = 'text-text-secondary' }: 
 }
 
 export function LeaderHistory() {
+  const { t: tr, lang } = useI18n()
+  const es = getDateLocale(lang)
   const [technicians, setTechnicians] = useState<any[]>([])
   const [selectedTech, setSelectedTech] = useState<string>('')
   const [dateFilter, setDateFilter]     = useState<DateFilter>('today')
@@ -277,10 +279,10 @@ export function LeaderHistory() {
       <div className="w-full lg:w-72 flex-shrink-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border-soft">
         <div className="p-4 space-y-3 border-b border-border-soft">
           <div>
-            <label className="block text-xs text-text-muted mb-1">Técnico</label>
+            <label className="block text-xs text-text-muted mb-1">{tr('common.technician')}</label>
             <select value={selectedTech} onChange={e => setSelectedTech(e.target.value)}
               className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary">
-              <option value="">Seleccionar técnico...</option>
+              <option value="">{tr('history.selectTech')}</option>
               {technicians.map(t => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -295,7 +297,7 @@ export function LeaderHistory() {
                   ? 'bg-primary/15 text-primary border border-primary/30'
                   : 'text-text-muted hover:text-text-secondary hover:bg-surface-raised border border-transparent'
               )}>
-              <Clock className="w-3 h-3" /> Hoy
+              <Clock className="w-3 h-3" /> {tr('history.today')}
             </button>
             <button onClick={() => { setDateFilter('expired'); setCustomDate('') }}
               className={cn(
@@ -304,14 +306,14 @@ export function LeaderHistory() {
                   ? 'bg-warning/15 text-warning border border-warning/30'
                   : 'text-text-muted hover:text-text-secondary hover:bg-surface-raised border border-transparent'
               )}>
-              <CalendarX className="w-3 h-3" /> Anteriores
+              <CalendarX className="w-3 h-3" /> {tr('history.previous')}
             </button>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => (dateInputRef.current as any)?.showPicker?.() ?? dateInputRef.current?.focus()}
-              title="Seleccionar fecha"
+              title={tr('history.selectDate')}
               className="text-text-muted hover:text-primary transition-colors flex-shrink-0"
             >
               <CalendarDays className="w-3.5 h-3.5" />
@@ -336,18 +338,18 @@ export function LeaderHistory() {
           </div>
 
           <div className="text-xs text-text-muted flex items-center gap-1">
-            <span>Mostrando:</span>
+            <span>{tr('history.showing')}</span>
             <span className={cn(
               'font-medium',
               dateFilter === 'today'   && 'text-primary',
               dateFilter === 'expired' && 'text-warning',
               dateFilter === 'custom'  && 'text-text-secondary',
             )}>
-              {dateFilter === 'today'   && `hoy (${format(new Date(), "d MMM", { locale: es })})`}
-              {dateFilter === 'expired' && 'últimos 30 días'}
+              {dateFilter === 'today'   && tr('history.todayLabel', { date: format(new Date(), "d MMM", { locale: es }) })}
+              {dateFilter === 'expired' && tr('history.last30')}
               {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
             </span>
-            {trips.length > 0 && <span className="ml-auto">{trips.length} viajes</span>}
+            {trips.length > 0 && <span className="ml-auto">{tr('history.tripsCount', { n: trips.length })}</span>}
           </div>
         </div>
 
@@ -380,7 +382,7 @@ export function LeaderHistory() {
                   <div className="flex items-center gap-1.5">
                     {inProgress && (
                       <span className="flex items-center gap-1 text-xs text-success font-medium">
-                        <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> En curso
+                        <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> {tr('history.inProgress')}
                       </span>
                     )}
                     {trip.accidents > 0 && (
@@ -406,12 +408,12 @@ export function LeaderHistory() {
           })}
           {trips.length === 0 && !loading && selectedTech && (
             <div className="text-center text-text-muted text-sm py-8">
-              No se encontraron viajes en este rango
+              {tr('history.noTrips')}
             </div>
           )}
           {!selectedTech && (
             <div className="text-center text-text-muted text-sm py-8">
-              Selecciona un técnico para ver sus viajes
+              {tr('history.selectTechToView')}
             </div>
           )}
         </div>
@@ -424,11 +426,11 @@ export function LeaderHistory() {
             <div className="p-4 border-b border-border-soft bg-surface">
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                  {selectedTrip.status !== 'completed' ? 'Viaje en curso' : 'Análisis del Viaje'} — {format(parseISO(selectedTrip.started_at), "d MMMM yyyy, h:mm a", { locale: es })}
+                  {selectedTrip.status !== 'completed' ? tr('history.tripInProgress') : tr('history.tripAnalysis')} — {format(parseISO(selectedTrip.started_at), "d MMMM yyyy, h:mm a", { locale: es })}
                 </h2>
                 {selectedTrip.status !== 'completed' && (
                   <span className="flex items-center gap-1 text-xs text-success font-medium">
-                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> En curso
+                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> {tr('history.inProgress')}
                   </span>
                 )}
               </div>
@@ -442,14 +444,14 @@ export function LeaderHistory() {
                   : `${Math.round((Date.now() - new Date(selectedTrip.started_at).getTime()) / 60_000)} min`
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-                    <StatBadge icon={Route}          value={distKm + ' km'}   label="Distancia"     color="text-primary" />
-                    <StatBadge icon={Clock}          value={durLabel}          label="Duración"      color="text-text-secondary" />
-                    <StatBadge icon={TrendingUp}     value={maxSpd + ' km/h'} label="Vel. máx"      color="text-danger" />
-                    <StatBadge icon={Gauge}          value={avgSpd + ' km/h'} label="Vel. prom"     color="text-warning" />
-                    <StatBadge icon={AlertTriangle}  value={selectedTrip.accidents}    label="Accidentes"    color={selectedTrip.accidents > 0 ? 'text-danger' : 'text-text-muted'} />
-                    <StatBadge icon={CornerDownLeft} value={selectedTrip.hard_brakes}  label="Frenadas"      color={selectedTrip.hard_brakes > 0 ? 'text-warning' : 'text-text-muted'} />
-                    <StatBadge icon={TrendingUp}     value={selectedTrip.rapid_accels} label="Aceleraciones" color={selectedTrip.rapid_accels > 0 ? 'text-warning' : 'text-text-muted'} />
-                    <StatBadge icon={RotateCcw}      value={selectedTrip.harsh_turns}  label="Giros bruscos" color="text-text-muted" />
+                    <StatBadge icon={Route}          value={distKm + ' km'}   label={tr('history.distance')}     color="text-primary" />
+                    <StatBadge icon={Clock}          value={durLabel}          label={tr('history.duration')}      color="text-text-secondary" />
+                    <StatBadge icon={TrendingUp}     value={maxSpd + ' km/h'} label={tr('history.maxSpeed')}      color="text-danger" />
+                    <StatBadge icon={Gauge}          value={avgSpd + ' km/h'} label={tr('history.avgSpeed')}     color="text-warning" />
+                    <StatBadge icon={AlertTriangle}  value={selectedTrip.accidents}    label={tr('history.accidents')}    color={selectedTrip.accidents > 0 ? 'text-danger' : 'text-text-muted'} />
+                    <StatBadge icon={CornerDownLeft} value={selectedTrip.hard_brakes}  label={tr('history.brakes')}      color={selectedTrip.hard_brakes > 0 ? 'text-warning' : 'text-text-muted'} />
+                    <StatBadge icon={TrendingUp}     value={selectedTrip.rapid_accels} label={tr('history.accels')} color={selectedTrip.rapid_accels > 0 ? 'text-warning' : 'text-text-muted'} />
+                    <StatBadge icon={RotateCcw}      value={selectedTrip.harsh_turns}  label={tr('history.harshTurns')} color="text-text-muted" />
                   </div>
                 )
               })()}
@@ -465,19 +467,19 @@ export function LeaderHistory() {
               </div>
               <div className="w-full xl:w-64 flex-shrink-0 flex flex-col border-t xl:border-t-0 xl:border-l border-border-soft bg-surface lg:overflow-y-auto p-4 space-y-4">
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Elevación</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{tr('history.elevation')}</h4>
                   <ElevationChart data={elevData} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Velocidad</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{tr('history.speed')}</h4>
                   <SpeedChart data={routePoints.map(p => ({ ts: p.ts, speed_kmh: p.speed_kmh, speed_band: p.speed_band }))} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Leyenda</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{tr('history.legend')}</h4>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-success" /><span className="text-text-muted">Baja (&lt;30 km/h)</span></div>
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-warning" /><span className="text-text-muted">Media (30-60 km/h)</span></div>
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-danger" /><span className="text-text-muted">Alta (&gt;60 km/h)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-success" /><span className="text-text-muted">{tr('history.speedLow')}</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-warning" /><span className="text-text-muted">{tr('history.speedMedium')}</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-danger" /><span className="text-text-muted">{tr('history.speedHigh')}</span></div>
                   </div>
                 </div>
               </div>
@@ -489,8 +491,8 @@ export function LeaderHistory() {
           <div className="flex-1 flex items-center justify-center text-text-muted">
             <div className="text-center">
               <Route className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium">Selecciona un viaje</p>
-              <p className="text-sm mt-1">para ver el análisis completo</p>
+              <p className="text-lg font-medium">{tr('history.selectTrip')}</p>
+              <p className="text-sm mt-1">{tr('history.selectTripHint')}</p>
             </div>
           </div>
         )}

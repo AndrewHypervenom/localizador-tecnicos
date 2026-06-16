@@ -12,7 +12,8 @@ import { useZonesStore } from '@/store/zonesStore'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, addDays, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns'
-import { es } from 'date-fns/locale'
+import type { Locale } from 'date-fns'
+import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { toast } from 'sonner'
@@ -38,17 +39,17 @@ interface LeaderMapProps {
   unreadAlertsCount?: number
 }
 
-const FAB_ACTIONS: { id: PanelView | 'zones'; icon: React.ElementType; label: string }[] = [
-  { id: 'stats',       icon: BarChart3,    label: 'Resumen'     },
-  { id: 'upload',      icon: Upload,       label: 'Subir rutas' },
-  { id: 'routes',      icon: ClipboardList,label: 'Ver rutas'   },
-  { id: 'technicians', icon: Wrench,       label: 'Técnicos'    },
-  { id: 'campaigns',   icon: Building2,    label: 'Campañas'    },
-  { id: 'history',     icon: History,      label: 'Historial'   },
-  { id: 'reports',     icon: FileText,     label: 'Reportes'    },
-  { id: 'alerts',      icon: Bell,         label: 'Alertas'     },
-  { id: 'settings',    icon: Settings,     label: 'Ajustes'     },
-  { id: 'zones',       icon: Layers,       label: 'Zonas'       },
+const FAB_ACTIONS: { id: PanelView | 'zones'; icon: React.ElementType; labelKey: string }[] = [
+  { id: 'stats',       icon: BarChart3,    labelKey: 'leaderMap.summary'        },
+  { id: 'upload',      icon: Upload,       labelKey: 'leaderMap.uploadRoutes'   },
+  { id: 'routes',      icon: ClipboardList,labelKey: 'leaderPanel.title.routes' },
+  { id: 'technicians', icon: Wrench,       labelKey: 'dashboard.technicians'    },
+  { id: 'campaigns',   icon: Building2,    labelKey: 'leaderPanel.title.campaigns' },
+  { id: 'history',     icon: History,      labelKey: 'dashboard.history'        },
+  { id: 'reports',     icon: FileText,     labelKey: 'dashboard.reports'        },
+  { id: 'alerts',      icon: Bell,         labelKey: 'dashboard.alerts'         },
+  { id: 'settings',    icon: Settings,     labelKey: 'leaderPanel.title.settings' },
+  { id: 'zones',       icon: Layers,       labelKey: 'dashboard.zones'          },
 ]
 
 const fabItemVariants = {
@@ -72,15 +73,17 @@ interface RouteRow {
   techStatus: string
 }
 
-function dayLabel(d: string) {
+function dayLabel(d: string, t: TFunc, locale: Locale) {
   const p = parseISO(d)
-  if (isToday(p))     return 'Hoy'
-  if (isTomorrow(p))  return 'Mañana'
-  if (isYesterday(p)) return 'Ayer'
-  return format(p, "EEE d MMM", { locale: es })
+  if (isToday(p))     return t('history.today')
+  if (isTomorrow(p))  return t('assign.tomorrow')
+  if (isYesterday(p)) return t('routes.yesterday')
+  return format(p, "EEE d MMM", { locale })
 }
 
 export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps) {
+  const { t, lang } = useI18n()
+  const locale = getDateLocale(lang)
   const navigate = useNavigate()
   const today = format(new Date(), 'yyyy-MM-dd')
   const [selectedDate, setSelectedDate] = useState(today)
@@ -197,24 +200,24 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
       const result = await generateRouteZones(0.3, (done, total) => setRouteProgress({ done, total }), selectedDate)
       setRouteResult(result)
       if (result.created > 0)
-        toast.success(`${result.created} zona${result.created !== 1 ? 's' : ''} creada${result.created !== 1 ? 's' : ''} correctamente`)
+        toast.success(t(result.created === 1 ? 'dashboard.gen.zonesCreatedOk_one' : 'dashboard.gen.zonesCreatedOk_other', { n: result.created }))
       else
-        toast.warning('No se pudo geocodificar ninguna dirección')
+        toast.warning(t('dashboard.noGeocode'))
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al generar zonas')
+      toast.error(err.message ?? t('dashboard.genError'))
     } finally {
       setRouteLoading(false)
     }
   }
 
   async function handleDeleteAllZones() {
-    if (!window.confirm(`¿Borrar todas las zonas? Esta acción no se puede deshacer.`)) return
+    if (!window.confirm(t('leaderMap.confirmDeleteZones'))) return
     setClearingZones(true)
     try {
       await deleteAllZones()
-      toast.success('Todas las zonas eliminadas')
+      toast.success(t('leaderMap.allZonesDeleted'))
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al borrar zonas')
+      toast.error(err.message ?? t('leaderMap.deleteZonesError'))
     } finally {
       setClearingZones(false)
     }
@@ -229,10 +232,10 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   }
 
   const realtimeCfg = {
-    connecting:   { dot: 'bg-warning animate-pulse', text: 'text-warning',    label: 'Conectando…' },
-    connected:    { dot: 'bg-success animate-pulse',  text: 'text-success',    label: 'En vivo' },
-    error:        { dot: 'bg-danger',                 text: 'text-danger',     label: 'Sin conexión' },
-    disconnected: { dot: 'bg-text-muted',             text: 'text-text-muted', label: 'Desconectado' },
+    connecting:   { dot: 'bg-warning animate-pulse', text: 'text-warning',    label: t('realtime.connecting') },
+    connected:    { dot: 'bg-success animate-pulse',  text: 'text-success',    label: t('realtime.connected') },
+    error:        { dot: 'bg-danger',                 text: 'text-danger',     label: t('realtime.error') },
+    disconnected: { dot: 'bg-text-muted',             text: 'text-text-muted', label: t('realtime.disconnected') },
   }[realtimeStatus]
 
   const onField = routes.filter(r => r.techStatus !== 'offline').length
@@ -259,7 +262,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                   sideTab === 'techs' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
                 )}
               >
-                Técnicos
+                {t('dashboard.technicians')}
               </button>
               <button
                 onClick={() => setSideTab('routes')}
@@ -267,7 +270,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                   sideTab === 'routes' ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
                 )}
               >
-                Rutas
+                {t('leaderMap.tabRoutes')}
               </button>
             </div>
           </div>
@@ -284,9 +287,9 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
               />
               <div className="flex items-center gap-1.5">
                 {[
-                  { label: 'Ayer',   d: format(addDays(new Date(), -1), 'yyyy-MM-dd') },
-                  { label: 'Hoy',    d: today },
-                  { label: 'Mañana', d: format(addDays(new Date(), 1),  'yyyy-MM-dd') },
+                  { label: t('routes.yesterday'), d: format(addDays(new Date(), -1), 'yyyy-MM-dd') },
+                  { label: t('history.today'),    d: today },
+                  { label: t('assign.tomorrow'),  d: format(addDays(new Date(), 1),  'yyyy-MM-dd') },
                 ].map(({ label, d }) => (
                   <button key={label} onClick={() => handleDateChange(d)}
                     className={cn('flex-1 text-xs py-1 rounded-lg border transition-colors font-medium',
@@ -313,7 +316,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                   className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
                 >
                   <ChevronRight className="w-3.5 h-3.5 rotate-180" />
-                  Volver a técnicos
+                  {t('leaderMap.backToTechs')}
                 </button>
                 <TechnicianDetail />
               </div>
@@ -329,14 +332,14 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
               ) : routes.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-12 px-4 text-center">
                   <FolderOpen className="w-8 h-8 text-text-muted/30" />
-                  <p className="text-text-muted text-xs">Sin rutas para {dayLabel(selectedDate).toLowerCase()}</p>
+                  <p className="text-text-muted text-xs">{t('leaderMap.noRoutesFor', { day: dayLabel(selectedDate, t, locale).toLowerCase() })}</p>
                 </div>
               ) : (
                 <>
                   <div className="px-3 py-2 flex items-center justify-between">
-                    <span className="text-text-muted text-xs">{routes.length} técnicos · {routes.reduce((s, r) => s + r.total, 0)} instalaciones</span>
+                    <span className="text-text-muted text-xs">{t('leaderStats.techsInstalls', { techs: routes.length, installs: routes.reduce((s, r) => s + r.total, 0) })}</span>
                     {onField > 0 && (
-                      <span className="text-xs text-success font-medium">{onField} en campo</span>
+                      <span className="text-xs text-success font-medium">{t('leaderMap.onField', { n: onField })}</span>
                     )}
                   </div>
                   <AnimatePresence mode="wait">
@@ -353,7 +356,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                           className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
                         >
                           <ChevronRight className="w-3.5 h-3.5 rotate-180" />
-                          Volver a la lista
+                          {t('leaderMap.backToList')}
                         </button>
                         <TechnicianDetail />
                       </motion.div>
@@ -398,12 +401,12 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                                 )}
                                 {r.techStatus === 'offline' && !r.technician_id && (
                                   <span className="text-xs text-text-muted/50 flex items-center gap-0.5">
-                                    <WifiOff className="w-2.5 h-2.5" /> Sin vincular
+                                    <WifiOff className="w-2.5 h-2.5" /> {t('routes.unlinked')}
                                   </span>
                                 )}
                                 {r.total > 0 && r.done < r.total && isToday(parseISO(selectedDate)) && r.techStatus !== 'offline' && (
                                   <span className="text-xs text-text-muted flex items-center gap-0.5 ml-auto">
-                                    <Clock className="w-2.5 h-2.5" />{r.total - r.done} pend.
+                                    <Clock className="w-2.5 h-2.5" />{t('leaderMap.pending', { n: r.total - r.done })}
                                   </span>
                                 )}
                               </div>
@@ -461,7 +464,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
               className="absolute top-4 left-4 z-[500] flex items-center gap-2 bg-surface/95 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 shadow-xl text-xs text-text-secondary hover:text-danger hover:border-danger/40 hover:bg-danger/5 transition-colors"
             >
               <X className="w-3.5 h-3.5" />
-              Limpiar selección
+              {t('leaderMap.clearSelection')}
             </motion.button>
           )}
         </AnimatePresence>
@@ -481,31 +484,31 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
         <div className="absolute top-4 right-4 z-[500] flex items-center gap-2">
           <button
             onClick={toggleShowZones}
-            title={showZones ? 'Ocultar zonas' : 'Mostrar zonas'}
+            title={showZones ? t('dashboard.hideZones') : t('dashboard.showZones')}
             className={cn(
               'bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-surface transition-colors shadow-xl text-xs',
               showZones ? 'text-primary' : 'text-text-muted'
             )}
           >
             {showZones ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            Zonas {zones.length > 0 && <span className="font-mono font-bold">{zones.length}</span>}
+            {t('dashboard.zones')} {zones.length > 0 && <span className="font-mono font-bold">{zones.length}</span>}
           </button>
           <button
             onClick={handleDeleteAllZones}
             disabled={clearingZones || zones.length === 0}
-            title="Borrar todas las zonas"
+            title={t('leaderMap.deleteAllZonesTitle')}
             className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-surface transition-colors shadow-xl text-xs text-danger hover:text-danger/80 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {clearingZones ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-            Borrar
+            {t('leaderMap.clearBtn')}
           </button>
           <button
             onClick={openGenerateModal}
-            title="Actualizar zonas desde ciudades de técnicos activos"
+            title={t('leaderMap.updateZonesTitle')}
             className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-surface transition-colors shadow-xl text-xs text-violet-400 hover:text-violet-300"
           >
             <MapPinned className="w-3.5 h-3.5" />
-            Actualizar
+            {t('common.refresh')}
           </button>
         </div>
 
@@ -533,7 +536,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                     className="flex items-center gap-2.5 bg-surface/95 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-2 shadow-xl hover:bg-surface transition-colors group cursor-pointer"
                   >
                     <span className="text-text-muted text-xs font-medium group-hover:text-text-primary whitespace-nowrap">
-                      {action.label}
+                      {t(action.labelKey)}
                     </span>
                     <div className="relative flex-shrink-0">
                       <Icon className="w-4 h-4 text-text-muted group-hover:text-primary transition-colors" />
@@ -558,7 +561,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                 ? 'bg-surface border border-border-soft text-text-muted hover:bg-surface-raised'
                 : 'bg-primary text-white hover:bg-primary/90',
             )}
-            title="Acciones"
+            title={t('leaderMap.actions')}
           >
             <motion.div
               animate={{ rotate: fabOpen ? 45 : 0 }}
@@ -599,8 +602,8 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                   <MapPinned className="w-5 h-5 text-violet-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-text-primary text-sm">Generar zonas en el mapa</p>
-                  <p className="text-text-muted text-xs mt-0.5">Ubica automáticamente las zonas de trabajo</p>
+                  <p className="font-bold text-text-primary text-sm">{t('dashboard.gen.title')}</p>
+                  <p className="text-text-muted text-xs mt-0.5">{t('leaderMap.gen.subtitle')}</p>
                 </div>
                 {!routeLoading && (
                   <button onClick={() => setGenOpen(false)} className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-lg hover:bg-surface-raised">
@@ -615,23 +618,23 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                       <div className="bg-success/10 border border-success/30 rounded-xl p-4 flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-semibold text-success text-sm">Proceso completado</p>
+                          <p className="font-semibold text-success text-sm">{t('dashboard.gen.completed')}</p>
                           <p className="text-text-muted text-xs mt-1">
-                            <strong className="text-text-primary">{routeResult.created}</strong> zonas creadas correctamente
-                            {routeResult.skipped > 0 && <> · <strong className="text-warning">{routeResult.skipped}</strong> sin geocodificar</>}
+                            <strong className="text-text-primary">{routeResult.created}</strong> {t('leaderMap.gen.zonesCreatedSuffix')}
+                            {routeResult.skipped > 0 && <> · <strong className="text-warning">{routeResult.skipped}</strong> {t('leaderMap.gen.skippedSuffix')}</>}
                           </p>
                         </div>
                       </div>
                       <button onClick={() => setGenOpen(false)}
                         className="w-full py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                        Cerrar
+                        {t('common.close')}
                       </button>
                     </div>
                   ) : routeLoading && routeProgress ? (
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 text-xs text-text-muted">
                         <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                        <span>Geocodificando con Google Maps…</span>
+                        <span>{t('leaderMap.gen.geocoding')}</span>
                       </div>
                       <div className="w-full bg-base rounded-full h-2 overflow-hidden">
                         <motion.div
@@ -641,9 +644,9 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                         />
                       </div>
                       <p className="text-center text-xs text-text-muted font-mono">
-                        {routeProgress.done} / {routeProgress.total} direcciones
+                        {t('leaderMap.gen.progress', { done: routeProgress.done, total: routeProgress.total })}
                       </p>
-                      <p className="text-center text-xs text-text-muted/60">No cierres esta ventana</p>
+                      <p className="text-center text-xs text-text-muted/60">{t('leaderMap.gen.dontClose')}</p>
                     </div>
                   ) : (
                     <>
@@ -651,22 +654,21 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                         {routePreviewCnt === null ? (
                           <div className="flex items-center justify-center gap-2 py-8 text-text-muted text-xs">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Contando direcciones…
+                            {t('leaderMap.gen.counting')}
                           </div>
                         ) : routePreviewCnt === 0 ? (
                           <div className="text-center py-8 space-y-2">
-                            <p className="text-text-muted text-sm">No hay rutas cargadas con direcciones.</p>
-                            <p className="text-text-muted/60 text-xs">Carga un Excel primero en la pestaña "Cargar".</p>
+                            <p className="text-text-muted text-sm">{t('leaderMap.gen.noRoutesAddr')}</p>
+                            <p className="text-text-muted/60 text-xs">{t('leaderMap.gen.loadExcelFirst')}</p>
                           </div>
                         ) : (
                           <div className="bg-base border border-border-soft rounded-xl p-4 space-y-2">
                             <div className="flex items-center gap-2">
                               <Layers className="w-4 h-4 text-violet-400" />
-                              <p className="text-sm font-semibold text-text-primary">{routePreviewCnt} direcciones únicas</p>
+                              <p className="text-sm font-semibold text-text-primary">{t('dashboard.gen.uniqueAddresses', { n: routePreviewCnt })}</p>
                             </div>
                             <p className="text-xs text-text-muted leading-relaxed">
-                              Se creará una zona circular por cada dirección usando <strong className="text-text-primary">Google Maps</strong> para ubicarlas con precisión.
-                              Las zonas existentes <strong className="text-text-primary">no se borran</strong> — se agregan.
+                              {t('leaderMap.gen.explainA')}<strong className="text-text-primary">Google Maps</strong>{t('leaderMap.gen.explainB')}<strong className="text-text-primary">{t('leaderMap.gen.explainBold')}</strong>{t('leaderMap.gen.explainC')}
                             </p>
                           </div>
                         )}
@@ -674,7 +676,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                       <div className="flex gap-2">
                         <button onClick={() => setGenOpen(false)}
                           className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                          Cancelar
+                          {t('common.cancel')}
                         </button>
                         <button
                           onClick={handleGenerateRouteZones}
@@ -682,7 +684,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
                         >
                           <Layers className="w-4 h-4" />
-                          Generar {routePreviewCnt ? `(${routePreviewCnt})` : ''}
+                          {t('dashboard.gen.generate')} {routePreviewCnt ? `(${routePreviewCnt})` : ''}
                         </button>
                       </div>
                     </>

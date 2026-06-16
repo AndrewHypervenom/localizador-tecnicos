@@ -5,9 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { getRoleFromSession } from '@/lib/roles'
 import { Eye, EyeOff, Loader2, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
 export function ChangePassword() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [password, setPassword]   = useState('')
   const [confirm, setConfirm]     = useState('')
   const [showPwd, setShowPwd]     = useState(false)
@@ -26,11 +29,11 @@ export function ChangePassword() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (password !== confirm) {
-      setError('Las contraseñas no coinciden')
+      setError(t('changePassword.mismatch'))
       return
     }
     if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres')
+      setError(t('changePassword.tooShort'))
       return
     }
     setError(null)
@@ -46,7 +49,7 @@ export function ChangePassword() {
       const role = getRoleFromSession(session)
       navigate(role === 'superadmin' ? '/admin' : '/', { replace: true })
     } catch (err: any) {
-      setError(err.message ?? 'Error al cambiar la contraseña')
+      setError(err.message ?? t('changePassword.error'))
     } finally {
       setLoading(false)
     }
@@ -59,6 +62,10 @@ export function ChangePassword() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-success/5 rounded-full blur-3xl" />
       </div>
 
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -69,9 +76,9 @@ export function ChangePassword() {
           <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto mb-4 shadow-lg shadow-primary/30">
             <img src="/favicon.png" alt="PositivoS+" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">Crear contraseña</h1>
+          <h1 className="text-2xl font-bold text-text-primary">{t('changePassword.title')}</h1>
           <p className="text-text-muted text-sm mt-1">
-            {userEmail ? `Bienvenido, ${userEmail}` : 'Primer inicio de sesión'}
+            {userEmail ? t('changePassword.welcome', { email: userEmail }) : t('changePassword.firstLogin')}
           </p>
         </div>
 
@@ -79,14 +86,14 @@ export function ChangePassword() {
           <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2.5 mb-5">
             <KeyRound className="w-4 h-4 text-primary shrink-0" />
             <p className="text-xs text-primary">
-              Por seguridad, debes crear tu propia contraseña antes de continuar.
+              {t('changePassword.notice')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Nueva contraseña
+                {t('changePassword.new')}
               </label>
               <div className="relative">
                 <input
@@ -96,7 +103,7 @@ export function ChangePassword() {
                   required
                   autoFocus
                   minLength={8}
-                  placeholder="Mínimo 8 caracteres"
+                  placeholder={t('changePassword.newPlaceholder')}
                   className={cn(
                     'w-full bg-surface-raised border border-border rounded-xl px-3.5 py-2.5 pr-10',
                     'text-text-primary text-sm placeholder-text-muted',
@@ -116,7 +123,7 @@ export function ChangePassword() {
 
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Confirmar contraseña
+                {t('changePassword.confirm')}
               </label>
               <div className="relative">
                 <input
@@ -125,7 +132,7 @@ export function ChangePassword() {
                   onChange={e => setConfirm(e.target.value)}
                   required
                   minLength={8}
-                  placeholder="Repetir contraseña"
+                  placeholder={t('changePassword.confirmPlaceholder')}
                   className={cn(
                     'w-full bg-surface-raised border border-border rounded-xl px-3.5 py-2.5 pr-10',
                     'text-text-primary text-sm placeholder-text-muted',
@@ -167,9 +174,9 @@ export function ChangePassword() {
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Guardando...
+                  {t('changePassword.submitting')}
                 </div>
-              ) : 'Guardar y continuar'}
+              ) : t('changePassword.submit')}
             </button>
           </form>
         </div>

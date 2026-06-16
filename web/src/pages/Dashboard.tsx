@@ -31,6 +31,8 @@ import {
 import { geocodeAddress, circlePolygon } from '@/lib/geocoding'
 import { coordsToWkt } from '@/hooks/useZones'
 import { ZONE_PALETTE } from '@/types/zones'
+import { useI18n } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
 type ActiveTab = 'technicians' | 'alerts'
 
@@ -38,38 +40,39 @@ type ActiveTab = 'technicians' | 'alerts'
 type RealtimeStatus = 'connecting' | 'connected' | 'error' | 'disconnected'
 
 function RealtimeIndicator({ status, lastEvent }: { status: RealtimeStatus; lastEvent: string | null }) {
+  const { t } = useI18n()
   const [secsSince, setSecsSince] = useState<number | null>(null)
 
   useEffect(() => {
     if (!lastEvent) { setSecsSince(null); return }
     const update = () => setSecsSince(Math.floor((Date.now() - new Date(lastEvent).getTime()) / 1000))
     update()
-    const t = setInterval(update, 5000)
-    return () => clearInterval(t)
+    const tmr = setInterval(update, 5000)
+    return () => clearInterval(tmr)
   }, [lastEvent])
 
   const cfg = {
-    connecting:   { dot: 'bg-warning animate-pulse', label: 'Conectando…',    text: 'text-warning' },
-    connected:    { dot: 'bg-success animate-pulse',  label: 'En vivo',        text: 'text-success' },
-    error:        { dot: 'bg-danger',                 label: 'Sin conexión',   text: 'text-danger'  },
-    disconnected: { dot: 'bg-text-muted',             label: 'Desconectado',   text: 'text-text-muted' },
+    connecting:   { dot: 'bg-warning animate-pulse', label: t('realtime.connecting'),   text: 'text-warning' },
+    connected:    { dot: 'bg-success animate-pulse',  label: t('realtime.connected'),    text: 'text-success' },
+    error:        { dot: 'bg-danger',                 label: t('realtime.error'),        text: 'text-danger'  },
+    disconnected: { dot: 'bg-text-muted',             label: t('realtime.disconnected'), text: 'text-text-muted' },
   }[status]
 
   const lastEventLabel = secsSince === null
-    ? 'sin eventos'
+    ? t('realtime.noEvents')
     : secsSince < 60
-      ? `hace ${secsSince}s`
-      : `hace ${Math.floor(secsSince / 60)}m`
+      ? t('realtime.agoSeconds', { n: secsSince })
+      : t('realtime.agoMinutes', { n: Math.floor(secsSince / 60) })
 
   return (
     <div className="absolute bottom-4 right-4 z-[500] bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs shadow-xl">
       <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', cfg.dot)} />
       <span className={cn('font-medium', cfg.text)}>{cfg.label}</span>
       {status === 'connected' && (
-        <span className="text-text-muted">· último evento {lastEventLabel}</span>
+        <span className="text-text-muted">{t('realtime.lastEvent', { label: lastEventLabel })}</span>
       )}
       {status === 'error' && (
-        <span className="text-text-muted">· revisa consola</span>
+        <span className="text-text-muted">{t('realtime.checkConsole')}</span>
       )}
     </div>
   )
@@ -85,6 +88,7 @@ function ZonesMenu({
   isSuperAdmin: boolean
   onGenerateZones: () => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -108,7 +112,7 @@ function ZonesMenu({
         )}
       >
         <Layers className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">Zonas</span>
+        <span className="hidden sm:inline">{t('dashboard.zones')}</span>
         {zones.length > 0 && (
           <span className={cn('font-mono font-bold', showZones ? 'text-primary' : 'text-text-muted')}>
             {zones.length}
@@ -124,7 +128,7 @@ function ZonesMenu({
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors"
           >
             {showZones ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {showZones ? 'Ocultar zonas' : 'Mostrar zonas'}
+            {showZones ? t('dashboard.hideZones') : t('dashboard.showZones')}
           </button>
           <Link
             to="/zones"
@@ -132,7 +136,7 @@ function ZonesMenu({
             className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors"
           >
             <Layers className="w-3.5 h-3.5" />
-            Editor de zonas
+            {t('dashboard.zonesEditor')}
           </Link>
           {isSuperAdmin && (
             <>
@@ -142,7 +146,7 @@ function ZonesMenu({
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
               >
                 <MapPinned className="w-3.5 h-3.5" />
-                Generar zonas automáticas
+                {t('dashboard.generateAutoZones')}
               </button>
             </>
           )}
@@ -153,6 +157,7 @@ function ZonesMenu({
 }
 
 export function Dashboard() {
+  const { t } = useI18n()
   const today = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
 
   useRealtimeTechnicians()
@@ -216,10 +221,10 @@ export function Dashboard() {
     setManualGeoResult(null)
     try {
       const result = await geocodeAddress(manualCity.trim())
-      if (!result) { toast.error('No se encontró la ciudad'); return }
+      if (!result) { toast.error(t('dashboard.cityNotFound')); return }
       setManualGeoResult(result)
     } catch {
-      toast.error('Error al buscar la ciudad')
+      toast.error(t('dashboard.citySearchError'))
     } finally {
       setManualGeoLoading(false)
     }
@@ -242,12 +247,12 @@ export function Dashboard() {
         created_by: userId ?? null,
       })
       if (error) throw error
-      toast.success(`Zona "${manualCity.trim()}" creada`)
+      toast.success(t('dashboard.zoneCreated', { name: manualCity.trim() }))
       setGenOpen(false)
       setManualGeoResult(null)
       setManualCity('')
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al crear zona')
+      toast.error(err.message ?? t('dashboard.zoneCreateError'))
     } finally {
       setManualSaving(false)
     }
@@ -265,7 +270,7 @@ export function Dashboard() {
     setGenOpen(true)
     previewCityZones()
       .then(setGenPreview)
-      .catch((err) => toast.error(err.message ?? 'Error al cargar vista previa'))
+      .catch((err) => toast.error(err.message ?? t('dashboard.previewError')))
     previewRouteZones()
       .then(setRoutePreviewCnt)
       .catch(() => {})
@@ -281,11 +286,11 @@ export function Dashboard() {
       }, today)
       setRouteResult(result)
       if (result.created > 0)
-        toast.success(`${result.created} zona${result.created !== 1 ? 's' : ''} creada${result.created !== 1 ? 's' : ''}`)
+        toast.success(t(result.created === 1 ? 'dashboard.zonesGenerated_one' : 'dashboard.zonesGenerated_other', { n: result.created }))
       else
-        toast.warning('No se pudo geocodificar ninguna dirección')
+        toast.warning(t('dashboard.noGeocode'))
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al generar zonas')
+      toast.error(err.message ?? t('dashboard.genError'))
     } finally {
       setRouteLoading(false)
     }
@@ -297,12 +302,12 @@ export function Dashboard() {
       const result = await generateCityZones(6)
       setGenResult(result)
       if (result.created.length > 0) {
-        toast.success(`${result.created.length} zona${result.created.length !== 1 ? 's' : ''} generada${result.created.length !== 1 ? 's' : ''}`)
+        toast.success(t(result.created.length === 1 ? 'dashboard.zonesGenerated_one' : 'dashboard.zonesGenerated_other', { n: result.created.length }))
       } else {
-        toast.warning('No se encontraron ciudades con técnicos asignados')
+        toast.warning(t('dashboard.noCitiesAssigned'))
       }
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al generar zonas')
+      toast.error(err.message ?? t('dashboard.genError'))
       setGenOpen(false)
     } finally {
       setGenLoading(false)
@@ -335,7 +340,7 @@ export function Dashboard() {
               )}
             >
               <Users className="w-3.5 h-3.5" />
-              Técnicos
+              {t('dashboard.technicians')}
             </button>
             <button
               onClick={() => setActiveTab('alerts')}
@@ -347,7 +352,7 @@ export function Dashboard() {
               )}
             >
               <Bell className="w-3.5 h-3.5" />
-              Alertas
+              {t('dashboard.alerts')}
               {unreadAlerts > 0 && (
                 <span className="absolute top-2 right-6 bg-danger text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
                   {unreadAlerts > 9 ? '9+' : unreadAlerts}
@@ -400,7 +405,7 @@ export function Dashboard() {
         animate={{ left: sidebarCollapsed ? 0 : 320 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         onClick={() => setSidebarCollapsed(v => !v)}
-        title={sidebarCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
+        title={sidebarCollapsed ? t('dashboard.showPanel') : t('dashboard.hidePanel')}
         className="absolute top-1/2 -translate-y-1/2 z-[500] group"
       >
         <div className={cn(
@@ -440,14 +445,14 @@ export function Dashboard() {
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors whitespace-nowrap"
               >
                 <History className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Historial</span>
+                <span className="hidden lg:inline">{t('dashboard.history')}</span>
               </Link>
               <Link
                 to="/reports"
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors whitespace-nowrap"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Reportes</span>
+                <span className="hidden lg:inline">{t('dashboard.reports')}</span>
               </Link>
               <ZonesMenu
                 showZones={showZones}
@@ -465,7 +470,7 @@ export function Dashboard() {
                 className="bg-warning/90 backdrop-blur-sm border border-warning/50 rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-warning transition-colors shadow-xl text-xs text-white font-medium"
               >
                 <ClipboardList className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Mi Panel</span>
+                <span className="hidden sm:inline">{t('dashboard.myPanel')}</span>
               </Link>
             )}
             {isSuperAdmin && (
@@ -474,14 +479,16 @@ export function Dashboard() {
                 className="bg-primary/90 backdrop-blur-sm border border-primary/50 rounded-xl px-3 py-2 flex items-center gap-1.5 hover:bg-primary transition-colors shadow-xl text-xs text-white font-medium"
               >
                 <Shield className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Admin</span>
+                <span className="hidden sm:inline">{t('dashboard.admin')}</span>
               </Link>
             )}
+
+            <LanguageSwitcher className="shadow-xl" />
 
             {/* Logout */}
             <button
               onClick={handleLogout}
-              title="Cerrar sesión"
+              title={t('common.logout')}
               className="bg-surface/90 backdrop-blur-sm border border-border-soft rounded-xl p-2 hover:bg-danger/10 hover:border-danger/30 transition-colors shadow-xl"
             >
               <LogOut className="w-3.5 h-3.5 text-text-muted hover:text-danger transition-colors" />
@@ -532,19 +539,19 @@ export function Dashboard() {
                   <MapPinned className="w-5 h-5 text-violet-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-text-primary text-sm">Generar zonas en el mapa</p>
+                  <p className="font-bold text-text-primary text-sm">{t('dashboard.gen.title')}</p>
                   <p className="text-text-muted text-xs mt-0.5">
                     {genMode === 'route'
                       ? routeResult
-                        ? 'Proceso completado'
+                        ? t('dashboard.gen.completed')
                         : routePreviewCnt !== null
-                          ? `${routePreviewCnt} dirección${routePreviewCnt !== 1 ? 'es' : ''} únicas en rutas`
-                          : 'Cargando rutas…'
+                          ? t(routePreviewCnt === 1 ? 'dashboard.gen.uniqueAddrInRoutes_one' : 'dashboard.gen.uniqueAddrInRoutes_other', { n: routePreviewCnt })
+                          : t('dashboard.gen.loadingRoutes')
                       : genResult
-                        ? 'Proceso completado'
+                        ? t('dashboard.gen.completed')
                         : genPreview
-                          ? `${genPreview.filter(c => c.hasCoords).length} ciudades detectadas`
-                          : 'Cargando ciudades…'
+                          ? t('dashboard.gen.citiesDetected', { n: genPreview.filter(c => c.hasCoords).length })
+                          : t('dashboard.gen.loadingCities')
                     }
                   </p>
                 </div>
@@ -568,7 +575,7 @@ export function Dashboard() {
                     )}
                   >
                     <MapPinned className="w-3.5 h-3.5" />
-                    Por ciudades
+                    {t('dashboard.gen.byCities')}
                   </button>
                   <button
                     onClick={() => setGenMode('route')}
@@ -580,7 +587,7 @@ export function Dashboard() {
                     )}
                   >
                     <MapPin className="w-3.5 h-3.5" />
-                    Por direcciones de ruta
+                    {t('dashboard.gen.byRouteAddr')}
                     {routePreviewCnt !== null && routePreviewCnt > 0 && (
                       <span className="ml-1 bg-violet-500/20 text-violet-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
                         {routePreviewCnt}
@@ -598,24 +605,24 @@ export function Dashboard() {
                       <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="font-semibold text-success text-sm">
-                          {routeResult.created} zona{routeResult.created !== 1 ? 's' : ''} creada{routeResult.created !== 1 ? 's' : ''} correctamente
+                          {t(routeResult.created === 1 ? 'dashboard.gen.zonesCreatedOk_one' : 'dashboard.gen.zonesCreatedOk_other', { n: routeResult.created })}
                         </p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          {routeResult.skipped > 0 && `${routeResult.skipped} sin geocodificar · `}
-                          {routeResult.total} dirección{routeResult.total !== 1 ? 'es' : ''} procesada{routeResult.total !== 1 ? 's' : ''}
+                          {routeResult.skipped > 0 && t('dashboard.gen.skippedAddr', { n: routeResult.skipped })}
+                          {t(routeResult.total === 1 ? 'dashboard.gen.addrProcessed_one' : 'dashboard.gen.addrProcessed_other', { n: routeResult.total })}
                         </p>
                       </div>
                     </div>
                     <button onClick={() => setGenOpen(false)}
                       className="w-full py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                      Cerrar
+                      {t('common.close')}
                     </button>
                   </div>
                 ) : routeLoading ? (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-xs text-text-muted">
-                        <span>Geocodificando direcciones…</span>
+                        <span>{t('dashboard.gen.geocodingAddr')}</span>
                         <span className="font-mono">{routeProgress?.done ?? 0} / {routeProgress?.total ?? 0}</span>
                       </div>
                       <div className="w-full bg-base rounded-full h-2 overflow-hidden">
@@ -625,7 +632,7 @@ export function Dashboard() {
                         />
                       </div>
                       <p className="text-xs text-text-muted/60 text-center">
-                        Esto puede tomar ~{routeProgress?.total ? Math.ceil(routeProgress.total * 1.1) : '?'}s · No cierres esta ventana
+                        {t('dashboard.gen.mayTake', { n: routeProgress?.total ? Math.ceil(routeProgress.total * 1.1) : '?' })}
                       </p>
                     </div>
                   </div>
@@ -633,22 +640,22 @@ export function Dashboard() {
                   <div className="space-y-4">
                     {routePreviewCnt === 0 ? (
                       <div className="text-center py-8">
-                        <p className="text-text-muted text-sm">No hay rutas cargadas.</p>
-                        <p className="text-text-muted/60 text-xs mt-1">Cargá rutas desde el Panel de Líder primero.</p>
+                        <p className="text-text-muted text-sm">{t('dashboard.gen.noRoutes')}</p>
+                        <p className="text-text-muted/60 text-xs mt-1">{t('dashboard.gen.loadRoutesFirst')}</p>
                       </div>
                     ) : (
                       <>
                         <div className="bg-base border border-border-soft rounded-xl px-4 py-3 flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-semibold text-text-primary">{routePreviewCnt ?? '…'} direcciones únicas</p>
-                            <p className="text-xs text-text-muted mt-0.5">Se creará un círculo en cada instalación</p>
+                            <p className="text-sm font-semibold text-text-primary">{t('dashboard.gen.uniqueAddresses', { n: routePreviewCnt ?? '…' })}</p>
+                            <p className="text-xs text-text-muted mt-0.5">{t('dashboard.gen.circlePerInstall')}</p>
                           </div>
                           <MapPin className="w-5 h-5 text-violet-400 flex-shrink-0" />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs text-text-muted">Radio por dirección</span>
+                            <span className="text-xs text-text-muted">{t('dashboard.gen.radiusPerAddr')}</span>
                             <span className="text-xs font-mono text-text-primary">{routeRadius} km</span>
                           </div>
                           <input
@@ -665,7 +672,7 @@ export function Dashboard() {
                         <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-start gap-2.5">
                           <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                           <p className="text-xs text-text-secondary leading-relaxed">
-                            Las zonas existentes <strong className="text-text-primary">no se borran</strong>. Se agregan nuevas zonas tipo <em>Punto de control</em>.
+                            {t('dashboard.gen.warnRoute1')}<strong className="text-text-primary">{t('dashboard.gen.warnRouteBold')}</strong>{t('dashboard.gen.warnRoute2')}<em>{t('dashboard.gen.warnRouteEm')}</em>.
                           </p>
                         </div>
                       </>
@@ -674,7 +681,7 @@ export function Dashboard() {
                     <div className="flex gap-2">
                       <button onClick={() => setGenOpen(false)}
                         className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                        Cancelar
+                        {t('common.cancel')}
                       </button>
                       <button
                         onClick={handleGenerateRouteZones}
@@ -682,7 +689,7 @@ export function Dashboard() {
                         className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
                       >
                         <MapPin className="w-4 h-4" />
-                        Generar {routePreviewCnt !== null ? `(${routePreviewCnt})` : ''}
+                        {t('dashboard.gen.generate')} {routePreviewCnt !== null ? `(${routePreviewCnt})` : ''}
                       </button>
                     </div>
                   </div>
@@ -696,10 +703,10 @@ export function Dashboard() {
                     <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold text-success text-sm">
-                        {genResult.created.length} zona{genResult.created.length !== 1 ? 's' : ''} creada{genResult.created.length !== 1 ? 's' : ''} correctamente
+                        {t(genResult.created.length === 1 ? 'dashboard.gen.zonesCreatedOk_one' : 'dashboard.gen.zonesCreatedOk_other', { n: genResult.created.length })}
                       </p>
                       {genResult.deleted > 0 && (
-                        <p className="text-text-muted text-xs mt-0.5">{genResult.deleted} zona{genResult.deleted !== 1 ? 's' : ''} anterior{genResult.deleted !== 1 ? 'es' : ''} eliminada{genResult.deleted !== 1 ? 's' : ''}</p>
+                        <p className="text-text-muted text-xs mt-0.5">{t(genResult.deleted === 1 ? 'dashboard.gen.prevZonesDeleted_one' : 'dashboard.gen.prevZonesDeleted_other', { n: genResult.deleted })}</p>
                       )}
                       {genResult.created.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -714,13 +721,13 @@ export function Dashboard() {
                     <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-start gap-2.5">
                       <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-text-muted">
-                        <strong className="text-warning">Sin coordenadas:</strong> {genResult.skipped.join(', ')}
+                        <strong className="text-warning">{t('dashboard.gen.noCoords')}</strong> {genResult.skipped.join(', ')}
                       </p>
                     </div>
                   )}
                   <button onClick={() => setGenOpen(false)}
                     className="w-full py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors">
-                    Cerrar
+                    {t('common.close')}
                   </button>
                 </div>
               ) : (
@@ -730,13 +737,13 @@ export function Dashboard() {
                     {!genPreview ? (
                       <div className="flex items-center justify-center gap-2 py-8 text-text-muted text-xs">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Consultando técnicos…
+                        {t('dashboard.gen.consultingTechs')}
                       </div>
                     ) : genPreview.length === 0 ? (
                       <div className="space-y-4">
                         <div className="text-center py-4 space-y-1">
-                          <p className="text-text-muted text-sm">Ningún técnico tiene ciudad asignada.</p>
-                          <p className="text-text-muted/60 text-xs">Puedes crear una zona de ciudad manualmente:</p>
+                          <p className="text-text-muted text-sm">{t('dashboard.gen.noTechCity')}</p>
+                          <p className="text-text-muted/60 text-xs">{t('dashboard.gen.createCityManually')}</p>
                         </div>
 
                         <div className="border-t border-border-soft pt-4 space-y-3">
@@ -745,7 +752,7 @@ export function Dashboard() {
                               value={manualCity}
                               onChange={e => setManualCity(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter' && !manualGeoLoading) handleManualGeocode() }}
-                              placeholder="Ej: Bogotá, Colombia"
+                              placeholder={t('dashboard.gen.cityPlaceholder')}
                               className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                             />
                             <button
@@ -768,7 +775,7 @@ export function Dashboard() {
                               </div>
                               <div>
                                 <div className="flex items-center justify-between mb-1.5">
-                                  <span className="text-xs text-text-muted">Radio de zona</span>
+                                  <span className="text-xs text-text-muted">{t('dashboard.gen.zoneRadius')}</span>
                                   <span className="text-xs font-mono text-text-primary">{manualRadius} km</span>
                                 </div>
                                 <input
@@ -785,7 +792,7 @@ export function Dashboard() {
                               >
                                 {manualSaving
                                   ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                  : <><MapPinned className="w-4 h-4" />Crear zona circular</>
+                                  : <><MapPinned className="w-4 h-4" />{t('dashboard.gen.createCircularZone')}</>
                                 }
                               </button>
                             </div>
@@ -795,7 +802,7 @@ export function Dashboard() {
                     ) : (
                       <>
                         <p className="text-xs text-text-muted uppercase tracking-wider font-medium mb-2">
-                          Zonas que se crearán
+                          {t('dashboard.gen.zonesToCreate')}
                         </p>
                         <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
                           {genPreview.map((c) => (
@@ -811,7 +818,7 @@ export function Dashboard() {
                               )} />
                               <span className="font-medium">{c.city}</span>
                               {c.country && <span className="text-text-muted">· {c.country}</span>}
-                              {!c.hasCoords && <span className="ml-auto text-warning text-[10px]">sin coords</span>}
+                              {!c.hasCoords && <span className="ml-auto text-warning text-[10px]">{t('dashboard.gen.noCoordsShort')}</span>}
                             </div>
                           ))}
                         </div>
@@ -824,7 +831,7 @@ export function Dashboard() {
                     <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 flex items-start gap-2.5 mb-4">
                       <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                       <p className="text-xs text-text-secondary leading-relaxed">
-                        Se <strong className="text-text-primary">borrarán todas las zonas existentes</strong> y se crearán zonas circulares de 6 km por cada ciudad.
+                        {t('dashboard.gen.warnCity1')}<strong className="text-text-primary">{t('dashboard.gen.warnCityBold')}</strong>{t('dashboard.gen.warnCity2')}
                       </p>
                     </div>
                   )}
@@ -832,7 +839,7 @@ export function Dashboard() {
                   <div className="flex gap-2">
                     <button onClick={() => setGenOpen(false)} disabled={genLoading}
                       className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium transition-colors disabled:opacity-50">
-                      Cancelar
+                      {t('common.cancel')}
                     </button>
                     <button
                       onClick={handleGenerateZones}
@@ -840,8 +847,8 @@ export function Dashboard() {
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                       {genLoading
-                        ? <><Loader2 className="w-4 h-4 animate-spin" />Generando…</>
-                        : <><MapPinned className="w-4 h-4" />Generar {genPreview && `(${genPreview.filter(c => c.hasCoords).length})`}</>
+                        ? <><Loader2 className="w-4 h-4 animate-spin" />{t('dashboard.gen.generating')}</>
+                        : <><MapPinned className="w-4 h-4" />{t('dashboard.gen.generate')} {genPreview && `(${genPreview.filter(c => c.hasCoords).length})`}</>
                       }
                     </button>
                   </div>

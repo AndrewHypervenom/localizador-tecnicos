@@ -7,7 +7,7 @@ import {
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface CampaignRow { id: string; name: string; is_active: boolean }
 interface CompanyRow {
@@ -53,6 +53,7 @@ function CompanyModal({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useI18n()
   const [name, setName]       = useState(company?.name ?? '')
   const [leaderId, setLeader] = useState(company?.leaderId ?? (leaders[0]?.id ?? ''))
   const [workStartHour, setWorkStartHour]       = useState(company?.workStartHour ?? 8)
@@ -64,7 +65,7 @@ function CompanyModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('El nombre es requerido'); return }
+    if (!name.trim()) { setError(t('campaigns.nameRequired')); return }
     setSaving(true); setError(null)
     try {
       const payload = { name, leaderId, workStartHour, workEndHour, workSkipWeekends, workTz }
@@ -75,7 +76,7 @@ function CompanyModal({
       }
       onSaved(); onClose()
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al guardar')
+      setError(err?.response?.data?.error ?? t('adminCompanies.saveError'))
     } finally {
       setSaving(false)
     }
@@ -99,10 +100,10 @@ function CompanyModal({
             </div>
             <div>
               <p className="font-bold text-text-primary text-sm leading-none">
-                {mode === 'create' ? 'Nueva empresa' : 'Editar empresa'}
+                {mode === 'create' ? t('campaigns.newCompany') : t('adminCompanies.editCompany')}
               </p>
               <p className="text-xs text-text-muted mt-0.5">
-                {mode === 'create' ? 'Completa los datos de la empresa' : company?.name}
+                {mode === 'create' ? t('adminCompanies.completeData') : company?.name}
               </p>
             </div>
           </div>
@@ -115,22 +116,22 @@ function CompanyModal({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-4 bg-primary rounded-full" />
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos de la empresa</p>
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('campaigns.companyData')}</p>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-text-muted font-medium mb-1.5">
-                  Nombre <span className="text-danger">*</span>
+                  {t('campaigns.name')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text" value={name} onChange={e => setName(e.target.value)}
-                  required autoFocus placeholder="Nombre de la empresa"
+                  required autoFocus placeholder={t('upload.companyNamePlaceholder')}
                   className={inp}
                 />
               </div>
               <div>
                 <label className="block text-xs text-text-muted font-medium mb-1.5">
-                  Líder asignado <span className="text-danger">*</span>
+                  {t('adminCompanies.assignedLeader')} <span className="text-danger">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -138,7 +139,7 @@ function CompanyModal({
                     required
                     className={cn(inp, 'appearance-none pr-8')}
                   >
-                    <option value="">— Seleccionar líder —</option>
+                    <option value="">{t('adminCompanies.selectLeader')}</option>
                     {leaders.map(l => (
                       <option key={l.id} value={l.id}>{l.email} ({l.role})</option>
                     ))}
@@ -153,16 +154,15 @@ function CompanyModal({
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-4 bg-primary rounded-full" />
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Horario de alertas</p>
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('leaderSettings.alertSchedule')}</p>
             </div>
             <p className="text-text-muted text-xs mb-3">
-              Las alertas de "sin señal" y batería baja solo se generan dentro de este horario.
-              Accidente y SOS siempre alertan, 24/7.
+              {t('leaderSettings.desc')}
             </p>
             <div className="space-y-3">
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="block text-xs text-text-muted font-medium mb-1.5">Desde</label>
+                  <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.from')}</label>
                   <select value={workStartHour} onChange={e => setWorkStartHour(Number(e.target.value))} className={inp}>
                     {Array.from({ length: 25 }, (_, h) => (
                       <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
@@ -170,7 +170,7 @@ function CompanyModal({
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs text-text-muted font-medium mb-1.5">Hasta</label>
+                  <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.to')}</label>
                   <select value={workEndHour} onChange={e => setWorkEndHour(Number(e.target.value))} className={inp}>
                     {Array.from({ length: 25 }, (_, h) => (
                       <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
@@ -185,10 +185,10 @@ function CompanyModal({
                   onChange={e => setWorkSkipWeekends(e.target.checked)}
                   className="rounded border-border-soft"
                 />
-                <span className="text-sm text-text-secondary">No alertar sábados ni domingos</span>
+                <span className="text-sm text-text-secondary">{t('leaderSettings.skipWeekends')}</span>
               </label>
               <div>
-                <label className="block text-xs text-text-muted font-medium mb-1.5">Zona horaria</label>
+                <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.timezone')}</label>
                 <select value={workTz} onChange={e => setWorkTz(e.target.value)} className={inp}>
                   {TZ_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
@@ -203,12 +203,12 @@ function CompanyModal({
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {mode === 'create' ? 'Crear empresa' : 'Guardar cambios'}
+              {mode === 'create' ? t('campaigns.createCompany') : t('editTech.saveChanges')}
             </button>
           </div>
         </form>
@@ -220,6 +220,7 @@ function CompanyModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function CompaniesManagement() {
+  const { t, lang } = useI18n()
   const [companies, setCompanies]   = useState<CompanyRow[]>([])
   const [leaders, setLeaders]       = useState<Leader[]>([])
   const [loading, setLoading]       = useState(true)
@@ -240,7 +241,7 @@ export function CompaniesManagement() {
       setCompanies(cos)
       setLeaders(ldrs)
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Error al cargar empresas')
+      setError(err?.response?.data?.error ?? t('adminCompanies.loadError'))
     } finally {
       setLoading(false)
     }
@@ -263,7 +264,7 @@ export function CompaniesManagement() {
       setCompanies(prev => prev.filter(c => c.id !== co.id))
       setConfirmDelete(null)
     } catch (err: any) {
-      alert(err?.response?.data?.error ?? 'Error al eliminar')
+      alert(err?.response?.data?.error ?? t('adminCompanies.deleteError'))
     } finally {
       setDeletingId(null)
     }
@@ -278,22 +279,22 @@ export function CompaniesManagement() {
       <div className="flex items-center gap-3">
         <div>
           <h2 className="text-text-primary font-semibold text-sm">
-            Empresas
+            {t('adminCompanies.title')}
             {!loading && <span className="text-text-muted font-normal ml-2">({companies.length})</span>}
           </h2>
           {!loading && companies.length > 0 && (
-            <p className="text-text-muted text-xs mt-0.5">{totalCampaigns} campañas · {totalTechnicians} técnicos</p>
+            <p className="text-text-muted text-xs mt-0.5">{t('adminCompanies.countLine', { campaigns: totalCampaigns, techs: totalTechnicians })}</p>
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={load} title="Actualizar" className="text-text-muted hover:text-text-primary transition-colors">
+          <button onClick={load} title={t('common.refresh')} className="text-text-muted hover:text-text-primary transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => { setEditing(undefined); setModalMode('create') }}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> Nueva empresa
+            <Plus className="w-3.5 h-3.5" /> {t('campaigns.newCompany')}
           </button>
         </div>
       </div>
@@ -307,8 +308,8 @@ export function CompaniesManagement() {
       ) : companies.length === 0 ? (
         <div className="text-center py-16 bg-surface border border-border-soft rounded-2xl">
           <Building2 className="w-10 h-10 text-text-muted/30 mx-auto mb-3" />
-          <p className="text-text-primary font-medium text-sm">Sin empresas registradas</p>
-          <p className="text-text-muted text-xs mt-1">Crea la primera empresa y asígnala a un líder.</p>
+          <p className="text-text-primary font-medium text-sm">{t('adminCompanies.empty')}</p>
+          <p className="text-text-muted text-xs mt-1">{t('adminCompanies.emptyHint')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -344,7 +345,7 @@ export function CompaniesManagement() {
                         <span className="text-text-muted text-xs truncate">{co.leaderEmail}</span>
                       )}
                       <span className="text-text-muted/50 text-xs">·</span>
-                      <span className="text-xs text-text-muted">{co.campaignCount} campaña{co.campaignCount !== 1 ? 's' : ''}</span>
+                      <span className="text-xs text-text-muted">{t(co.campaignCount === 1 ? 'campaigns.campaignsCount_one' : 'campaigns.campaignsCount_other', { n: co.campaignCount })}</span>
                       {co.technicianCount > 0 && (
                         <>
                           <span className="text-text-muted/50 text-xs">·</span>
@@ -354,7 +355,7 @@ export function CompaniesManagement() {
                         </>
                       )}
                       <span className="text-text-muted/50 text-xs">·</span>
-                      <span className="text-xs text-text-muted flex items-center gap-1" title="Horario de alertas">
+                      <span className="text-xs text-text-muted flex items-center gap-1" title={t('leaderSettings.alertSchedule')}>
                         <Clock className="w-3 h-3" />
                         {String(co.workStartHour ?? 8).padStart(2, '0')}–{String(co.workEndHour ?? 17).padStart(2, '0')}h
                         {(co.workSkipWeekends ?? true) ? ' L–V' : ''}
@@ -364,7 +365,7 @@ export function CompaniesManagement() {
 
                   {/* Date */}
                   <span className="text-text-muted/60 text-xs flex-shrink-0 hidden sm:inline">
-                    {format(parseISO(co.createdAt), 'dd MMM yyyy', { locale: es })}
+                    {format(parseISO(co.createdAt), 'dd MMM yyyy', { locale: getDateLocale(lang) })}
                   </span>
 
                   {/* Actions */}
@@ -373,7 +374,7 @@ export function CompaniesManagement() {
                       type="button"
                       onClick={() => { setEditing(co); setModalMode('edit') }}
                       className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
-                      title="Editar"
+                      title={t('common.edit')}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -386,14 +387,14 @@ export function CompaniesManagement() {
                           className="text-xs px-2 py-1 bg-danger text-white rounded-lg font-medium flex items-center gap-1"
                         >
                           {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                          Confirmar
+                          {t('common.confirm')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(null)}
                           className="text-xs px-2 py-1 border border-border-soft text-text-muted rounded-lg hover:bg-surface-raised"
                         >
-                          Cancelar
+                          {t('common.cancel')}
                         </button>
                       </>
                     ) : (
@@ -401,7 +402,7 @@ export function CompaniesManagement() {
                         type="button"
                         onClick={() => setConfirmDelete(co.id)}
                         className="p-1.5 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-danger/10"
-                        title="Eliminar empresa"
+                        title={t('campaigns.deleteCompany')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -413,7 +414,7 @@ export function CompaniesManagement() {
                 {isExpanded && (
                   <div className="border-t border-border-soft bg-base/40">
                     {co.campaigns.length === 0 ? (
-                      <div className="px-14 py-4 text-text-muted text-xs">Sin campañas aún.</div>
+                      <div className="px-14 py-4 text-text-muted text-xs">{t('adminCompanies.noCampaigns')}</div>
                     ) : (
                       <div className="divide-y divide-border-soft">
                         {co.campaigns.map(cp => (
@@ -426,7 +427,7 @@ export function CompaniesManagement() {
                                 ? 'bg-success/10 text-success border-success/20'
                                 : 'bg-surface-raised text-text-muted border-border'
                             )}>
-                              {cp.is_active ? 'Activa' : 'Inactiva'}
+                              {cp.is_active ? t('campaigns.active') : t('campaigns.inactive')}
                             </span>
                           </div>
                         ))}

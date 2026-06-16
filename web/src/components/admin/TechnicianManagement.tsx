@@ -13,7 +13,7 @@ import { TechnicianEditModal, type TechnicianEditable } from '@/components/modal
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { to12h } from '@/components/ui/TimeSelect'
 import { parseShift } from '@/lib/geo'
@@ -27,17 +27,21 @@ interface TechStatus {
   battery: number | null
 }
 
-const STATUS_CFG: Record<string, { label: string; dot: string; text: string }> = {
-  moving:   { label: 'En movimiento', dot: 'bg-success animate-pulse', text: 'text-success' },
-  idle:     { label: 'Inactivo',      dot: 'bg-warning',               text: 'text-warning' },
-  stopped:  { label: 'Detenido',      dot: 'bg-text-muted',            text: 'text-text-muted' },
-  offline:  { label: 'Sin conexión',  dot: 'bg-danger',                text: 'text-danger' },
-  accident: { label: '¡Accidente!',   dot: 'bg-danger animate-pulse',  text: 'text-danger font-bold' },
+const STATUS_CFG: Record<string, { labelKey: string; dot: string; text: string }> = {
+  moving:   { labelKey: 'adminTech.status.moving',   dot: 'bg-success animate-pulse', text: 'text-success' },
+  idle:     { labelKey: 'adminTech.status.idle',     dot: 'bg-warning',               text: 'text-warning' },
+  stopped:  { labelKey: 'adminTech.status.stopped',  dot: 'bg-text-muted',            text: 'text-text-muted' },
+  // 'no_signal' = app viva (heartbeat) sin punto GPS fresco (quieto + ahorro de
+  // batería). Sin este caso caía al fallback 'offline' y se veía rojo en falso.
+  no_signal:{ labelKey: 'status.no_signal',          dot: 'bg-amber-500',             text: 'text-amber-500' },
+  offline:  { labelKey: 'adminTech.status.offline',  dot: 'bg-danger',                text: 'text-danger' },
+  accident: { labelKey: 'adminTech.status.accident', dot: 'bg-danger animate-pulse',  text: 'text-danger font-bold' },
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => void }) {
+  const { t, lang } = useI18n()
   const [techs, setTechs]           = useState<Technician[]>([])
   const [statuses, setStatuses]     = useState<Record<string, TechStatus>>({})
   const [loading, setLoading]       = useState(true)
@@ -138,7 +142,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
   }
 
   async function deleteTech(tech: Technician) {
-    if (!window.confirm(`¿Eliminar al técnico "${tech.name}"?\nSe borrarán también sus tokens de registro. Esta acción no se puede deshacer.`)) return
+    if (!window.confirm(t('adminTech.deleteConfirm', { name: tech.name }))) return
     setDeletingId(tech.id)
     try {
       await supabase.from('registration_tokens').delete().eq('technician_id', tech.id)
@@ -155,7 +159,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
   async function deleteSelected() {
     const ids = [...selectedIds]
     if (ids.length === 0) return
-    if (!window.confirm(`¿Eliminar ${ids.length} técnico${ids.length !== 1 ? 's' : ''}?\nEsta acción no se puede deshacer.`)) return
+    if (!window.confirm(t(ids.length === 1 ? 'adminTech.deleteSelectedConfirm_one' : 'adminTech.deleteSelectedConfirm_other', { n: ids.length }))) return
     setDeletingAll(true)
     try {
       await supabase.from('registration_tokens').delete().in('technician_id', ids)
@@ -163,7 +167,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
       if (error) throw error
       setTechs(prev => prev.filter(t => !ids.includes(t.id)))
       setSelectedIds(new Set())
-      toast.success(`${ids.length} técnico${ids.length !== 1 ? 's' : ''} eliminado${ids.length !== 1 ? 's' : ''}`)
+      toast.success(t(ids.length === 1 ? 'adminTech.deletedToast_one' : 'adminTech.deletedToast_other', { n: ids.length }))
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -172,25 +176,25 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
   }
 
   function downloadCSV() {
-    const header = 'ID,Nombre,Teléfono,País,Ciudad,Jornada,Cliente,Proyecto,Notas,Device ID,Activo,Estado,Batería,Último acceso,Registrado'
-    const rows = techs.map(t => {
-      const s = statuses[t.id]
+    const header = t('adminTech.csvHeader')
+    const rows = techs.map(tch => {
+      const s = statuses[tch.id]
       return [
-        t.id,
-        `"${t.name}"`,
-        t.phone ?? '',
-        t.country ?? '',
-        t.city ?? '',
-        t.shift ?? '',
-        `"${t.client ?? ''}"`,
-        `"${t.project ?? ''}"`,
-        `"${(t.notes ?? '').replace(/"/g, '""')}"`,
-        t.device_id ?? '',
-        t.active ? 'Sí' : 'No',
+        tch.id,
+        `"${tch.name}"`,
+        tch.phone ?? '',
+        tch.country ?? '',
+        tch.city ?? '',
+        tch.shift ?? '',
+        `"${tch.client ?? ''}"`,
+        `"${tch.project ?? ''}"`,
+        `"${(tch.notes ?? '').replace(/"/g, '""')}"`,
+        tch.device_id ?? '',
+        tch.active ? t('common.yes') : t('common.no'),
         s?.status ?? 'offline',
         s?.battery != null ? `${s.battery}%` : '',
         s?.last_seen ? format(parseISO(s.last_seen), 'dd/MM/yyyy HH:mm') : '',
-        format(parseISO(t.created_at), 'dd/MM/yyyy'),
+        format(parseISO(tch.created_at), 'dd/MM/yyyy'),
       ].join(',')
     })
     const csv = [header, ...rows].join('\n')
@@ -208,12 +212,12 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
         <div>
-          <p className="text-text-primary font-semibold text-sm">Técnicos de Campo</p>
+          <p className="text-text-primary font-semibold text-sm">{t('adminTech.title')}</p>
           {!loading && (
             <p className="text-xs text-text-muted">
               {filtered.length !== techs.length
-                ? `${filtered.length} de ${techs.length} técnicos`
-                : `${techs.length} técnicos`}
+                ? t('adminTech.countFiltered', { filtered: filtered.length, total: techs.length })
+                : t('adminTech.countTotal', { n: techs.length })}
             </p>
           )}
         </div>
@@ -227,20 +231,20 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
               {deletingAll
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <Trash2 className="w-3.5 h-3.5" />}
-              Borrar {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+              {t(selectedIds.size === 1 ? 'adminTech.deleteSelectedBtn_one' : 'adminTech.deleteSelectedBtn_other', { n: selectedIds.size })}
             </button>
           )}
-          <button onClick={downloadCSV} title="Exportar CSV"
+          <button onClick={downloadCSV} title={t('adminTech.exportCsv')}
             className="text-xs text-text-muted hover:text-text-primary transition-colors border border-border rounded-lg px-2.5 py-1.5">
-            Exportar CSV
+            {t('adminTech.exportCsv')}
           </button>
-          <button onClick={load} title="Actualizar"
+          <button onClick={load} title={t('common.refresh')}
             className="text-text-muted hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-raised">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button onClick={() => setCreateOpen(true)}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Nuevo técnico
+            <Plus className="w-3.5 h-3.5" /> {t('adminTech.newTech')}
           </button>
         </div>
       </div>
@@ -257,10 +261,10 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-amber-400">
-                {unlinkedTechs.length} técnico{unlinkedTechs.length !== 1 ? 's' : ''} sin app vinculada
+                {t(unlinkedTechs.length === 1 ? 'adminTech.unlinkedCount_one' : 'adminTech.unlinkedCount_other', { n: unlinkedTechs.length })}
               </p>
               <p className="text-xs text-text-muted">
-                Generá el QR y enviáselo para que empiecen a rastrear
+                {t('adminTech.unlinkedHint')}
               </p>
             </div>
             <ChevronDown className={cn('w-4 h-4 text-text-muted transition-transform flex-shrink-0', showUnlinked && 'rotate-180')} />
@@ -272,7 +276,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-text-primary truncate">{tech.name}</p>
                     <p className="text-xs text-text-muted truncate">
-                      {[tech.city, tech.country].filter(Boolean).join(', ') || 'Sin ubicación asignada'}
+                      {[tech.city, tech.country].filter(Boolean).join(', ') || t('adminTech.noLocation')}
                     </p>
                   </div>
                   <button
@@ -280,7 +284,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                     className="flex items-center gap-1.5 text-xs bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 rounded-lg px-2.5 py-1.5 transition-colors flex-shrink-0 font-medium"
                   >
                     <QrCode className="w-3.5 h-3.5" />
-                    Ver QR
+                    {t('adminTech.viewQr')}
                   </button>
                 </div>
               ))}
@@ -301,10 +305,10 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-primary">
-                {incompleteTechs.length} técnico{incompleteTechs.length !== 1 ? 's' : ''} con perfil incompleto
+                {t(incompleteTechs.length === 1 ? 'adminTech.incompleteCount_one' : 'adminTech.incompleteCount_other', { n: incompleteTechs.length })}
               </p>
               <p className="text-xs text-text-muted">
-                Faltan teléfono o ciudad — se puede detectar la ciudad por GPS automáticamente
+                {t('adminTech.incompleteHint')}
               </p>
             </div>
             <ChevronDown className={cn('w-4 h-4 text-text-muted transition-transform flex-shrink-0', showIncomplete && 'rotate-180')} />
@@ -317,10 +321,10 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                     <p className="text-xs font-semibold text-text-primary truncate">{tech.name}</p>
                     <div className="flex flex-wrap items-center gap-1 mt-0.5">
                       {!tech.phone && (
-                        <span className="text-[10px] bg-warning/10 text-warning border border-warning/20 rounded px-1.5 py-0.5">Sin teléfono</span>
+                        <span className="text-[10px] bg-warning/10 text-warning border border-warning/20 rounded px-1.5 py-0.5">{t('adminTech.noPhone')}</span>
                       )}
                       {!tech.city && (
-                        <span className="text-[10px] bg-warning/10 text-warning border border-warning/20 rounded px-1.5 py-0.5">Sin ciudad</span>
+                        <span className="text-[10px] bg-warning/10 text-warning border border-warning/20 rounded px-1.5 py-0.5">{t('adminTech.noCity')}</span>
                       )}
                     </div>
                   </div>
@@ -329,7 +333,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                     className="flex items-center gap-1.5 text-xs bg-primary/10 text-primary hover:bg-primary/20 rounded-lg px-2.5 py-1.5 transition-colors flex-shrink-0 font-medium"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
-                    Completar
+                    {t('adminTech.complete')}
                   </button>
                 </div>
               ))}
@@ -347,7 +351,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, cliente…"
+            placeholder={t('adminTech.searchPlaceholder')}
             className="w-full bg-base border border-border-soft rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
           />
           {search && (
@@ -362,7 +366,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
           icon={<MapPin className="w-3 h-3" />}
           value={filterCountry}
           onChange={setFilterCountry}
-          placeholder="País"
+          placeholder={t('reports.country')}
           options={uniqueCountries}
         />
 
@@ -371,7 +375,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
           icon={<Building2 className="w-3 h-3" />}
           value={filterClient}
           onChange={setFilterClient}
-          placeholder="Cliente"
+          placeholder={t('reports.client')}
           options={uniqueClients}
         />
 
@@ -380,7 +384,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
           icon={<FolderOpen className="w-3 h-3" />}
           value={filterProject}
           onChange={setFilterProject}
-          placeholder="Proyecto"
+          placeholder={t('reports.project')}
           options={uniqueProjects}
         />
 
@@ -391,14 +395,14 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
             className="flex items-center gap-1 text-xs text-danger hover:text-danger/80 transition-colors px-2 py-1.5 rounded-lg hover:bg-danger/10"
           >
             <X className="w-3 h-3" />
-            Limpiar ({activeFilters})
+            {t('reports.clear', { n: activeFilters })}
           </button>
         )}
 
         {activeFilters === 0 && uniqueCountries.length === 0 && (
           <span className="flex items-center gap-1 text-xs text-text-muted px-2">
             <Filter className="w-3 h-3" />
-            Los filtros aparecerán cuando haya datos
+            {t('adminTech.filtersWhenData')}
           </span>
         )}
       </div>
@@ -413,19 +417,19 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
         <div className="text-center py-16 space-y-3">
           {techs.length === 0 ? (
             <>
-              <p className="text-text-muted text-sm">No hay técnicos registrados aún.</p>
+              <p className="text-text-muted text-sm">{t('adminTech.noneYet')}</p>
               {onOpenWizard && (
                 <button
                   onClick={onOpenWizard}
                   className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-base text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Crear primer proyecto
+                  {t('adminTech.createFirstProject')}
                 </button>
               )}
             </>
           ) : (
-            <p className="text-text-muted text-sm">Sin resultados para los filtros aplicados</p>
+            <p className="text-text-muted text-sm">{t('adminTech.noResults')}</p>
           )}
         </div>
       ) : (
@@ -449,7 +453,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                       className="w-3.5 h-3.5 accent-primary cursor-pointer"
                     />
                   </th>
-                  {['Técnico', 'País / Organización', 'Estado', 'Dispositivo', 'Registrado', ''].map((h, i) => (
+                  {[t('adminTech.col.tech'), t('adminTech.col.org'), t('adminTech.col.status'), t('adminTech.col.device'), t('adminTech.col.registered'), ''].map((h, i) => (
                     <th key={i} className={cn(
                       'text-xs text-text-muted font-medium px-4 py-3',
                       i === 5 ? 'text-right' : 'text-left'
@@ -488,7 +492,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                       <td className="px-4 py-3">
                         <p className="text-text-primary text-xs font-semibold">{tech.name}</p>
                         {tech.phone && <p className="text-text-muted text-xs">{tech.phone}</p>}
-                        {!tech.active && <span className="text-xs text-warning font-medium">Desactivado</span>}
+                        {!tech.active && <span className="text-xs text-warning font-medium">{t('adminTech.deactivated')}</span>}
                       </td>
 
                       {/* Country / City / Shift / Client / Project */}
@@ -535,15 +539,15 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           <div>
                             <div className="flex items-center gap-1.5">
                               <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', cfg.dot)} />
-                              <span className={cn('text-xs', cfg.text)}>{cfg.label}</span>
+                              <span className={cn('text-xs', cfg.text)}>{t(cfg.labelKey)}</span>
                             </div>
                             {st?.battery != null && (
-                              <p className="text-text-muted text-xs mt-0.5 ml-3">{st.battery}% bat.</p>
+                              <p className="text-text-muted text-xs mt-0.5 ml-3">{t('adminTech.battPct', { n: st.battery })}</p>
                             )}
                           </div>
                         ) : (
                           <span className="text-text-muted text-xs flex items-center gap-1">
-                            <WifiOff className="w-3 h-3" /> Sin app
+                            <WifiOff className="w-3 h-3" /> {t('leaderTech.noApp')}
                           </span>
                         )}
                       </td>
@@ -558,13 +562,13 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                             </span>
                           </span>
                         ) : (
-                          <span className="text-text-muted text-xs">No registrado</span>
+                          <span className="text-text-muted text-xs">{t('adminTech.notRegistered')}</span>
                         )}
                       </td>
 
                       {/* Date */}
                       <td className="px-4 py-3 text-text-muted text-xs whitespace-nowrap">
-                        {format(parseISO(tech.created_at), 'dd MMM yyyy', { locale: es })}
+                        {format(parseISO(tech.created_at), 'dd MMM yyyy', { locale: getDateLocale(lang) })}
                       </td>
 
                       {/* Actions */}
@@ -573,7 +577,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           {tech.device_id && (
                             <Link
                               to={`/map?tech=${tech.id}`}
-                              title="Ver en mapa"
+                              title={t('adminTech.viewOnMap')}
                               className="text-text-muted hover:text-success p-1.5 rounded-lg hover:bg-success/10 transition-colors"
                             >
                               <MapPin className="w-3.5 h-3.5" />
@@ -581,14 +585,14 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           )}
                           <button
                             onClick={() => setQrTech({ id: tech.id, name: tech.name })}
-                            title="Generar QR"
+                            title={t('adminTech.genQr')}
                             className="text-text-muted hover:text-primary p-1.5 rounded-lg hover:bg-primary/10 transition-colors"
                           >
                             <QrCode className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setEditTech(tech)}
-                            title="Editar"
+                            title={t('common.edit')}
                             className="text-text-muted hover:text-text-primary p-1.5 rounded-lg hover:bg-surface-raised transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -596,7 +600,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           <button
                             onClick={() => toggleActive(tech)}
                             disabled={isToggling || isDeleting}
-                            title={tech.active ? 'Desactivar' : 'Activar'}
+                            title={tech.active ? t('adminTech.deactivate') : t('adminTech.activate')}
                             className={cn(
                               'text-xs px-2 py-1 rounded-lg transition-colors disabled:opacity-40',
                               tech.active
@@ -606,12 +610,12 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           >
                             {isToggling
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : tech.active ? 'Desactivar' : 'Activar'}
+                              : tech.active ? t('adminTech.deactivate') : t('adminTech.activate')}
                           </button>
                           <button
                             onClick={() => deleteTech(tech)}
                             disabled={isDeleting || isToggling}
-                            title="Eliminar"
+                            title={t('common.delete')}
                             className="text-text-muted hover:text-danger p-1.5 rounded-lg hover:bg-danger/10 transition-colors disabled:opacity-40"
                           >
                             {isDeleting

@@ -8,8 +8,8 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface Campaign {
   id: string; name: string; description: string | null
@@ -58,13 +58,14 @@ function CompanyModal({ onClose, onCreated }: {
   onClose: () => void
   onCreated: (co: Company) => void
 }) {
+  const { t } = useI18n()
   const [name, setName]     = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('El nombre es requerido'); return }
+    if (!name.trim()) { setError(t('campaigns.nameRequired')); return }
     setSaving(true); setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -73,9 +74,9 @@ function CompanyModal({ onClose, onCreated }: {
         .select('id, name, created_at').single()
       if (err) throw err
       onCreated({ ...data, campaigns: [] })
-      toast.success('Empresa creada')
+      toast.success(t('campaigns.companyCreated'))
     } catch (err: any) {
-      setError(err.message ?? 'Error al crear empresa')
+      setError(err.message ?? t('campaigns.companyCreateError'))
     } finally {
       setSaving(false)
     }
@@ -97,8 +98,8 @@ function CompanyModal({ onClose, onCreated }: {
               <Building2 className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="font-bold text-text-primary text-sm leading-none">Nueva empresa</p>
-              <p className="text-xs text-text-muted mt-0.5">Empresa o cliente contratante</p>
+              <p className="font-bold text-text-primary text-sm leading-none">{t('campaigns.newCompany')}</p>
+              <p className="text-xs text-text-muted mt-0.5">{t('campaigns.companySubtitle')}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors rounded-lg p-1.5 hover:bg-surface-raised">
@@ -109,15 +110,15 @@ function CompanyModal({ onClose, onCreated }: {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-4 bg-primary rounded-full" />
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos de la empresa</p>
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('campaigns.companyData')}</p>
             </div>
             <div>
               <label className="block text-xs text-text-muted font-medium mb-1.5">
-                Nombre <span className="text-danger">*</span>
+                {t('campaigns.name')} <span className="text-danger">*</span>
               </label>
               <input
                 type="text" value={name} onChange={e => setName(e.target.value)}
-                required autoFocus placeholder="Empresa ABC"
+                required autoFocus placeholder={t('campaigns.companyPlaceholder')}
                 className={inp}
               />
             </div>
@@ -126,12 +127,12 @@ function CompanyModal({ onClose, onCreated }: {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Crear empresa
+              {t('campaigns.createCompany')}
             </button>
           </div>
         </form>
@@ -148,6 +149,7 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
   onClose: () => void
   onCreated: (cp: Campaign) => void
 }) {
+  const { t } = useI18n()
   const [name, setName]       = useState('')
   const [startDate, setStart] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [endDate, setEnd]     = useState('')
@@ -156,7 +158,7 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('El nombre es requerido'); return }
+    if (!name.trim()) { setError(t('campaigns.nameRequired')); return }
     setSaving(true); setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -167,9 +169,9 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
       }).select('id, name, description, start_date, end_date, is_active, created_at').single()
       if (err) throw err
       onCreated(data as Campaign)
-      toast.success('Campaña creada')
+      toast.success(t('campaigns.campaignCreated'))
     } catch (err: any) {
-      setError(err.message ?? 'Error al crear campaña')
+      setError(err.message ?? t('campaigns.campaignCreateError'))
     } finally {
       setSaving(false)
     }
@@ -191,7 +193,7 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
               <FolderOpen className="w-4 h-4 text-accent" />
             </div>
             <div>
-              <p className="font-bold text-text-primary text-sm leading-none">Nueva campaña</p>
+              <p className="font-bold text-text-primary text-sm leading-none">{t('campaigns.newCampaign')}</p>
               <p className="text-xs text-text-muted mt-0.5">{companyName}</p>
             </div>
           </div>
@@ -203,27 +205,27 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-1 h-4 bg-accent rounded-full" />
-              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos de la campaña</p>
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('campaigns.campaignData')}</p>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-text-muted font-medium mb-1.5">
-                  Nombre <span className="text-danger">*</span>
+                  {t('campaigns.name')} <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text" value={name} onChange={e => setName(e.target.value)}
-                  required autoFocus placeholder="Instalación Zona Norte"
+                  required autoFocus placeholder={t('campaigns.campaignPlaceholder')}
                   className={inp}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-text-muted font-medium mb-1.5">Fecha inicio</label>
+                  <label className="block text-xs text-text-muted font-medium mb-1.5">{t('campaigns.startDate')}</label>
                   <input type="date" value={startDate} onChange={e => setStart(e.target.value)} className={inp} />
                 </div>
                 <div>
                   <label className="block text-xs text-text-muted font-medium mb-1.5">
-                    Fecha fin <span className="text-text-muted/60 font-normal">(opcional)</span>
+                    {t('campaigns.endDate')} <span className="text-text-muted/60 font-normal">{t('techForm.optional')}</span>
                   </label>
                   <input type="date" value={endDate} onChange={e => setEnd(e.target.value)} className={inp} />
                 </div>
@@ -234,12 +236,12 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised">
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Crear campaña
+              {t('campaigns.createCampaign')}
             </button>
           </div>
         </form>
@@ -251,6 +253,8 @@ function CampaignModal({ companyId, companyName, onClose, onCreated }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function LeaderCampaigns() {
+  const { t, lang } = useI18n()
+  const es = getDateLocale(lang)
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading]     = useState(true)
   const [expanded, setExpanded]   = useState<Set<string>>(new Set())
@@ -301,7 +305,7 @@ export function LeaderCampaigns() {
     if (error) { toast.error(error.message); return }
     setCompanies(prev => prev.map(c => c.id === id ? { ...c, name: name.trim() } : c))
     setEditingCompany(null)
-    toast.success('Empresa actualizada')
+    toast.success(t('campaigns.companyUpdated'))
   }
 
   async function deleteCompany(id: string) {
@@ -309,7 +313,7 @@ export function LeaderCampaigns() {
     if (error) { toast.error(error.message); return }
     setCompanies(prev => prev.filter(c => c.id !== id))
     setConfirmDeleteCo(null)
-    toast.success('Empresa eliminada')
+    toast.success(t('campaigns.companyDeleted'))
   }
 
   async function renameCampaign(companyId: string, id: string, name: string) {
@@ -320,7 +324,7 @@ export function LeaderCampaigns() {
       ...c, campaigns: c.campaigns.map(cp => cp.id === id ? { ...cp, name: name.trim() } : cp),
     }))
     setEditingCampaign(null)
-    toast.success('Campaña actualizada')
+    toast.success(t('campaigns.campaignUpdated'))
   }
 
   async function deleteCampaign(companyId: string, id: string) {
@@ -330,7 +334,7 @@ export function LeaderCampaigns() {
       ...c, campaigns: c.campaigns.filter(cp => cp.id !== id),
     }))
     setConfirmDeleteCp(null)
-    toast.success('Campaña eliminada')
+    toast.success(t('campaigns.campaignDeleted'))
   }
 
   const totalCampaigns  = companies.reduce((s, c) => s + c.campaigns.length, 0)
@@ -342,22 +346,22 @@ export function LeaderCampaigns() {
       <div className="flex items-center gap-3">
         <div>
           <h2 className="text-text-primary font-semibold text-sm">
-            Empresas y Campañas
-            {!loading && <span className="text-text-muted font-normal ml-2">({companies.length} empresas)</span>}
+            {t('campaigns.title')}
+            {!loading && <span className="text-text-muted font-normal ml-2">{t('campaigns.companiesCount', { n: companies.length })}</span>}
           </h2>
           {!loading && totalCampaigns > 0 && (
-            <p className="text-text-muted text-xs mt-0.5">{activeCampaigns} campañas activas de {totalCampaigns}</p>
+            <p className="text-text-muted text-xs mt-0.5">{t('campaigns.activeOfTotal', { active: activeCampaigns, total: totalCampaigns })}</p>
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={load} title="Actualizar" className="text-text-muted hover:text-text-primary transition-colors">
+          <button onClick={load} title={t('common.refresh')} className="text-text-muted hover:text-text-primary transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCompanyModalOpen(true)}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> Nueva empresa
+            <Plus className="w-3.5 h-3.5" /> {t('campaigns.newCompany')}
           </button>
         </div>
       </div>
@@ -369,8 +373,8 @@ export function LeaderCampaigns() {
       ) : companies.length === 0 ? (
         <div className="text-center py-16 bg-surface border border-border-soft rounded-2xl">
           <Building2 className="w-10 h-10 text-text-muted/30 mx-auto mb-3" />
-          <p className="text-text-primary font-medium text-sm">Sin empresas aún</p>
-          <p className="text-text-muted text-xs mt-1">Crea tu primera empresa para organizar las campañas.</p>
+          <p className="text-text-primary font-medium text-sm">{t('campaigns.noCompanies')}</p>
+          <p className="text-text-muted text-xs mt-1">{t('campaigns.noCompaniesHint')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -400,10 +404,10 @@ export function LeaderCampaigns() {
                       <div className="flex-1 min-w-0">
                         <p className="text-text-primary font-semibold text-sm truncate">{co.name}</p>
                         <p className="text-text-muted text-xs mt-0.5">
-                          {co.campaigns.length} campaña{co.campaigns.length !== 1 ? 's' : ''}
+                          {t(co.campaigns.length === 1 ? 'campaigns.campaignsCount_one' : 'campaigns.campaignsCount_other', { n: co.campaigns.length })}
                           {co.campaigns.filter(c => c.is_active).length > 0 && (
                             <span className="text-success ml-1">
-                              · {co.campaigns.filter(c => c.is_active).length} activa{co.campaigns.filter(c => c.is_active).length !== 1 ? 's' : ''}
+                              {t(co.campaigns.filter(c => c.is_active).length === 1 ? 'campaigns.activeSuffix_one' : 'campaigns.activeSuffix_other', { n: co.campaigns.filter(c => c.is_active).length })}
                             </span>
                           )}
                         </p>
@@ -411,19 +415,19 @@ export function LeaderCampaigns() {
 
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button type="button" onClick={() => setEditingCompany(co.id)}
-                          className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10" title="Renombrar">
+                          className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10" title={t('campaigns.rename')}>
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                         {confirmDeleteCo === co.id ? (
                           <>
                             <button type="button" onClick={() => deleteCompany(co.id)}
-                              className="text-xs px-2 py-1 bg-danger text-white rounded-lg font-medium">Confirmar</button>
+                              className="text-xs px-2 py-1 bg-danger text-white rounded-lg font-medium">{t('common.confirm')}</button>
                             <button type="button" onClick={() => setConfirmDeleteCo(null)}
-                              className="text-xs px-2 py-1 border border-border-soft text-text-muted rounded-lg hover:bg-surface-raised">Cancelar</button>
+                              className="text-xs px-2 py-1 border border-border-soft text-text-muted rounded-lg hover:bg-surface-raised">{t('common.cancel')}</button>
                           </>
                         ) : (
                           <button type="button" onClick={() => setConfirmDeleteCo(co.id)}
-                            className="p-1.5 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-danger/10" title="Eliminar empresa">
+                            className="p-1.5 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-danger/10" title={t('campaigns.deleteCompany')}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
@@ -436,7 +440,7 @@ export function LeaderCampaigns() {
                 {isExpanded && (
                   <div className="border-t border-border-soft">
                     {co.campaigns.length === 0 ? (
-                      <div className="px-14 py-3 text-text-muted text-xs">Sin campañas. Crea una abajo.</div>
+                      <div className="px-14 py-3 text-text-muted text-xs">{t('campaigns.noCampaignsHint')}</div>
                     ) : (
                       <div className="divide-y divide-border-soft">
                         {co.campaigns.map(cp => (
@@ -459,7 +463,7 @@ export function LeaderCampaigns() {
                                     {cp.start_date && (
                                       <span className="text-text-muted/60 text-xs">
                                         {format(parseISO(cp.start_date), 'd MMM yyyy', { locale: es })}
-                                        {cp.end_date && ` → ${format(parseISO(cp.end_date), 'd MMM yyyy', { locale: es })}`}
+                                        {cp.end_date && ` → ${format(parseISO(cp.end_date), 'd MMM yyyy', { locale: es })}`}{''}
                                       </span>
                                     )}
                                   </div>
@@ -471,22 +475,22 @@ export function LeaderCampaigns() {
                                       ? 'bg-success/10 text-success border-success/20'
                                       : 'bg-surface-raised text-text-muted border-border'
                                   )}>
-                                    {cp.is_active ? 'Activa' : 'Inactiva'}
+                                    {cp.is_active ? t('campaigns.active') : t('campaigns.inactive')}
                                   </span>
                                   <button type="button" onClick={() => setEditingCampaign(cp.id)}
-                                    className="p-1 text-text-muted hover:text-primary transition-colors rounded" title="Renombrar">
+                                    className="p-1 text-text-muted hover:text-primary transition-colors rounded" title={t('campaigns.rename')}>
                                     <Pencil className="w-3 h-3" />
                                   </button>
                                   {confirmDeleteCp === cp.id ? (
                                     <>
                                       <button type="button" onClick={() => deleteCampaign(co.id, cp.id)}
-                                        className="text-xs px-2 py-0.5 bg-danger text-white rounded font-medium">Eliminar</button>
+                                        className="text-xs px-2 py-0.5 bg-danger text-white rounded font-medium">{t('common.delete')}</button>
                                       <button type="button" onClick={() => setConfirmDeleteCp(null)}
-                                        className="text-xs px-2 py-0.5 border border-border-soft text-text-muted rounded hover:bg-surface-raised">Cancelar</button>
+                                        className="text-xs px-2 py-0.5 border border-border-soft text-text-muted rounded hover:bg-surface-raised">{t('common.cancel')}</button>
                                     </>
                                   ) : (
                                     <button type="button" onClick={() => setConfirmDeleteCp(cp.id)}
-                                      className="p-1 text-text-muted hover:text-danger transition-colors rounded" title="Eliminar campaña">
+                                      className="p-1 text-text-muted hover:text-danger transition-colors rounded" title={t('campaigns.deleteCampaign')}>
                                       <Trash2 className="w-3 h-3" />
                                     </button>
                                   )}
@@ -505,7 +509,7 @@ export function LeaderCampaigns() {
                         className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary transition-colors px-2 py-1.5 rounded-lg hover:bg-primary/5">
                         <FolderOpen className="w-3.5 h-3.5" />
                         <Plus className="w-3 h-3" />
-                        Nueva campaña
+                        {t('campaigns.newCampaign')}
                       </button>
                     </div>
                   </div>

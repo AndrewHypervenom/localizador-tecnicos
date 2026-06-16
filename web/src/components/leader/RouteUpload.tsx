@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { COUNTRIES, CITIES_BY_COUNTRY } from '@/lib/geo'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ function CampaignSelector({
   onSelect: (id: string) => void
   onCampaignsChange: () => void
 }) {
+  const { t } = useI18n()
   const [addingCompany, setAddingCompany]   = useState(false)
   const [addingCampaign, setAddingCampaign] = useState(false)
   const [companyName, setCompanyName]       = useState('')
@@ -94,7 +96,7 @@ function CampaignSelector({
       if (error) throw error
       setCompanyName(''); setAddingCompany(false)
       onCampaignsChange()
-      toast.success('Empresa creada')
+      toast.success(t('upload.companyCreated'))
     } catch (e: any) { toast.error(e.message) }
     finally { setSaving(false) }
   }
@@ -112,7 +114,7 @@ function CampaignSelector({
       setCampaignName(''); setAddingCampaign(false)
       onCampaignsChange()
       onSelect(data.id)
-      toast.success('Campaña creada')
+      toast.success(t('upload.campaignCreated'))
     } catch (e: any) { toast.error(e.message) }
     finally { setSaving(false) }
   }
@@ -129,7 +131,7 @@ function CampaignSelector({
     <div className="bg-surface border border-border-soft rounded-2xl p-4 space-y-3 h-full">
       <div className="flex items-center justify-between">
         <label className="text-xs text-text-muted uppercase tracking-wider font-medium">
-          Campaña
+          {t('upload.campaign')}
         </label>
         <div className="flex gap-1.5">
           <button
@@ -141,7 +143,7 @@ function CampaignSelector({
                 : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
             )}
           >
-            <FolderOpen className="w-3 h-3" /> Nueva
+            <FolderOpen className="w-3 h-3" /> {t('upload.new')}
           </button>
           <button
             type="button"
@@ -152,21 +154,21 @@ function CampaignSelector({
                 : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
             )}
           >
-            <Building2 className="w-3 h-3" /> Empresa
+            <Building2 className="w-3 h-3" /> {t('upload.company')}
           </button>
         </div>
       </div>
 
       {addingCompany && (
         <div className="bg-base border border-border-soft rounded-xl p-3 space-y-2">
-          <p className="text-xs text-text-muted font-medium">Nueva empresa</p>
+          <p className="text-xs text-text-muted font-medium">{t('upload.newCompany')}</p>
           <div className="flex gap-2">
             <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)}
-              placeholder="Nombre de la empresa" className={cn(inp, 'flex-1 py-2')}
+              placeholder={t('upload.companyNamePlaceholder')} className={cn(inp, 'flex-1 py-2')}
               onKeyDown={e => e.key === 'Enter' && createCompany()} autoFocus />
             <button type="button" onClick={createCompany} disabled={!companyName.trim() || saving}
               className="px-3 py-2 bg-primary hover:bg-primary/90 text-white text-xs rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Crear
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} {t('upload.create')}
             </button>
           </div>
         </div>
@@ -174,36 +176,36 @@ function CampaignSelector({
 
       {addingCampaign && (
         <div className="bg-base border border-border-soft rounded-xl p-3 space-y-2">
-          <p className="text-xs text-text-muted font-medium">Nueva campaña</p>
+          <p className="text-xs text-text-muted font-medium">{t('upload.newCampaign')}</p>
           <div className="flex gap-2">
             <select value={selectedCompanyForNew} onChange={e => setForNew(e.target.value)}
               className={cn(inp, 'py-2 w-auto text-xs')}>
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <input type="text" value={campaignName} onChange={e => setCampaignName(e.target.value)}
-              placeholder="Nombre de la campaña" className={cn(inp, 'flex-1 py-2')}
+              placeholder={t('upload.campaignNamePlaceholder')} className={cn(inp, 'flex-1 py-2')}
               onKeyDown={e => e.key === 'Enter' && createCampaign()} autoFocus />
             <button type="button" onClick={createCampaign} disabled={!campaignName.trim() || !selectedCompanyForNew || saving}
               className="px-3 py-2 bg-primary hover:bg-primary/90 text-white text-xs rounded-xl transition-colors disabled:opacity-50 flex items-center gap-1">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Crear
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} {t('upload.create')}
             </button>
           </div>
         </div>
       )}
 
       {companies.length === 0 ? (
-        <p className="text-text-muted text-xs py-2">Crea una empresa primero.</p>
+        <p className="text-text-muted text-xs py-2">{t('upload.createCompanyFirst')}</p>
       ) : campaigns.length === 0 ? (
-        <p className="text-text-muted text-xs py-2">Crea una campaña para organizar tus rutas.</p>
+        <p className="text-text-muted text-xs py-2">{t('upload.createCampaignHint')}</p>
       ) : (
         <div className="relative">
           <select value={selectedCampaignId} onChange={e => onSelect(e.target.value)}
             className={cn(inp, 'pr-8 appearance-none')}>
-            <option value="">— Sin campaña asignada —</option>
+            <option value="">{t('upload.noCampaignOption')}</option>
             {grouped.map(g => (
               <optgroup key={g.company.id} label={g.company.name}>
                 {g.items.map(cp => (
-                  <option key={cp.id} value={cp.id}>{cp.name}{!cp.is_active ? ' (inactiva)' : ''}</option>
+                  <option key={cp.id} value={cp.id}>{cp.name}{!cp.is_active ? t('upload.inactiveSuffix') : ''}</option>
                 ))}
               </optgroup>
             ))}
@@ -234,6 +236,7 @@ function UnmatchedTechRow({
   companies: Company[]; campaigns: Campaign[]
   onLinked: (techId: string) => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen]       = useState(false)
   const [phone, setPhone]     = useState(initialPhone ?? '')
   const [country, setCountry] = useState('')
@@ -269,7 +272,7 @@ function UnmatchedTechRow({
       if (error) throw error
       onLinked(data.id)
       setDone(true)
-      toast.success(`${pim} registrado`)
+      toast.success(t('upload.techRegistered', { name: pim }))
     } catch (e: any) {
       toast.error(e.message)
     } finally {
@@ -284,7 +287,7 @@ function UnmatchedTechRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-success font-semibold text-sm truncate">{pim}</p>
-        <p className="text-success/70 text-xs">Registrado y vinculado</p>
+        <p className="text-success/70 text-xs">{t('upload.registeredLinked')}</p>
       </div>
     </div>
   )
@@ -301,12 +304,12 @@ function UnmatchedTechRow({
         <div className="flex-1 min-w-0">
           <p className="text-text-primary font-semibold text-sm truncate">{pim}</p>
           <div className="flex items-center gap-2 flex-wrap mt-0.5">
-            {cedula && <span className="text-text-muted text-xs">CC {cedula}</span>}
+            {cedula && <span className="text-text-muted text-xs">{t('upload.cedula')} {cedula}</span>}
             {initialPhone && <span className="text-text-muted text-xs">· {initialPhone}</span>}
           </div>
         </div>
         <span className="hidden sm:inline text-warning text-xs font-medium bg-warning/10 px-2.5 py-1 rounded-full border border-warning/20 flex-shrink-0">
-          Sin cuenta
+          {t('upload.noAccount')}
         </span>
         <button
           type="button"
@@ -320,23 +323,23 @@ function UnmatchedTechRow({
         >
           {open
             ? <ChevronDown className="w-3.5 h-3.5" />
-            : <><UserPlus className="w-3.5 h-3.5" /> Registrar</>
+            : <><UserPlus className="w-3.5 h-3.5" /> {t('upload.register')}</>
           }
         </button>
       </div>
 
       {open && (
         <div className="border-t border-warning/20 bg-base/70 p-4 space-y-3">
-          <p className="text-text-muted text-xs">Revisa los datos y registra este técnico en el sistema:</p>
+          <p className="text-text-muted text-xs">{t('upload.reviewAndRegister')}</p>
 
           {/* Datos del Excel (solo lectura) */}
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-base border border-border-soft rounded-xl px-3 py-2">
-              <p className="text-text-muted/70 text-xs mb-0.5">Nombre</p>
+              <p className="text-text-muted/70 text-xs mb-0.5">{t('upload.name')}</p>
               <p className="text-text-primary text-xs font-semibold truncate">{pim}</p>
             </div>
             <div className="bg-base border border-border-soft rounded-xl px-3 py-2">
-              <p className="text-text-muted/70 text-xs mb-0.5">Cédula</p>
+              <p className="text-text-muted/70 text-xs mb-0.5">{t('upload.cedula')}</p>
               <p className="text-text-primary text-xs font-semibold">{cedula || '—'}</p>
             </div>
           </div>
@@ -344,11 +347,11 @@ function UnmatchedTechRow({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs text-text-muted font-medium flex items-center gap-1.5">
-                Teléfono
+                {t('upload.phone')}
                 {phoneFromExcel && (
-                  <span className="text-success text-xs bg-success/10 px-1.5 py-0.5 rounded border border-success/20">del Excel</span>
+                  <span className="text-success text-xs bg-success/10 px-1.5 py-0.5 rounded border border-success/20">{t('upload.fromExcel')}</span>
                 )}
-                {!phoneFromExcel && <span className="text-text-muted/50">(opcional)</span>}
+                {!phoneFromExcel && <span className="text-text-muted/50">{t('upload.optional')}</span>}
               </label>
               <input
                 type="tel" value={phone} onChange={e => setPhone(e.target.value)}
@@ -356,33 +359,33 @@ function UnmatchedTechRow({
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-text-muted font-medium">Campaña</label>
+              <label className="text-xs text-text-muted font-medium">{t('upload.campaign')}</label>
               <select value={campaignId} onChange={e => setCamp(e.target.value)}
                 className={cn(inp, 'appearance-none')}>
-                <option value="">— Seleccionar campaña —</option>
+                <option value="">{t('upload.selectCampaign')}</option>
                 {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-text-muted font-medium flex items-center gap-1.5">
-                <MapPin className="w-3 h-3" /> País
+                <MapPin className="w-3 h-3" /> {t('upload.country')}
               </label>
               <select value={country} onChange={e => handleCountryChange(e.target.value)}
                 className={cn(inp, 'appearance-none')}>
-                <option value="">— Sin especificar —</option>
+                <option value="">{t('upload.unspecified')}</option>
                 {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs text-text-muted font-medium flex items-center gap-1.5">
-                <Navigation className="w-3 h-3" /> Ciudad
+                <Navigation className="w-3 h-3" /> {t('upload.city')}
               </label>
               <select
                 value={city} onChange={e => setCity(e.target.value)}
                 disabled={!country}
                 className={cn(inp, 'appearance-none', !country && 'opacity-40 cursor-not-allowed')}
               >
-                <option value="">{country ? '— Seleccionar ciudad —' : '— Selecciona país primero —'}</option>
+                <option value="">{country ? t('upload.selectCity') : t('upload.selectCountryFirst')}</option>
                 {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -391,11 +394,11 @@ function UnmatchedTechRow({
             <button type="button" onClick={handleCreate} disabled={saving}
               className="flex-1 bg-primary hover:bg-primary/90 text-white text-sm font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-              Registrar técnico
+              {t('upload.registerTech')}
             </button>
             <button type="button" onClick={() => setOpen(false)}
               className="px-4 py-2.5 border border-border-soft text-text-muted text-sm rounded-xl hover:bg-surface-raised transition-colors">
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -407,6 +410,8 @@ function UnmatchedTechRow({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
+  const { t, lang } = useI18n()
+  const dfLocale = getDateLocale(lang)
   const [step, setStep]             = useState<UploadStep>('idle')
   const [dragOver, setDragOver]     = useState(false)
   const [fileName, setFileName]     = useState('')
@@ -485,7 +490,7 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
       setGroups(newGroups)
       setStep('preview')
     } catch (err: any) {
-      toast.error('Error al leer el archivo: ' + (err.message ?? 'Formato inválido'))
+      toast.error(t('upload.readError') + (err.message ?? t('upload.invalidFormat')))
     }
   }, [])
 
@@ -545,9 +550,9 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
       }
 
       setStep('done')
-      toast.success(`Rutas del ${format(new Date(routeDate + 'T12:00:00'), "d 'de' MMMM", { locale: es })} cargadas`)
+      toast.success(t('upload.routesLoadedToast', { date: format(new Date(routeDate + 'T12:00:00'), "d 'de' MMMM", { locale: dfLocale }) }))
     } catch (err: any) {
-      toast.error('Error al guardar: ' + (err.message ?? 'Error desconocido'))
+      toast.error(t('upload.saveError') + (err.message ?? t('upload.unknownError')))
       setStep('preview')
     }
   }
@@ -564,12 +569,12 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
         <Check className="w-12 h-12 text-success" />
       </div>
       <div className="text-center">
-        <h2 className="text-text-primary font-black text-2xl">¡Rutas cargadas!</h2>
+        <h2 className="text-text-primary font-black text-2xl">{t('upload.routesLoadedTitle')}</h2>
         <p className="text-text-muted text-sm mt-2">
-          {groups.length} técnicos · {totalItems} instalaciones
+          {groups.length} {t('upload.techNoun')}s · {totalItems} {t('upload.installations')}
         </p>
         <p className="text-text-muted text-sm capitalize">
-          {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+          {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: dfLocale })}
         </p>
       </div>
       <div className="flex gap-3">
@@ -577,11 +582,11 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
           onClick={() => { setStep('idle'); setGroups([]); setFileName('') }}
           className="px-5 py-2.5 border border-border-soft text-text-muted hover:text-text-primary text-sm rounded-xl transition-colors hover:bg-surface-raised"
         >
-          Cargar otro archivo
+          {t('upload.loadAnother')}
         </button>
         <button onClick={onUploaded}
           className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-xl transition-colors">
-          Ver rutas cargadas
+          {t('upload.viewLoaded')}
         </button>
       </div>
     </div>
@@ -592,8 +597,8 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
     <div className="flex flex-col items-center justify-center py-24 gap-5">
       <div className="w-14 h-14 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       <div className="text-center">
-        <p className="text-text-primary font-semibold">Guardando rutas…</p>
-        <p className="text-text-muted text-xs mt-1">No cierres esta página</p>
+        <p className="text-text-primary font-semibold">{t('upload.saving')}</p>
+        <p className="text-text-muted text-xs mt-1">{t('upload.dontClose')}</p>
       </div>
       <div className="w-72 bg-surface border border-border-soft rounded-full h-3 overflow-hidden">
         <div className="h-full bg-primary transition-all duration-300 rounded-full" style={{ width: `${saveProgress}%` }} />
@@ -612,13 +617,13 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
           <FileSpreadsheet className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-text-primary font-black text-xl leading-tight">Revisar rutas</h2>
+          <h2 className="text-text-primary font-black text-xl leading-tight">{t('upload.reviewRoutes')}</h2>
           <p className="text-text-muted text-xs truncate mt-0.5">{fileName}</p>
         </div>
         <button
           onClick={() => { setStep('idle'); setGroups([]); setFileName('') }}
           className="text-text-muted hover:text-danger transition-colors p-2.5 rounded-xl hover:bg-danger/10 flex-shrink-0"
-          title="Cancelar"
+          title={t('common.cancel')}
         >
           <X className="w-5 h-5" />
         </button>
@@ -627,10 +632,10 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
       {/* Stats hero */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
-          { label: 'Técnicos',      value: groups.length, sub: 'en el Excel',   cls: 'text-text-primary', bg: 'bg-surface border-border-soft'    },
-          { label: 'Instalaciones', value: totalItems,    sub: 'en total',      cls: 'text-text-primary', bg: 'bg-surface border-border-soft'    },
-          { label: 'Franja AM',     value: totalAM,       sub: 'por la mañana', cls: 'text-warning',      bg: 'bg-warning/5 border-warning/20'   },
-          { label: 'Franja PM',     value: totalPM,       sub: 'por la tarde',  cls: 'text-primary',      bg: 'bg-primary/5 border-primary/20'   },
+          { label: t('upload.techsLabel'),         value: groups.length, sub: t('upload.inExcel'),  cls: 'text-text-primary', bg: 'bg-surface border-border-soft'    },
+          { label: t('upload.installationsLabel'), value: totalItems,    sub: t('upload.inTotal'),  cls: 'text-text-primary', bg: 'bg-surface border-border-soft'    },
+          { label: t('upload.bandAM'),             value: totalAM,       sub: t('upload.morning'),  cls: 'text-warning',      bg: 'bg-warning/5 border-warning/20'   },
+          { label: t('upload.bandPM'),             value: totalPM,       sub: t('upload.afternoon'),cls: 'text-primary',      bg: 'bg-primary/5 border-primary/20'   },
         ] as const).map(s => (
           <div key={s.label} className={cn('border rounded-2xl p-4 sm:p-5', s.bg)}>
             <p className={cn('text-4xl sm:text-5xl font-black tracking-tight leading-none', s.cls)}>{s.value}</p>
@@ -648,7 +653,7 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
           onCampaignsChange={loadCampaigns}
         />
         <div className="bg-surface border border-border-soft rounded-2xl p-4 space-y-3">
-          <p className="text-xs text-text-muted uppercase tracking-wider font-medium">Fecha de las rutas</p>
+          <p className="text-xs text-text-muted uppercase tracking-wider font-medium">{t('upload.routesDate')}</p>
           <DateScroller
             selected={routeDate} onChange={handleDateChange}
             weekStart={weekStart} onWeekChange={s => setWeekStart(s)}
@@ -659,15 +664,15 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
                 routeDate === format(new Date(), 'yyyy-MM-dd')
                   ? 'bg-primary text-white border-primary'
                   : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
-              )}>Hoy</button>
+              )}>{t('upload.today')}</button>
             <button onClick={() => handleDateChange(format(addDays(new Date(), 1), 'yyyy-MM-dd'))}
               className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                 routeDate === format(addDays(new Date(), 1), 'yyyy-MM-dd')
                   ? 'bg-primary text-white border-primary'
                   : 'border-border-soft text-text-muted hover:text-text-primary hover:bg-surface-raised'
-              )}>Mañana</button>
+              )}>{t('upload.tomorrow')}</button>
             <span className="ml-auto text-text-muted text-xs capitalize">
-              {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+              {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: dfLocale })}
             </span>
           </div>
         </div>
@@ -686,10 +691,10 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-text-primary font-bold text-sm">
-                {unmatched.length} técnico{unmatched.length !== 1 ? 's' : ''} sin cuenta
+                {unmatched.length} {t('upload.techNoun')}{unmatched.length !== 1 ? 's' : ''} {t('upload.noAccountSuffix')}
               </p>
               <p className="text-text-muted text-xs mt-0.5">
-                {unmatchedOpen ? 'Regístralos para vincularlos a sus rutas' : 'Expande para registrarlos ahora'}
+                {unmatchedOpen ? t('upload.registerToLink') : t('upload.expandToRegister')}
               </p>
             </div>
             <span className="bg-warning text-white text-xs font-black px-2.5 py-1 rounded-full flex-shrink-0">
@@ -725,17 +730,17 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
           <div className="flex items-center gap-2.5">
             <Users className="w-4 h-4 text-text-muted" />
             <h3 className="text-text-primary font-bold text-sm">
-              {groups.length} técnico{groups.length !== 1 ? 's' : ''}
+              {groups.length} {t('upload.techNoun')}{groups.length !== 1 ? 's' : ''}
             </h3>
-            <span className="text-text-muted text-xs">· {totalItems} instalaciones</span>
+            <span className="text-text-muted text-xs">· {totalItems} {t('upload.installations')}</span>
           </div>
           {unmatched.length === 0 ? (
             <span className="flex items-center gap-1.5 text-xs text-success font-medium bg-success/10 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Todos vinculados
+              <CheckCircle2 className="w-3.5 h-3.5" /> {t('upload.allLinked')}
             </span>
           ) : (
             <span className="text-xs text-warning font-medium bg-warning/10 px-2.5 py-1 rounded-full">
-              {groups.length - unmatched.length} de {groups.length} vinculados
+              {t('upload.linkedCount', { done: groups.length - unmatched.length, total: groups.length })}
             </span>
           )}
         </div>
@@ -760,7 +765,7 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-text-primary font-semibold text-sm truncate">{g.pim}</p>
                   <p className="text-text-muted text-xs mt-0.5">
-                    {g.cedula ? `CC ${g.cedula}` : 'Sin cédula'}
+                    {g.cedula ? `${t('upload.cedula')} ${g.cedula}` : t('upload.noCedula')}
                   </p>
                 </div>
 
@@ -777,7 +782,7 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
                     </span>
                   )}
                   {g.matchedTechId && (
-                    <span title="Vinculado al sistema">
+                    <span title={t('upload.linkedToSystem')}>
                       <Link2 className="w-3.5 h-3.5 text-success" />
                     </span>
                   )}
@@ -836,8 +841,7 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
             <div className="flex items-center gap-2 bg-danger/10 border border-danger/30 rounded-xl px-4 py-2">
               <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0" />
               <p className="text-danger text-xs font-semibold">
-                No se puede guardar: {unmatched.length} técnico{unmatched.length !== 1 ? 's' : ''} sin registrar.
-                Regístralos arriba antes de continuar.
+                {t('upload.cannotSave', { n: unmatched.length, noun: `${t('upload.techNoun')}${unmatched.length !== 1 ? 's' : ''}` })}
               </p>
             </div>
           </div>
@@ -845,10 +849,10 @@ export function RouteUpload({ onUploaded }: { onUploaded: () => void }) {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div>
             <p className="text-text-primary text-sm font-bold">
-              {groups.length} ruta{groups.length !== 1 ? 's' : ''} · {totalItems} instalaciones
+              {groups.length} {t('upload.routeNoun')}{groups.length !== 1 ? 's' : ''} · {totalItems} {t('upload.installations')}
             </p>
             <p className="text-text-muted text-xs capitalize">
-              {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: es })}
+              {format(new Date(routeDate + 'T12:00:00'), "EEEE d 'de' MMMM", { locale: dfLocale })}
             </p>
           </div>
           <div className="flex gap-3">

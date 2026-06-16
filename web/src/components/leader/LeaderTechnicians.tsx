@@ -6,23 +6,27 @@ import {
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { TechnicianEditModal, type TechnicianEditable } from '@/components/modals/TechnicianEditModal'
 import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 type Tech = TechnicianEditable & {
   status?: string
   last_seen?: string | null
 }
 
-const STATUS_CFG: Record<string, { dot: string; label: string; text: string }> = {
-  moving:  { dot: 'bg-success animate-pulse', label: 'En movimiento', text: 'text-success' },
-  idle:    { dot: 'bg-warning',               label: 'Inactivo',      text: 'text-warning' },
-  stopped: { dot: 'bg-text-muted',            label: 'Detenido',      text: 'text-text-muted' },
-  offline: { dot: 'bg-danger',                label: 'Sin conexión',  text: 'text-danger' },
+const STATUS_CFG: Record<string, { dot: string; labelKey: string; text: string }> = {
+  moving:    { dot: 'bg-success animate-pulse', labelKey: 'status.moving',            text: 'text-success' },
+  idle:      { dot: 'bg-warning',               labelKey: 'detail.inactive',         text: 'text-warning' },
+  stopped:   { dot: 'bg-text-muted',            labelKey: 'zone.statusStopped',      text: 'text-text-muted' },
+  // 'no_signal' = la app sigue viva (heartbeat fresco) pero sin punto GPS reciente:
+  // típico al quedarse quieto (GPS a 30s + Doze en segundo plano). NO es desconexión.
+  // Sin este caso caía al fallback 'offline' y se veía rojo "Sin conexión" en falso.
+  no_signal: { dot: 'bg-amber-500',             labelKey: 'status.no_signal',        text: 'text-amber-500' },
+  offline:   { dot: 'bg-danger',                labelKey: 'leaderStats.statusOffline', text: 'text-danger' },
 }
 
 function initials(name: string) {
@@ -30,6 +34,7 @@ function initials(name: string) {
 }
 
 export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: string) => void } = {}) {
+  const { t: tr, lang } = useI18n()
   const [techs, setTechs]       = useState<Tech[]>([])
   const [loading, setLoading]   = useState(true)
   const [query, setQuery]       = useState('')
@@ -88,7 +93,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
         .eq('id', t.id)
       if (error) throw error
       setTechs(prev => prev.map(x => x.id === t.id ? { ...x, active: !x.active } : x))
-      toast.success(t.active ? `${t.name} desactivado` : `${t.name} activado`)
+      toast.success(t.active ? tr('leaderTech.deactivated', { name: t.name }) : tr('leaderTech.activated', { name: t.name }))
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -101,7 +106,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
     if (error) throw new Error(error.message)
     setTechs(prev => prev.map(t => t.id === id ? { ...t, ...data } : t))
     setEditTech(null)
-    toast.success('Técnico actualizado')
+    toast.success(tr('leaderTech.updated'))
   }
 
   const filtered = techs.filter(t =>
@@ -119,22 +124,22 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
       <div className="flex items-center gap-3">
         <div>
           <h2 className="text-text-primary font-semibold text-sm">
-            Técnicos
-            {!loading && <span className="text-text-muted font-normal ml-2">({techs.filter(t => t.active).length} activos)</span>}
+            {tr('dashboard.technicians')}
+            {!loading && <span className="text-text-muted font-normal ml-2">{tr('leaderTech.activeCount', { n: techs.filter(t => t.active).length })}</span>}
           </h2>
           {!loading && onField > 0 && (
-            <p className="text-success text-xs mt-0.5">{onField} en campo ahora</p>
+            <p className="text-success text-xs mt-0.5">{tr('leaderTech.onFieldNow', { n: onField })}</p>
           )}
         </div>
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={load} title="Actualizar" className="text-text-muted hover:text-text-primary transition-colors">
+          <button onClick={load} title={tr('common.refresh')} className="text-text-muted hover:text-text-primary transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCreateOpen(true)}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> Nuevo técnico
+            <Plus className="w-3.5 h-3.5" /> {tr('regTech.newTech')}
           </button>
         </div>
       </div>
@@ -144,7 +149,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
         <input
           type="text" value={query} onChange={e => setQuery(e.target.value)}
-          placeholder="Buscar por nombre, teléfono o empresa…"
+          placeholder={tr('leaderTech.searchPlaceholder')}
           className="w-full bg-surface border border-border-soft rounded-xl pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
         />
         {query && (
@@ -160,13 +165,13 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 bg-surface border border-border-soft rounded-2xl space-y-3">
-          <p className="text-text-muted text-sm">{query ? 'Sin resultados para tu búsqueda' : 'No hay técnicos registrados'}</p>
+          <p className="text-text-muted text-sm">{query ? tr('leaderTech.noResults') : tr('leaderTech.noneRegistered')}</p>
           {!query && (
             <button
               onClick={() => setCreateOpen(true)}
               className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-base text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
             >
-              <Plus className="w-4 h-4" /> Nuevo técnico
+              <Plus className="w-4 h-4" /> {tr('regTech.newTech')}
             </button>
           )}
         </div>
@@ -176,7 +181,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
           {active.length > 0 && (
             <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-border-soft">
-                <h3 className="text-text-primary text-xs font-semibold uppercase tracking-wider">Activos ({active.length})</h3>
+                <h3 className="text-text-primary text-xs font-semibold uppercase tracking-wider">{tr('leaderTech.activeGroup', { n: active.length })}</h3>
               </div>
               <div className="divide-y divide-border-soft">
                 {active.map(t => {
@@ -193,7 +198,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-text-primary text-sm font-semibold truncate">{t.name}</p>
-                          <div className={cn('w-2 h-2 rounded-full flex-shrink-0', cfg.dot)} title={cfg.label} />
+                          <div className={cn('w-2 h-2 rounded-full flex-shrink-0', cfg.dot)} title={tr(cfg.labelKey)} />
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           {t.phone && (
@@ -214,7 +219,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         </div>
                         {t.last_seen && (
                           <p className="text-text-muted/50 text-xs mt-0.5">
-                            Último: {format(parseISO(t.last_seen), "d MMM HH:mm", { locale: es })}
+                            {tr('leaderTech.last', { date: format(parseISO(t.last_seen), "d MMM HH:mm", { locale: getDateLocale(lang) }) })}
                           </p>
                         )}
                       </div>
@@ -228,16 +233,16 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         ) : (
                           <button
                             onClick={() => setQrTech({ id: t.id, name: t.name })}
-                            title="Generar QR de registro"
+                            title={tr('tech.generateQr')}
                             className="text-xs text-text-muted flex items-center gap-1 bg-surface-raised px-2 py-0.5 rounded-lg border border-border hover:border-primary hover:text-primary hover:bg-primary/10 transition-colors"
                           >
-                            <QrCode className="w-3 h-3" /> Sin app
+                            <QrCode className="w-3 h-3" /> {tr('leaderTech.noApp')}
                           </button>
                         )}
                         {t.device_id && (
                           <button
                             onClick={() => setQrTech({ id: t.id, name: t.name })}
-                            title="Regenerar QR de vinculación (re-vincular dispositivo)"
+                            title={tr('leaderTech.regenQrTitle')}
                             className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
                           >
                             <QrCode className="w-3.5 h-3.5" />
@@ -246,7 +251,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         {t.device_id && t.status !== 'offline' && onViewOnMap && (
                           <button
                             onClick={() => onViewOnMap(t.id)}
-                            title="Ver en mapa en tiempo real"
+                            title={tr('leaderTech.viewOnMapLive')}
                             className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
                           >
                             <MapPin className="w-3.5 h-3.5" />
@@ -255,7 +260,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         {onViewOnMap && t.home_lat && t.home_lng && (
                           <button
                             onClick={() => onViewOnMap(t.id)}
-                            title="Ver casa en mapa"
+                            title={tr('leaderTech.viewHomeOnMap')}
                             className="p-1.5 text-text-muted hover:text-success transition-colors rounded-lg hover:bg-success/10"
                           >
                             <Home className="w-3.5 h-3.5" />
@@ -263,7 +268,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         )}
                         <button
                           onClick={() => setEditTech(t)}
-                          title="Editar técnico"
+                          title={tr('detail.editTech')}
                           className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -271,7 +276,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                         <button
                           onClick={() => toggleActive(t)}
                           disabled={isToggling}
-                          title="Desactivar técnico"
+                          title={tr('leaderTech.deactivate')}
                           className="p-1.5 text-text-muted hover:text-warning transition-colors rounded-lg hover:bg-warning/10 disabled:opacity-40"
                         >
                           <UserX className="w-3.5 h-3.5" />
@@ -288,7 +293,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
           {inactive.length > 0 && (
             <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden opacity-70">
               <div className="px-4 py-3 border-b border-border-soft">
-                <h3 className="text-text-muted text-xs font-semibold uppercase tracking-wider">Inactivos ({inactive.length})</h3>
+                <h3 className="text-text-muted text-xs font-semibold uppercase tracking-wider">{tr('leaderTech.inactiveGroup', { n: inactive.length })}</h3>
               </div>
               <div className="divide-y divide-border-soft">
                 {inactive.map(t => (
@@ -304,7 +309,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                       {onViewOnMap && t.home_lat && t.home_lng && (
                         <button
                           onClick={() => onViewOnMap(t.id)}
-                          title="Ver casa en mapa"
+                          title={tr('leaderTech.viewHomeOnMap')}
                           className="p-1.5 text-text-muted hover:text-success transition-colors rounded-lg hover:bg-success/10"
                         >
                           <Home className="w-3.5 h-3.5" />
@@ -320,7 +325,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                       <button
                         onClick={() => toggleActive(t)}
                         disabled={toggling === t.id}
-                        title="Reactivar técnico"
+                        title={tr('leaderTech.reactivate')}
                         className="p-1.5 text-text-muted hover:text-success transition-colors rounded-lg hover:bg-success/10 disabled:opacity-40"
                       >
                         <UserCheck className="w-3.5 h-3.5" />

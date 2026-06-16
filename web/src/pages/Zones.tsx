@@ -16,11 +16,13 @@ import { useZones, coordsToWkt } from '@/hooks/useZones'
 import { useZonesStore } from '@/store/zonesStore'
 import { cn } from '@/lib/utils'
 import {
-  Zone, ZoneType, ZONE_TYPE_LABELS, ZONE_TYPE_COLORS, ZONE_PALETTE,
+  Zone, ZoneType, ZONE_TYPE_LABELS, ZONE_TYPE_LABEL_KEYS, ZONE_TYPE_COLORS, ZONE_PALETTE,
 } from '@/types/zones'
 import { deleteAllZones } from '@/lib/generateCityZones'
 import { getLeaderScope } from '@/lib/leaderContext'
 import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
+import { useI18n } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -62,6 +64,7 @@ interface DrawControllerProps {
 
 const DrawController = forwardRef<DrawHandle, DrawControllerProps>(
   function DrawController({ active, previewColor, onComplete, onCancel, onPointsChange }, ref) {
+    const { t } = useI18n()
     const map       = useMap()
     const pointsRef = useRef<[number, number][]>([])
     const layersRef = useRef<{ polygon: L.Polygon | null; markers: L.CircleMarker[] }>({
@@ -102,7 +105,7 @@ const DrawController = forwardRef<DrawHandle, DrawControllerProps>(
 
     const handleFinish = useCallback(() => {
       if (pointsRef.current.length < 3) {
-        toast.warning('Necesitas al menos 3 puntos para crear una zona')
+        toast.warning(t('zonesPage.need3Points'))
         return
       }
       const coords = [...pointsRef.current]
@@ -165,6 +168,7 @@ interface VertexEditorProps {
 }
 
 function VertexEditor({ coords, color, onChange }: VertexEditorProps) {
+  const { t } = useI18n()
   const map         = useMap()
   const onChangeRef = useRef(onChange)
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
@@ -243,7 +247,7 @@ function VertexEditor({ coords, color, onChange }: VertexEditorProps) {
         if (live.coords.length > 3) {
           onChangeRef.current(live.coords.filter((_, j) => j !== i))
         } else {
-          toast.warning('La zona necesita al menos 3 vértices')
+          toast.warning(t('zonesPage.need3Vertices'))
         }
       })
 
@@ -359,54 +363,55 @@ interface FormFieldsProps {
 }
 
 function FormFields({ form, onChange, autoFocus }: FormFieldsProps) {
+  const { t } = useI18n()
   return (
     <div className="space-y-4">
       {/* Nombre */}
       <div>
-        <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">Nombre *</label>
+        <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">{t('zonesPage.nameLabel')}</label>
         <input
           autoFocus={autoFocus}
           value={form.name}
           onChange={(e) => onChange({ ...form, name: e.target.value })}
-          placeholder="Zona Norte, Base Central..."
+          placeholder={t('zonesPage.namePlaceholder')}
           className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
         />
       </div>
 
       {/* Descripción */}
       <div>
-        <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">Descripción</label>
+        <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">{t('zonesPage.descLabel')}</label>
         <input
           value={form.description}
           onChange={(e) => onChange({ ...form, description: e.target.value })}
-          placeholder="Cobertura del equipo norte..."
+          placeholder={t('zonesPage.descPlaceholder')}
           className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
         />
       </div>
 
       {/* Tipo */}
       <div>
-        <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">Tipo de zona</label>
+        <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">{t('zonesPage.zoneType')}</label>
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((t) => (
+          {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((ztype) => (
             <button
-              key={t}
+              key={ztype}
               type="button"
               onClick={() => onChange({
                 ...form,
-                type: t,
+                type: ztype,
                 // auto-sync color solo si el color actual era del tipo anterior
-                color: form.color === ZONE_TYPE_COLORS[form.type] ? ZONE_TYPE_COLORS[t] : form.color,
+                color: form.color === ZONE_TYPE_COLORS[form.type] ? ZONE_TYPE_COLORS[ztype] : form.color,
               })}
               className={cn(
                 'flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all text-left',
-                form.type === t
+                form.type === ztype
                   ? 'border-primary/50 bg-primary/10 text-primary'
                   : 'border-border-soft bg-base text-text-secondary hover:border-border hover:bg-surface-raised'
               )}
             >
-              <span style={{ color: ZONE_TYPE_COLORS[t] }}>{ZONE_ICONS[t]}</span>
-              {ZONE_TYPE_LABELS[t]}
+              <span style={{ color: ZONE_TYPE_COLORS[ztype] }}>{ZONE_ICONS[ztype]}</span>
+              {t(ZONE_TYPE_LABEL_KEYS[ztype])}
             </button>
           ))}
         </div>
@@ -414,7 +419,7 @@ function FormFields({ form, onChange, autoFocus }: FormFieldsProps) {
 
       {/* Color */}
       <div>
-        <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">Color</label>
+        <label className="block text-xs text-text-muted uppercase tracking-wider mb-2">{t('zonesPage.color')}</label>
         <div className="flex items-center gap-2 flex-wrap">
           {ZONE_PALETTE.map((c) => (
             <button
@@ -434,12 +439,12 @@ function FormFields({ form, onChange, autoFocus }: FormFieldsProps) {
               value={form.color}
               onChange={(e) => onChange({ ...form, color: e.target.value })}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-              title="Color personalizado"
+              title={t('zonesPage.customColor')}
             />
             <div
               className="w-7 h-7 rounded-full border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
               style={{ background: ZONE_PALETTE.includes(form.color) ? 'transparent' : form.color }}
-              title="Color personalizado"
+              title={t('zonesPage.customColor')}
             >
               {ZONE_PALETTE.includes(form.color) && (
                 <span className="text-text-muted text-[10px] font-bold">+</span>
@@ -456,9 +461,9 @@ function FormFields({ form, onChange, autoFocus }: FormFieldsProps) {
       >
         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: form.color }} />
         <span style={{ color: form.color }} className="font-medium truncate">
-          {form.name || 'Vista previa de zona'}
+          {form.name || t('zonesPage.previewName')}
         </span>
-        <span className="text-text-muted ml-auto flex-shrink-0">{ZONE_TYPE_LABELS[form.type]}</span>
+        <span className="text-text-muted ml-auto flex-shrink-0">{t(ZONE_TYPE_LABEL_KEYS[form.type])}</span>
       </div>
     </div>
   )
@@ -497,6 +502,7 @@ function CityBoundaryPreview({ coords, color }: CityBoundaryPreviewProps) {
 export function Zones() {
   useZones()
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   const { zones, selectedZoneId, selectZone, addZone, updateZone, removeZone } = useZonesStore()
 
@@ -625,7 +631,7 @@ export function Zones() {
 
       // 1. Link de Google Maps (largo o corto maps.app.goo.gl) → extraer coordenadas
       const isShort = isShortMapsLink(raw)
-      if (isShort) toast.loading('Resolviendo link de Google Maps…', { id: 'gm-resolve' })
+      if (isShort) toast.loading(t('zonesPage.resolvingLink'), { id: 'gm-resolve' })
       const gmCoords = await resolveMapsLink(raw)
       if (isShort) toast.dismiss('gm-resolve')
       if (gmCoords) {
@@ -637,7 +643,7 @@ export function Zones() {
         return
       }
       if (isShort) {
-        toast.error('No se pudo resolver el link corto de Google Maps. Intenta con el link largo (el que muestra la dirección en la barra).')
+        toast.error(t('zonesPage.shortLinkError'))
         return
       }
 
@@ -651,14 +657,14 @@ export function Zones() {
       if (!result) result = await geocodeAddress(queryWithCountry)
 
       if (!result) {
-        toast.error(`No se encontró "${raw}" en ${defaultCountry}. Verifica que sea una dirección de ${defaultCountry}.`)
+        toast.error(t('zonesPage.addressNotFound', { q: raw, country: defaultCountry }))
         return
       }
 
       // Validar que el resultado pertenece al país esperado
       const inCountry = result.displayName.toLowerCase().includes(defaultCountry.toLowerCase())
       if (!inCountry) {
-        toast.error(`Esta dirección no corresponde a ${defaultCountry}. Solo puedes crear zonas en el país de tu campaña.`)
+        toast.error(t('zonesPage.addressWrongCountry', { country: defaultCountry }))
         return
       }
 
@@ -667,7 +673,7 @@ export function Zones() {
       setDrawnCoords(circle)
       setFitCoords(circle)
     } catch {
-      toast.error('Error al buscar la dirección')
+      toast.error(t('zonesPage.geocodeError'))
     } finally {
       setGeocodeLoading(false)
     }
@@ -700,13 +706,13 @@ export function Zones() {
     try {
       const result = await fetchCityBoundary(query, defaultCountry)
       if (!result) {
-        setCityError(`No se encontró "${query}" en ${defaultCountry}. Tu campaña es de ${defaultCountry} — solo puedes importar ciudades de ese país. Para otras ubicaciones usa "Buscar por dirección".`)
+        setCityError(t('zonesPage.cityNotFound', { q: query, country: defaultCountry }))
         return
       }
       setCityBoundary(result)
       setFitCoords(result.coords)
     } catch {
-      setCityError('Error al consultar los límites de la ciudad.')
+      setCityError(t('zonesPage.cityError'))
     } finally {
       setCityLoading(false)
     }
@@ -762,8 +768,8 @@ export function Zones() {
   }
 
   async function handleSaveNew() {
-    if (!newZoneForm.name.trim()) { toast.error('El nombre es obligatorio'); return }
-    if (!drawnCoords)             { toast.error('Dibuja el polígono primero'); return }
+    if (!newZoneForm.name.trim()) { toast.error(t('zonesPage.nameRequired')); return }
+    if (!drawnCoords)             { toast.error(t('zonesPage.drawFirst')); return }
     setSaving(true)
     try {
       const wkt = coordsToWkt(drawnCoords)
@@ -794,18 +800,18 @@ export function Zones() {
         isActive:    true,
         createdAt:   row.created_at,
       })
-      toast.success('Zona creada')
+      toast.success(t('zonesPage.zoneCreated'))
       setMode('idle')
       setDrawnCoords(null)
     } catch (e: any) {
-      toast.error(e.message ?? 'Error al guardar')
+      toast.error(e.message ?? t('zonesPage.saveError'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleSaveEdit() {
-    if (!editForm.name.trim()) { toast.error('El nombre es obligatorio'); return }
+    if (!editForm.name.trim()) { toast.error(t('zonesPage.nameRequired')); return }
     if (!editingZone) return
     setSaving(true)
     try {
@@ -833,10 +839,10 @@ export function Zones() {
         type:        editForm.type,
         coordinates: editCoords,
       })
-      toast.success('Zona actualizada')
+      toast.success(t('zonesPage.zoneUpdated'))
       exitEditMode()
     } catch (e: any) {
-      toast.error(e.message ?? 'Error al actualizar')
+      toast.error(e.message ?? t('zonesPage.updateError'))
     } finally {
       setSaving(false)
     }
@@ -850,12 +856,12 @@ export function Zones() {
       .delete()
       .eq('id', deleteTarget.id)
     if (error) {
-      toast.error('Error al eliminar zona')
+      toast.error(t('zonesPage.deleteError'))
     } else {
       removeZone(deleteTarget.id)
       if (selectedZoneId === deleteTarget.id) selectZone(null)
       if (editingZone?.id === deleteTarget.id) exitEditMode()
-      toast.success('Zona eliminada')
+      toast.success(t('zonesPage.zoneDeleted'))
     }
     setDeleting(false)
     setDeleteTarget(null)
@@ -868,9 +874,9 @@ export function Zones() {
       zones.forEach((z) => removeZone(z.id))
       selectZone(null)
       if (mode !== 'idle') { setMode('idle'); setDrawnCoords(null) }
-      toast.success(`${count} zona${count !== 1 ? 's' : ''} eliminada${count !== 1 ? 's' : ''}`)
+      toast.success(`${count} ${t('zonesPage.zoneNoun')}${count !== 1 ? 's' : ''} ${t('zonesPage.removedFem')}${count !== 1 ? 's' : ''}`)
     } catch (err: any) {
-      toast.error(err.message ?? 'Error al borrar zonas')
+      toast.error(err.message ?? t('zonesPage.clearError'))
     } finally {
       setClearingAll(false)
       setClearAllConfirm(false)
@@ -916,19 +922,20 @@ export function Zones() {
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Layers className="w-4 h-4 text-primary flex-shrink-0" />
             <span className="font-bold text-text-primary text-sm truncate">
-              {mode === 'creating' ? 'Nueva Zona'
-               : mode === 'drawing'  ? 'Dibujando...'
-               : mode === 'editing'  ? 'Editar Zona'
-               : 'Zonas Geográficas'}
+              {mode === 'creating' ? t('zonesPage.newZone')
+               : mode === 'drawing'  ? t('zonesPage.drawing')
+               : mode === 'editing'  ? t('zonesPage.editZoneHeader')
+               : t('zonesPage.title')}
             </span>
           </div>
 
           {mode === 'idle' && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
+              <LanguageSwitcher />
               {zones.length > 0 && (
                 <button
                   onClick={() => setClearAllConfirm(true)}
-                  title="Borrar todas las zonas"
+                  title={t('zonesPage.clearAllTitle')}
                   className="p-1.5 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -936,7 +943,7 @@ export function Zones() {
               )}
               <button
                 onClick={startCreate}
-                title="Nueva zona"
+                title={t('zonesPage.newZoneTitle')}
                 className="p-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -956,7 +963,7 @@ export function Zones() {
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar zona..."
+                    placeholder={t('zonesPage.searchPlaceholder')}
                     className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
                   />
                   {search && (
@@ -970,10 +977,10 @@ export function Zones() {
 
             {/* Leyenda */}
             <div className="px-4 py-2 border-b border-border-soft grid grid-cols-2 gap-1.5 flex-shrink-0">
-              {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((t) => (
-                <div key={t} className="flex items-center gap-1.5 text-xs text-text-muted">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: ZONE_TYPE_COLORS[t] }} />
-                  {ZONE_TYPE_LABELS[t]}
+              {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((ztype) => (
+                <div key={ztype} className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: ZONE_TYPE_COLORS[ztype] }} />
+                  {t(ZONE_TYPE_LABEL_KEYS[ztype])}
                 </div>
               ))}
             </div>
@@ -986,19 +993,19 @@ export function Zones() {
                   {zones.length === 0 ? (
                     <>
                       <div className="text-center">
-                        <p className="text-sm font-medium text-text-secondary">Sin zonas definidas</p>
-                        <p className="text-xs mt-1">Crea tu primera zona geográfica</p>
+                        <p className="text-sm font-medium text-text-secondary">{t('zonesPage.noZones')}</p>
+                        <p className="text-xs mt-1">{t('zonesPage.noZonesHint')}</p>
                       </div>
                       <button
                         onClick={startCreate}
                         className="flex items-center gap-1.5 text-xs text-primary hover:underline"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Crear primera zona
+                        {t('zonesPage.createFirst')}
                       </button>
                     </>
                   ) : (
-                    <p className="text-sm">Sin resultados para "{search}"</p>
+                    <p className="text-sm">{t('zonesPage.noResults', { q: search })}</p>
                   )}
                 </div>
               ) : (
@@ -1029,12 +1036,12 @@ export function Zones() {
                           <ZoneTypeIcon type={zone.type} color={zone.color} />
                           <span className="font-semibold text-text-primary text-sm truncate">{zone.name}</span>
                         </div>
-                        <span className="text-xs text-text-muted">{ZONE_TYPE_LABELS[zone.type]}</span>
+                        <span className="text-xs text-text-muted">{t(ZONE_TYPE_LABEL_KEYS[zone.type])}</span>
                         {zone.description && (
                           <p className="text-xs text-text-muted mt-0.5 truncate">{zone.description}</p>
                         )}
                         <span className="text-xs text-text-muted/50 mt-0.5 block">
-                          {zone.coordinates.length} vértices
+                          {t('zonesPage.vertices', { n: zone.coordinates.length })}
                         </span>
                       </div>
 
@@ -1042,14 +1049,14 @@ export function Zones() {
                       <div className="flex flex-col gap-1 flex-shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); startEdit(zone) }}
-                          title="Editar zona"
+                          title={t('zonesPage.editZone')}
                           className="p-1.5 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setDeleteTarget(zone) }}
-                          title="Eliminar zona"
+                          title={t('zonesPage.deleteZone')}
                           className="p-1.5 rounded-lg hover:bg-danger/10 text-text-muted hover:text-danger transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1064,12 +1071,12 @@ export function Zones() {
             {/* Stats footer */}
             <div className="px-4 py-3 border-t border-border-soft flex-shrink-0">
               <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((t) => {
-                  const count = zones.filter((z) => z.type === t).length
+                {(Object.keys(ZONE_TYPE_LABELS) as ZoneType[]).map((ztype) => {
+                  const count = zones.filter((z) => z.type === ztype).length
                   return (
-                    <div key={t} className="bg-base rounded-xl px-3 py-2 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: ZONE_TYPE_COLORS[t] }} />
-                      <span className="text-text-muted text-xs truncate">{ZONE_TYPE_LABELS[t]}</span>
+                    <div key={ztype} className="bg-base rounded-xl px-3 py-2 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: ZONE_TYPE_COLORS[ztype] }} />
+                      <span className="text-text-muted text-xs truncate">{t(ZONE_TYPE_LABEL_KEYS[ztype])}</span>
                       <span className="ml-auto text-text-primary text-xs font-mono font-bold">{count}</span>
                     </div>
                   )
@@ -1091,10 +1098,9 @@ export function Zones() {
               <Pencil className="w-7 h-7" style={{ color: newZoneForm.color }} />
             </motion.div>
             <div>
-              <p className="font-bold text-text-primary text-sm">Dibujando polígono</p>
+              <p className="font-bold text-text-primary text-sm">{t('zonesPage.drawingPolygon')}</p>
               <p className="text-xs text-text-muted mt-1 leading-relaxed">
-                Haz clic en el mapa para colocar vértices.
-                Necesitas mínimo 3 puntos.
+                {t('zonesPage.drawingHint')}
               </p>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border" style={{ borderColor: newZoneForm.color + '50', background: newZoneForm.color + '15' }}>
@@ -1103,7 +1109,7 @@ export function Zones() {
                 {newZoneForm.name || 'Nueva Zona'}
               </span>
             </div>
-            <p className="text-xs text-text-muted/50">Esc para cancelar</p>
+            <p className="text-xs text-text-muted/50">{t('zonesPage.escToCancel')}</p>
           </div>
         )}
 
@@ -1112,14 +1118,14 @@ export function Zones() {
           <div className="flex-1 overflow-y-auto p-4">
             {/* ── Visibilidad / scope de la zona ── */}
             <div className="mb-4 space-y-2">
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">Visible para</label>
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">{t('zonesPage.visibleFor')}</label>
 
               <select
                 value={zoneCompanyId}
                 onChange={e => setZoneCompanyId(e.target.value)}
                 className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               >
-                {isSuperAdmin && <option value="">Todas las empresas</option>}
+                {isSuperAdmin && <option value="">{t('zonesPage.allCompanies')}</option>}
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
 
@@ -1129,17 +1135,17 @@ export function Zones() {
                   onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Toda la empresa (todas sus campañas)</option>
+                  <option value="">{t('zonesPage.wholeCompany')}</option>
                   {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}
 
               <p className="text-xs text-text-muted/70 italic px-0.5">
                 {!zoneCompanyId
-                  ? '⚠️ Selecciona una empresa para continuar'
+                  ? t('zonesPage.selectCompanyWarn')
                   : !zoneCampaignId
-                    ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
-                    : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
+                    ? t('zonesPage.visibleCompanyOnly', { name: companies.find(c => c.id === zoneCompanyId)?.name ?? '' })
+                    : t('zonesPage.visibleCampaignOnly', { name: companyCampaigns.find(c => c.id === zoneCampaignId)?.name ?? '' })
                 }
               </p>
             </div>
@@ -1156,10 +1162,10 @@ export function Zones() {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs text-text-muted uppercase tracking-wider">
-                  Buscar por dirección o link de Google Maps
+                  {t('zonesPage.searchByAddress')}
                 </label>
                 {addressActive && !cityActive && (
-                  <button onClick={clearAddress} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title="Limpiar">
+                  <button onClick={clearAddress} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title={t('zonesPage.clear')}>
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -1168,13 +1174,13 @@ export function Zones() {
               {cityActive ? (
                 <div className="flex items-center gap-2 bg-surface-raised border border-border-soft rounded-xl px-3 py-2.5">
                   <span className="text-xs text-text-muted flex-1 leading-relaxed">
-                    No disponible mientras tengas una ciudad seleccionada. Borra la ciudad para usar esta opción.
+                    {t('zonesPage.cityBlockingAddress')}
                   </span>
                   <button
                     onClick={clearCity}
                     className="text-xs text-primary font-semibold whitespace-nowrap hover:underline flex-shrink-0 ml-1"
                   >
-                    Limpiar ciudad
+                    {t('zonesPage.clearCity')}
                   </button>
                 </div>
               ) : (
@@ -1184,7 +1190,7 @@ export function Zones() {
                       value={geocodeQuery}
                       onChange={(e) => setGeocodeQuery(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && !geocodeLoading) handleGeocode() }}
-                      placeholder="Dirección o pega un link de Google Maps"
+                      placeholder={t('zonesPage.addressPlaceholder')}
                       className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                     />
                     <button
@@ -1201,7 +1207,7 @@ export function Zones() {
 
                   <p className="text-[11px] text-text-muted flex items-start gap-1.5 bg-primary/5 border border-primary/15 rounded-lg px-2.5 py-1.5 leading-relaxed">
                     <span className="flex-shrink-0">🗺️</span>
-                    <span>Puedes escribir la dirección <strong className="text-text-secondary">o pegar un link de Google Maps</strong> para ubicar el punto exacto en el mapa</span>
+                    <span>{t('zonesPage.addressHintPre')}<strong className="text-text-secondary">{t('zonesPage.addressHintStrong')}</strong>{t('zonesPage.addressHintPost')}</span>
                   </p>
 
                   {geocodeResult && (
@@ -1212,7 +1218,7 @@ export function Zones() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs text-text-muted">Radio de zona</span>
+                          <span className="text-xs text-text-muted">{t('zonesPage.zoneRadius')}</span>
                           <span className="text-xs font-mono text-text-primary">{Math.max(geocodeRadius, 150)} m</span>
                         </div>
                         <input
@@ -1228,7 +1234,7 @@ export function Zones() {
                         className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                       >
                         <MapPin className="w-3.5 h-3.5" />
-                        Actualizar zona circular
+                        {t('zonesPage.updateCircular')}
                       </button>
                     </div>
                   )}
@@ -1240,10 +1246,10 @@ export function Zones() {
             <div className="mt-4 space-y-2">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs text-text-muted uppercase tracking-wider">
-                  Importar ciudad (límites reales)
+                  {t('zonesPage.importCity')}
                 </label>
                 {cityActive && !addressActive && (
-                  <button onClick={clearCity} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title="Limpiar">
+                  <button onClick={clearCity} className="text-text-muted hover:text-danger transition-colors p-0.5 rounded" title={t('zonesPage.clear')}>
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -1252,13 +1258,13 @@ export function Zones() {
               {addressActive ? (
                 <div className="flex items-center gap-2 bg-surface-raised border border-border-soft rounded-xl px-3 py-2.5">
                   <span className="text-xs text-text-muted flex-1 leading-relaxed">
-                    No disponible mientras tengas una dirección ingresada. Borra la dirección para usar esta opción.
+                    {t('zonesPage.addressBlockingCity')}
                   </span>
                   <button
                     onClick={clearAddress}
                     className="text-xs text-primary font-semibold whitespace-nowrap hover:underline flex-shrink-0 ml-1"
                   >
-                    Limpiar dirección
+                    {t('zonesPage.clearAddress')}
                   </button>
                 </div>
               ) : (
@@ -1283,7 +1289,7 @@ export function Zones() {
                       value={citySearch}
                       onChange={(e) => setCitySearch(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && !cityLoading) handleFetchCityBoundary() }}
-                      placeholder="Ej: Bogotá, Medellín, Cali..."
+                      placeholder={t('zonesPage.cityPlaceholder')}
                       className="flex-1 bg-base border border-border-soft rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                     />
                     <button
@@ -1309,7 +1315,7 @@ export function Zones() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-text-primary">{cityBoundary.name}</p>
                           <p className="text-xs text-text-muted line-clamp-1 mt-0.5">{cityBoundary.displayName}</p>
-                          <p className="text-xs text-text-muted mt-0.5">{cityBoundary.coords.length} vértices</p>
+                          <p className="text-xs text-text-muted mt-0.5">{t('zonesPage.vertices', { n: cityBoundary.coords.length })}</p>
                         </div>
                       </div>
                       <button
@@ -1317,7 +1323,7 @@ export function Zones() {
                         className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
-                        Usar estos límites
+                        {t('zonesPage.useBoundary')}
                       </button>
                     </div>
                   )}
@@ -1334,16 +1340,16 @@ export function Zones() {
                   <div className="flex items-center gap-2.5 bg-success/10 border border-success/30 rounded-xl px-3 py-2.5">
                     <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-success">Polígono listo</p>
-                      <p className="text-xs text-text-muted">{drawnCoords.length} vértices</p>
+                      <p className="text-xs font-semibold text-success">{t('zonesPage.polygonReady')}</p>
+                      <p className="text-xs text-text-muted">{t('zonesPage.vertices', { n: drawnCoords.length })}</p>
                     </div>
                     <button
                       onClick={() => { setDrawnCoords(null); startDraw() }}
-                      title="Redibujar polígono"
+                      title={t('zonesPage.redrawTitle')}
                       className="flex items-center gap-1 text-xs text-text-muted hover:text-warning transition-colors"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      Redibujar
+                      {t('zonesPage.redraw')}
                     </button>
                   </div>
 
@@ -1359,7 +1365,7 @@ export function Zones() {
                   >
                     {saving
                       ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      : <><Save className="w-4 h-4" />Guardar zona</>
+                      : <><Save className="w-4 h-4" />{t('zonesPage.saveZone')}</>
                     }
                   </button>
                 </>
@@ -1369,7 +1375,7 @@ export function Zones() {
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-primary hover:bg-primary/90 text-white transition-colors"
                 >
                   <Pencil className="w-4 h-4" />
-                  Dibujar en el mapa
+                  {t('zonesPage.drawOnMap')}
                 </button>
               )}
 
@@ -1377,7 +1383,7 @@ export function Zones() {
                 onClick={() => { setMode('idle'); setDrawnCoords(null) }}
                 className="w-full py-2 rounded-xl text-sm text-text-muted hover:text-text-secondary hover:bg-surface-raised transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -1387,14 +1393,14 @@ export function Zones() {
         {mode === 'editing' && editingZone && (
           <div className="flex-1 overflow-y-auto p-4">
             <div className="mb-4 space-y-2">
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">Visible para</label>
+              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">{t('zonesPage.visibleFor')}</label>
 
               <select
                 value={zoneCompanyId}
                 onChange={e => setZoneCompanyId(e.target.value)}
                 className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
               >
-                {isSuperAdmin && <option value="">Todas las empresas</option>}
+                {isSuperAdmin && <option value="">{t('zonesPage.allCompanies')}</option>}
                 {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
 
@@ -1404,17 +1410,17 @@ export function Zones() {
                   onChange={e => setZoneCampaignId(e.target.value)}
                   className="w-full bg-base border border-border-soft rounded-xl px-3 py-2.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow"
                 >
-                  <option value="">Toda la empresa (todas sus campañas)</option>
+                  <option value="">{t('zonesPage.wholeCompany')}</option>
                   {companyCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}
 
               <p className="text-xs text-text-muted/70 italic px-0.5">
                 {!zoneCompanyId
-                  ? '⚠️ Selecciona una empresa para continuar'
+                  ? t('zonesPage.selectCompanyWarn')
                   : !zoneCampaignId
-                    ? `✓ Solo visible para "${companies.find(c => c.id === zoneCompanyId)?.name}"`
-                    : `✓ Solo visible para la campaña "${companyCampaigns.find(c => c.id === zoneCampaignId)?.name}"`
+                    ? t('zonesPage.visibleCompanyOnly', { name: companies.find(c => c.id === zoneCompanyId)?.name ?? '' })
+                    : t('zonesPage.visibleCampaignOnly', { name: companyCampaigns.find(c => c.id === zoneCampaignId)?.name ?? '' })
                 }
               </p>
             </div>
@@ -1424,22 +1430,22 @@ export function Zones() {
             <div className="mt-4 bg-base border border-border-soft rounded-xl px-3 py-3 space-y-2">
               <p className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
                 <Move className="w-3.5 h-3.5 text-primary" />
-                Edición de vértices
+                {t('zonesPage.vertexEditing')}
               </p>
               <ul className="space-y-1 text-xs text-text-muted">
-                <li>• <strong className="text-text-secondary">Arrastra</strong> los puntos sólidos para moverlos</li>
-                <li>• <strong className="text-text-secondary">Clic</strong> en los puntos pequeños para agregar</li>
-                <li>• <strong className="text-text-secondary">Clic derecho</strong> en vértice para eliminarlo</li>
+                <li>• <strong className="text-text-secondary">{t('zonesPage.vtxDragStrong')}</strong>{t('zonesPage.vtxDragRest')}</li>
+                <li>• <strong className="text-text-secondary">{t('zonesPage.vtxClickStrong')}</strong>{t('zonesPage.vtxClickRest')}</li>
+                <li>• <strong className="text-text-secondary">{t('zonesPage.vtxRightStrong')}</strong>{t('zonesPage.vtxRightRest')}</li>
               </ul>
               <div className="flex items-center gap-1.5 pt-1 border-t border-border-soft">
-                <span className="text-xs text-text-muted">{editCoords.length} vértices actuales</span>
+                <span className="text-xs text-text-muted">{t('zonesPage.currentVertices', { n: editCoords.length })}</span>
                 <button
                   onClick={() => setEditCoords([...editingZone.coordinates])}
                   className="ml-auto flex items-center gap-1 text-xs text-text-muted hover:text-warning transition-colors"
-                  title="Restaurar forma original"
+                  title={t('zonesPage.restoreTitle')}
                 >
                   <RotateCcw className="w-3 h-3" />
-                  Restaurar
+                  {t('zonesPage.restore')}
                 </button>
               </div>
             </div>
@@ -1449,7 +1455,7 @@ export function Zones() {
                 onClick={exitEditMode}
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-surface-raised hover:bg-border-soft text-text-secondary transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSaveEdit}
@@ -1463,7 +1469,7 @@ export function Zones() {
               >
                 {saving
                   ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <><Save className="w-4 h-4" />Guardar</>
+                  : <><Save className="w-4 h-4" />{t('common.save')}</>
                 }
               </button>
             </div>
@@ -1482,9 +1488,9 @@ export function Zones() {
           >
             <Pencil className="w-3.5 h-3.5" />
             {drawPointCount === 0
-              ? 'Haz clic en el mapa para el primer punto'
-              : `${drawPointCount} punto${drawPointCount !== 1 ? 's' : ''} · ${
-                  drawPointCount < 3 ? `${3 - drawPointCount} más para finalizar` : 'listo — pulsa Finalizar'
+              ? t('zonesPage.clickFirstPoint')
+              : `${drawPointCount} ${t('zonesPage.pointNoun')}${drawPointCount !== 1 ? 's' : ''} · ${
+                  drawPointCount < 3 ? t('zonesPage.moreToFinish', { k: 3 - drawPointCount }) : t('zonesPage.readyFinish')
                 }`
             }
           </div>
@@ -1498,7 +1504,7 @@ export function Zones() {
             className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-warning/90 backdrop-blur-sm text-white text-xs font-medium px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 pointer-events-none"
           >
             <Move className="w-3.5 h-3.5" />
-            Modo edición — arrastra vértices · clic en midpoints para agregar · clic derecho para eliminar
+            {t('zonesPage.editBanner')}
           </motion.div>
         )}
 
@@ -1559,8 +1565,8 @@ export function Zones() {
                 <MousePointer className="w-3.5 h-3.5 text-primary" />
                 <span>
                   {drawPointCount === 0
-                    ? 'Clic para primer punto'
-                    : `${drawPointCount} vértice${drawPointCount !== 1 ? 's' : ''} · ${drawPointCount < 3 ? 'Mín. 3' : 'Listo'}`
+                    ? t('zonesPage.clickForFirst')
+                    : `${drawPointCount} ${t('zonesPage.vertexNoun')}${drawPointCount !== 1 ? 's' : ''} · ${drawPointCount < 3 ? t('zonesPage.min3') : t('zonesPage.ready')}`
                   }
                 </span>
               </div>
@@ -1568,7 +1574,7 @@ export function Zones() {
               <button
                 onClick={() => drawRef.current?.undo()}
                 disabled={drawPointCount === 0}
-                title="Deshacer último punto"
+                title={t('zonesPage.undoTitle')}
                 className="p-1.5 rounded-lg text-text-muted hover:text-text-primary disabled:opacity-30 transition-colors hover:bg-surface-raised"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -1584,11 +1590,11 @@ export function Zones() {
                 )}
               >
                 <CheckCircle className="w-3.5 h-3.5" />
-                Finalizar
+                {t('zonesPage.finish')}
               </button>
               <button
                 onClick={() => drawRef.current?.cancel()}
-                title="Cancelar dibujo"
+                title={t('zonesPage.cancelDrawTitle')}
                 className="p-1.5 rounded-lg text-text-muted hover:text-danger transition-colors hover:bg-danger/10"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1611,7 +1617,7 @@ export function Zones() {
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
-                      Editar zona
+                      {t('zonesPage.editZone')}
                     </button>
                     <button
                       onClick={() => setDeleteTarget(selectedZone)}
@@ -1670,20 +1676,19 @@ export function Zones() {
                   <AlertTriangle className="w-5 h-5 text-danger" />
                 </div>
                 <div>
-                  <p className="font-bold text-text-primary text-sm">Eliminar zona</p>
-                  <p className="text-text-muted text-xs mt-0.5">Esta acción no se puede deshacer</p>
+                  <p className="font-bold text-text-primary text-sm">{t('zonesPage.deleteZone')}</p>
+                  <p className="text-text-muted text-xs mt-0.5">{t('zonesPage.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-text-secondary text-sm mb-5">
-                ¿Eliminar <strong className="text-text-primary">"{deleteTarget.name}"</strong>?
-                El historial de eventos quedará registrado.
+                {t('zonesPage.confirmDeletePre')}<strong className="text-text-primary">"{deleteTarget.name}"</strong>{t('zonesPage.confirmDeletePost')}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setDeleteTarget(null)}
                   className="flex-1 bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium rounded-xl py-2.5 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -1692,7 +1697,7 @@ export function Zones() {
                 >
                   {deleting
                     ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    : <><Trash2 className="w-4 h-4" />Eliminar</>
+                    : <><Trash2 className="w-4 h-4" />{t('common.delete')}</>
                   }
                 </button>
               </div>
@@ -1724,12 +1729,12 @@ export function Zones() {
                   <Trash2 className="w-5 h-5 text-danger" />
                 </div>
                 <div>
-                  <p className="font-bold text-text-primary text-sm">Borrar todas las zonas</p>
-                  <p className="text-text-muted text-xs mt-0.5">{zones.length} zona{zones.length !== 1 ? 's' : ''} en la base de datos</p>
+                  <p className="font-bold text-text-primary text-sm">{t('zonesPage.clearAllTitle')}</p>
+                  <p className="text-text-muted text-xs mt-0.5">{zones.length} {t('zonesPage.zoneNoun')}{zones.length !== 1 ? 's' : ''} {t('zonesPage.inDatabase')}</p>
                 </div>
               </div>
               <p className="text-text-secondary text-sm mb-5 leading-relaxed">
-                Se eliminarán <strong className="text-danger">{zones.length} zona{zones.length !== 1 ? 's' : ''}</strong> permanentemente. Esta acción no se puede deshacer.
+                {t('zonesPage.clearAllConfirmPre')}<strong className="text-danger">{zones.length} {t('zonesPage.zoneNoun')}{zones.length !== 1 ? 's' : ''}</strong>{t('zonesPage.clearAllConfirmPost')}
               </p>
               <div className="flex gap-3">
                 <button
@@ -1737,7 +1742,7 @@ export function Zones() {
                   disabled={clearingAll}
                   className="flex-1 bg-surface-raised hover:bg-border-soft text-text-secondary text-sm font-medium rounded-xl py-2.5 transition-colors disabled:opacity-50"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleClearAll}
@@ -1746,7 +1751,7 @@ export function Zones() {
                 >
                   {clearingAll
                     ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    : <><Trash2 className="w-4 h-4" />Borrar todo</>
+                    : <><Trash2 className="w-4 h-4" />{t('zonesPage.clearAllBtn')}</>
                   }
                 </button>
               </div>

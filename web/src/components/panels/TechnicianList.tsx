@@ -6,18 +6,18 @@ import { getZonesForPoint } from '@/lib/geoUtils'
 import { Battery, MapPin, Wifi, WifiOff, AlertTriangle, ChevronRight, UserPlus, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
-const STATUS_LABELS: Record<TechnicianStatus, string> = {
-  moving:    'En movimiento',
-  idle:      'Activo',
-  stopped:   'Sin rastreo',
-  no_signal: 'App activa — sin señal',
-  offline:   'Desconectado',
-  accident:  'ACCIDENTE',
+export const STATUS_LABEL_KEYS: Record<TechnicianStatus, string> = {
+  moving:    'status.moving',
+  idle:      'status.idle',
+  stopped:   'status.stopped',
+  no_signal: 'status.no_signal',
+  offline:   'status.offline',
+  accident:  'status.accident',
 }
 
 const STATUS_COLORS: Record<TechnicianStatus, string> = {
@@ -55,13 +55,14 @@ interface TechnicianRowProps {
 }
 
 function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
+  const { t, lang } = useI18n()
   const { selectTechnician, selectedTechnicianId } = useTrackingStore()
   const { zones } = useZonesStore()
   const isSelected  = selectedTechnicianId === tech.id
   const speedKmh    = tech.lastSpeed ? Math.round(tech.lastSpeed * 3.6) : 0
   const lastSeen    = tech.lastSeen
-    ? formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: es })
-    : 'Sin datos'
+    ? formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: getDateLocale(lang) })
+    : t('common.noData')
   const noDevice    = !tech.deviceId
 
   const currentZones = tech.lat && tech.lng
@@ -109,8 +110,8 @@ function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
           <div className="flex items-center justify-between mt-0.5">
             <span className={cn('text-xs font-medium', STATUS_COLORS[tech.status])}>
               {noDevice
-                ? <span className="text-warning">Sin dispositivo</span>
-                : <>{STATUS_LABELS[tech.status]}{tech.status === 'moving' && speedKmh > 0 && ` • ${speedKmh} km/h`}</>
+                ? <span className="text-warning">{t('tech.noDevice')}</span>
+                : <>{t(STATUS_LABEL_KEYS[tech.status])}{tech.status === 'moving' && speedKmh > 0 && ` • ${speedKmh} km/h`}</>
               }
             </span>
             <span className="text-xs text-text-muted">{noDevice ? '' : lastSeen}</span>
@@ -141,7 +142,7 @@ function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
       {noDevice && (
         <button
           onClick={(e) => { e.stopPropagation(); onQrClick(tech) }}
-          title="Generar QR de registro"
+          title={t('tech.generateQr')}
           className="flex-shrink-0 p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
         >
           <QrCode className="w-4 h-4" />
@@ -159,6 +160,7 @@ interface TechnicianListProps {
 }
 
 export function TechnicianList({ className, variant = 'admin' }: TechnicianListProps) {
+  const { t } = useI18n()
   const { technicians } = useTrackingStore()
   const techList = Object.values(technicians)
 
@@ -190,30 +192,30 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
         {/* Header */}
         <div className="px-4 py-3 border-b border-border-soft">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-text-primary text-sm">Técnicos</h2>
+            <h2 className="font-bold text-text-primary text-sm">{t('dashboard.technicians')}</h2>
             <button
               onClick={() => setWizardOpen(true)}
-              title="Agregar técnico"
+              title={t('tech.addTechnician')}
               className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 rounded-lg px-2 py-1 transition-colors"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              Nuevo
+              {t('common.new')}
             </button>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-success/10 rounded-lg px-2 py-1.5 text-center">
               <div className="text-success font-mono font-bold text-lg">{counts.active}</div>
-              <div className="text-success/70 text-xs">Activos</div>
+              <div className="text-success/70 text-xs">{t('tech.activeCount')}</div>
             </div>
             <div className="bg-text-muted/10 rounded-lg px-2 py-1.5 text-center">
               <div className={cn('font-mono font-bold text-lg', counts.inactive > 0 ? 'text-warning/70' : 'text-text-muted')}>{counts.inactive}</div>
-              <div className="text-text-muted/70 text-xs">Sin rastreo</div>
+              <div className="text-text-muted/70 text-xs">{t('status.stopped')}</div>
             </div>
             <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
               <div className={cn('font-mono font-bold text-lg', counts.alert > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
                 {counts.alert}
               </div>
-              <div className="text-xs text-text-muted">Alertas</div>
+              <div className="text-xs text-text-muted">{t('tech.alertsCount')}</div>
             </div>
           </div>
         </div>
@@ -223,12 +225,12 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
           {sortedTechs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-text-muted gap-2">
               <MapPin className="w-8 h-8 opacity-30" />
-              <span className="text-sm">Sin técnicos registrados</span>
+              <span className="text-sm">{t('tech.noneRegistered')}</span>
               <button
                 onClick={() => setWizardOpen(true)}
                 className="text-xs text-primary hover:underline"
               >
-                Agregar el primero
+                {t('tech.addFirst')}
               </button>
             </div>
           ) : (

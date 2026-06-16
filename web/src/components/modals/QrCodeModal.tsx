@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { QrCode, X, RefreshCw, CheckCircle } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
+import { useI18n } from '@/lib/i18n/i18n'
 
 interface Props {
   tech: { id: string; name: string }
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function QrCodeModal({ tech, onClose }: Props) {
+  const { t } = useI18n()
   const [qrToken, setQrToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -33,7 +35,7 @@ export function QrCodeModal({ tech, onClose }: Props) {
       if (err) throw new Error(err.message)
       setQrToken(data.token)
     } catch (err: any) {
-      setError(err.message ?? 'Error al generar QR')
+      setError(err.message ?? t('qr.genError'))
     } finally {
       setLoading(false)
     }
@@ -60,7 +62,7 @@ export function QrCodeModal({ tech, onClose }: Props) {
               <QrCode className="w-4 h-4 text-success" />
             </div>
             <div>
-              <p className="font-bold text-text-primary text-sm leading-none">Código QR de vinculación</p>
+              <p className="font-bold text-text-primary text-sm leading-none">{t('qr.titleLink')}</p>
               <p className="text-xs text-text-muted mt-0.5 truncate max-w-[200px]">{tech.name}</p>
             </div>
           </div>
@@ -86,10 +88,10 @@ export function QrCodeModal({ tech, onClose }: Props) {
               </div>
               <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-xl px-3 py-2 text-xs text-success">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                Válido por 24 horas · Un solo uso
+                {t('qr.validOneUse')}
               </div>
               <p className="text-text-muted text-xs text-center">
-                El técnico debe abrir la app y apuntar la cámara a este código para vincular su dispositivo.
+                {t('qr.scanHintFull')}
               </p>
             </>
           )}
@@ -101,13 +103,13 @@ export function QrCodeModal({ tech, onClose }: Props) {
               className="flex-1 flex items-center justify-center gap-1.5 text-xs border border-border-soft text-text-secondary hover:text-text-primary hover:bg-surface-raised rounded-xl py-2.5 transition-colors disabled:opacity-50"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Regenerar QR
+              {t('qr.regenerate')}
             </button>
             <button
               onClick={onClose}
               className="flex-1 bg-primary hover:bg-primary-hover text-base text-xs font-semibold rounded-xl py-2.5 transition-colors"
             >
-              Listo
+              {t('qr.done')}
             </button>
           </div>
         </div>

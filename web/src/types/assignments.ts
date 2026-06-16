@@ -14,9 +14,9 @@ export interface TechnicianAssignment {
   created_at?:                 string
 }
 
-export const ASSIGNMENT_STATUS_CFG: Record<AssignmentStatus, { color: string; label: string }> = {
-  pending:     { color: '#F59E0B', label: 'Pendiente'    },
-  in_progress: { color: '#3B82F6', label: 'En progreso'  },
-  completed:   { color: '#10B981', label: 'Completado'   },
-  cancelled:   { color: '#EF4444', label: 'Cancelado'    },
+export const ASSIGNMENT_STATUS_CFG: Record<AssignmentStatus, { color: string; labelKey: string }> = {
+  pending:     { color: '#F59E0B', labelKey: 'assign.status.pending'     },
+  in_progress: { color: '#3B82F6', labelKey: 'assign.status.in_progress' },
+  completed:   { color: '#10B981', labelKey: 'assign.status.completed'   },
+  cancelled:   { color: '#EF4444', labelKey: 'assign.status.cancelled'   },
 }

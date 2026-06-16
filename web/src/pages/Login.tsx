@@ -5,9 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { getRoleFromSession } from '@/lib/roles'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
 export function Login() {
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -31,7 +34,7 @@ export function Login() {
       navigate(role === 'superadmin' ? '/admin' : role === 'leader' ? '/leader' : '/')
     } catch (err: any) {
       setError(err.message === 'Invalid login credentials'
-        ? 'Email o contraseña incorrectos'
+        ? t('login.badCredentials')
         : err.message)
     } finally {
       setLoading(false)
@@ -46,6 +49,10 @@ export function Login() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-success/5 rounded-full blur-3xl" />
       </div>
 
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -58,7 +65,7 @@ export function Login() {
             <img src="/favicon.png" alt="PositivoS+" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Localizador <span className="text-primary">PositivoS+</span></h1>
-          <p className="text-text-muted text-sm mt-1">Panel de Control de Técnicos</p>
+          <p className="text-text-muted text-sm mt-1">{t('login.subtitle')}</p>
         </div>
 
         {/* Card de login */}
@@ -66,7 +73,7 @@ export function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Correo electrónico
+                {t('login.email')}
               </label>
               <input
                 type="email"
@@ -85,7 +92,7 @@ export function Login() {
 
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Contraseña
+                {t('login.password')}
               </label>
               <div className="relative">
                 <input
@@ -135,15 +142,15 @@ export function Login() {
               {loading ? (
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Iniciando sesión...
+                  {t('login.submitting')}
                 </div>
-              ) : 'Ingresar'}
+              ) : t('login.submit')}
             </button>
           </form>
         </div>
 
         <p className="text-center text-xs text-text-muted mt-4">
-          Solo para personal autorizado
+          {t('login.footer')}
         </p>
       </motion.div>
     </div>

@@ -3,8 +3,8 @@ import { Users, Sun, RefreshCw, Sunset, Wifi, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface TechRouteRow {
   id: string
@@ -40,11 +40,12 @@ function StatCard({ icon: Icon, label, value, color, sub }: {
 }
 
 export function LeaderStats() {
+  const { t, lang } = useI18n()
   const [routes, setRoutes] = useState<TechRouteRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const today = format(new Date(), 'yyyy-MM-dd')
-  const todayLabel = format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })
+  const todayLabel = format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: getDateLocale(lang) })
 
   async function load() {
     setLoading(true)
@@ -115,7 +116,7 @@ export function LeaderStats() {
       <div className="flex flex-col items-center gap-3 py-20">
         <p className="text-danger text-sm">{error}</p>
         <button onClick={load} className="text-xs text-text-muted hover:text-text-primary flex items-center gap-1.5 transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+          <RefreshCw className="w-3.5 h-3.5" /> {t('common.retry')}
         </button>
       </div>
     )
@@ -125,25 +126,25 @@ export function LeaderStats() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-text-primary font-semibold text-base">Resumen del día</h2>
+          <h2 className="text-text-primary font-semibold text-base">{t('leaderPanel.title.stats')}</h2>
           <p className="text-text-muted text-xs capitalize mt-0.5">{todayLabel}</p>
         </div>
-        <button onClick={load} className="text-text-muted hover:text-text-primary transition-colors" title="Actualizar">
+        <button onClick={load} className="text-text-muted hover:text-text-primary transition-colors" title={t('common.refresh')}>
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <StatCard icon={Users} label="Técnicos con ruta hoy" value={routes.length} color="bg-primary/10 text-primary" />
-        <StatCard icon={Wifi} label="Técnicos en campo" value={onlineTechs} color="bg-success/10 text-success" sub={`de ${routes.length} programados`} />
-        <StatCard icon={Sun} label="Instalaciones AM" value={totalAM} color="bg-warning/10 text-warning" />
-        <StatCard icon={Sunset} label="Instalaciones PM" value={totalPM} color="bg-primary/10 text-primary" />
+        <StatCard icon={Users} label={t('leaderStats.techsWithRoute')} value={routes.length} color="bg-primary/10 text-primary" />
+        <StatCard icon={Wifi} label={t('leaderStats.techsInField')} value={onlineTechs} color="bg-success/10 text-success" sub={t('leaderStats.ofScheduled', { n: routes.length })} />
+        <StatCard icon={Sun} label={t('leaderStats.installsAM')} value={totalAM} color="bg-warning/10 text-warning" />
+        <StatCard icon={Sunset} label={t('leaderStats.installsPM')} value={totalPM} color="bg-primary/10 text-primary" />
         <StatCard
           icon={CheckCircle2}
-          label="Completadas hoy"
+          label={t('leaderStats.completedToday')}
           value={completionPct !== null ? `${completionPct}%` : '—'}
           color="bg-success/10 text-success"
-          sub={totalAssigned > 0 ? `${totalDone} de ${totalAssigned}` : undefined}
+          sub={totalAssigned > 0 ? t('leaderStats.ofTotal', { done: totalDone, total: totalAssigned }) : undefined}
         />
       </div>
 
@@ -152,16 +153,16 @@ export function LeaderStats() {
           <div className="w-12 h-12 rounded-xl bg-surface-raised flex items-center justify-center mx-auto mb-4">
             <Users className="w-6 h-6 text-text-muted" />
           </div>
-          <p className="text-text-primary font-medium">No hay rutas cargadas para hoy</p>
-          <p className="text-text-muted text-xs mt-1">Ve a "Cargar Rutas" para subir el Excel de asignaciones.</p>
+          <p className="text-text-primary font-medium">{t('leaderStats.noRoutesToday')}</p>
+          <p className="text-text-muted text-xs mt-1">{t('leaderStats.goUpload')}</p>
         </div>
       ) : (
         <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border-soft flex items-center justify-between">
-            <h3 className="text-text-primary text-sm font-semibold">Técnicos de hoy</h3>
-            <span className="text-text-muted text-xs">{routes.length} técnicos · {totalAM + totalPM} instalaciones</span>
+            <h3 className="text-text-primary text-sm font-semibold">{t('leaderStats.techsToday')}</h3>
+            <span className="text-text-muted text-xs">{t('leaderStats.techsInstalls', { techs: routes.length, installs: totalAM + totalPM })}</span>
             {completionPct !== null && (
-              <span className="text-xs text-success font-medium">{completionPct}% completo</span>
+              <span className="text-xs text-success font-medium">{t('leaderStats.pctComplete', { pct: completionPct })}</span>
             )}
           </div>
           <div className="divide-y divide-border-soft">
@@ -178,7 +179,7 @@ export function LeaderStats() {
                 <div className="flex-1 min-w-0">
                   <p className="text-text-primary text-sm font-medium truncate">{route.technician_name}</p>
                   {route.technician_cedula && (
-                    <p className="text-text-muted text-xs">Cédula: {route.technician_cedula}</p>
+                    <p className="text-text-muted text-xs">{t('leaderStats.cedula', { value: route.technician_cedula })}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -211,10 +212,10 @@ export function LeaderStats() {
                   route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
                   'bg-surface-raised text-text-muted border-border'
                 )}>
-                  {route.techStatus === 'moving'    ? 'En campo' :
-                   route.techStatus === 'idle'      ? 'Inactivo' :
-                   route.techStatus === 'stopped'   ? 'Detenido' :
-                   route.techStatus === 'no_signal' ? 'Sin señal' : 'Sin conexión'}
+                  {route.techStatus === 'moving'    ? t('leaderStats.statusField') :
+                   route.techStatus === 'idle'      ? t('leaderStats.statusIdle') :
+                   route.techStatus === 'stopped'   ? t('leaderStats.statusStopped') :
+                   route.techStatus === 'no_signal' ? t('leaderStats.statusNoSignal') : t('leaderStats.statusOffline')}
                 </span>
               </div>
             ))}

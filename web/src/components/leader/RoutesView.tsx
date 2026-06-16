@@ -6,10 +6,11 @@ import {
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, addDays, parseISO, isToday, isTomorrow, isYesterday } from 'date-fns'
-import { es } from 'date-fns/locale'
+import type { Locale } from 'date-fns'
 import { toast } from 'sonner'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 
 interface RouteItem {
   id: string
@@ -28,21 +29,23 @@ interface Company  { id: string; name: string }
 interface Campaign { id: string; name: string; company_id: string }
 
 const ITEM_STATUSES = [
-  { value: 'pending',     label: 'Pendiente',   cls: 'bg-surface-raised text-text-muted border-border'    },
-  { value: 'in_progress', label: 'En progreso', cls: 'bg-warning/10 text-warning border-warning/20'       },
-  { value: 'completed',   label: 'Completado',  cls: 'bg-success/10 text-success border-success/20'       },
-  { value: 'failed',      label: 'No exitoso',  cls: 'bg-danger/10 text-danger border-danger/20'          },
+  { value: 'pending',     labelKey: 'assign.status.pending',     cls: 'bg-surface-raised text-text-muted border-border'    },
+  { value: 'in_progress', labelKey: 'assign.status.in_progress', cls: 'bg-warning/10 text-warning border-warning/20'       },
+  { value: 'completed',   labelKey: 'assign.status.completed',   cls: 'bg-success/10 text-success border-success/20'       },
+  { value: 'failed',      labelKey: 'routes.statusFailed',       cls: 'bg-danger/10 text-danger border-danger/20'          },
 ]
 
-function dayLabel(dateStr: string): string {
+function dayLabel(dateStr: string, t: TFunc, locale: Locale): string {
   const d = parseISO(dateStr)
-  if (isToday(d))     return 'Hoy'
-  if (isTomorrow(d))  return 'Mañana'
-  if (isYesterday(d)) return 'Ayer'
-  return format(d, "EEEE d 'de' MMMM", { locale: es })
+  if (isToday(d))     return t('history.today')
+  if (isTomorrow(d))  return t('assign.tomorrow')
+  if (isYesterday(d)) return t('routes.yesterday')
+  return format(d, "EEEE d 'de' MMMM", { locale })
 }
 
 export function RoutesView() {
+  const { t, lang } = useI18n()
+  const locale = getDateLocale(lang)
   const today       = format(new Date(), 'yyyy-MM-dd')
   const [selectedDate, setSelectedDate] = useState(today)
   const [weekStart, setWeekStart]       = useState(getWeekStart(today))
@@ -142,21 +145,21 @@ export function RoutesView() {
 
   async function updateStatus(itemId: string, newStatus: string) {
     const { error } = await supabase.from('route_items').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', itemId)
-    if (error) { toast.error('Error al actualizar'); return }
+    if (error) { toast.error(t('routes.updateError')); return }
     setRoutes(prev => prev.map(r => ({ ...r, items: r.items.map(i => i.id === itemId ? { ...i, status: newStatus } : i) })))
     setEditingItem(null)
   }
 
   async function deleteRoute(routeId: string) {
     const { error } = await supabase.from('technician_routes').delete().eq('id', routeId)
-    if (error) { toast.error('Error al eliminar ruta'); return }
+    if (error) { toast.error(t('routes.deleteRouteError')); return }
     setRoutes(prev => prev.filter(r => r.id !== routeId))
-    setConfirmDelete(null); toast.success('Ruta eliminada')
+    setConfirmDelete(null); toast.success(t('routes.routeDeleted'))
   }
 
   async function deleteItem(routeId: string, itemId: string) {
     const { error } = await supabase.from('route_items').delete().eq('id', itemId)
-    if (error) { toast.error('Error al eliminar instalación'); return }
+    if (error) { toast.error(t('routes.deleteItemError')); return }
     setRoutes(prev => prev.map(r => r.id !== routeId ? r : { ...r, items: r.items.filter(i => i.id !== itemId) }))
   }
 
@@ -187,11 +190,11 @@ export function RoutesView() {
         <button onClick={() => handleDateChange(format(new Date(), 'yyyy-MM-dd'))}
           className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
             selectedDate === today ? 'bg-primary text-white border-primary' : 'border-border-soft text-text-secondary hover:text-text-primary hover:bg-surface'
-          )}>Hoy</button>
+          )}>{t('history.today')}</button>
         <button onClick={() => handleDateChange(format(addDays(new Date(), 1), 'yyyy-MM-dd'))}
           className={cn('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
             selectedDate === format(addDays(new Date(), 1), 'yyyy-MM-dd') ? 'bg-primary text-white border-primary' : 'border-border-soft text-text-secondary hover:text-text-primary hover:bg-surface'
-          )}>Mañana</button>
+          )}>{t('assign.tomorrow')}</button>
 
         {/* Campaign filter */}
         {groupedCampaigns.length > 0 && (
@@ -202,7 +205,7 @@ export function RoutesView() {
               onChange={e => setFilterCampaign(e.target.value)}
               className="pl-7 pr-7 py-1.5 bg-surface border border-border-soft rounded-lg text-xs text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 appearance-none"
             >
-              <option value="">Todas las campañas</option>
+              <option value="">{t('routes.allCampaigns')}</option>
               {groupedCampaigns.map(g => (
                 <optgroup key={g.company.id} label={g.company.name}>
                   {g.items.map(cp => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
@@ -213,7 +216,7 @@ export function RoutesView() {
           </div>
         )}
 
-        <button onClick={load} className={cn('p-1.5 text-text-muted hover:text-text-primary transition-colors', groupedCampaigns.length === 0 && 'ml-auto')} title="Actualizar">
+        <button onClick={load} className={cn('p-1.5 text-text-muted hover:text-text-primary transition-colors', groupedCampaigns.length === 0 && 'ml-auto')} title={t('common.refresh')}>
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -221,9 +224,9 @@ export function RoutesView() {
       {/* Day header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-text-primary font-semibold capitalize">{dayLabel(selectedDate)}</p>
+          <p className="text-text-primary font-semibold capitalize">{dayLabel(selectedDate, t, locale)}</p>
           {routes.length > 0 && (
-            <p className="text-text-muted text-xs mt-0.5">{routes.length} técnicos · {totalItems} instalaciones</p>
+            <p className="text-text-muted text-xs mt-0.5">{t('leaderStats.techsInstalls', { techs: routes.length, installs: totalItems })}</p>
           )}
         </div>
         {routes.length > 0 && (
@@ -244,7 +247,7 @@ export function RoutesView() {
         <div className="flex flex-col items-center gap-3 py-16">
           <p className="text-danger text-sm">{error}</p>
           <button onClick={load} className="text-xs text-text-muted hover:text-text-primary flex items-center gap-1.5 transition-colors">
-            <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+            <RefreshCw className="w-3.5 h-3.5" /> {t('common.retry')}
           </button>
         </div>
       ) : routes.length === 0 ? (
@@ -252,9 +255,9 @@ export function RoutesView() {
           <div className="w-12 h-12 rounded-xl bg-surface-raised flex items-center justify-center mx-auto mb-4">
             <FolderOpen className="w-6 h-6 text-text-muted" />
           </div>
-          <p className="text-text-primary font-medium">Sin rutas para este día</p>
+          <p className="text-text-primary font-medium">{t('routes.noRoutesDay')}</p>
           <p className="text-text-muted text-xs mt-1">
-            {filterCampaign ? 'No hay rutas para esta campaña en esta fecha.' : 'Ve a "Cargar Rutas" para subir el Excel de asignaciones.'}
+            {filterCampaign ? t('routes.noRoutesCampaign') : t('leaderStats.goUpload')}
           </p>
         </div>
       ) : (
@@ -270,19 +273,20 @@ export function RoutesView() {
                   onClick={() => toggleExpand(route.id)}
                 >
                   <div className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0',
-                    route.techStatus === 'moving'  ? 'bg-success animate-pulse' :
-                    route.techStatus === 'idle'    ? 'bg-warning' :
-                    route.techStatus === 'stopped' ? 'bg-text-muted' : 'bg-border'
+                    route.techStatus === 'moving'    ? 'bg-success animate-pulse' :
+                    route.techStatus === 'idle'      ? 'bg-warning' :
+                    route.techStatus === 'no_signal' ? 'bg-amber-500' :
+                    route.techStatus === 'stopped'   ? 'bg-text-muted' : 'bg-border'
                   )} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-text-primary text-sm font-semibold truncate">{route.technician_name}</p>
                       {!route.technician_id && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex-shrink-0">Sin vincular</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex-shrink-0">{t('routes.unlinked')}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      {route.technician_cedula && <span className="text-text-muted text-xs">Cédula {route.technician_cedula}</span>}
+                      {route.technician_cedula && <span className="text-text-muted text-xs">{t('routes.cedulaShort', { value: route.technician_cedula })}</span>}
                       {routeCompany && <span className="text-text-muted/60 text-xs">· {routeCompany.name}</span>}
                       {routeCampaign && <span className="text-primary/70 text-xs">· {routeCampaign.name}</span>}
                     </div>
@@ -307,25 +311,26 @@ export function RoutesView() {
                   </div>
 
                   <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0 hidden md:inline-flex',
-                    route.techStatus === 'moving'  ? 'bg-success/10 text-success border-success/20' :
-                    route.techStatus === 'idle'    ? 'bg-warning/10 text-warning border-warning/20' :
-                    route.techStatus === 'stopped' ? 'bg-text-muted/10 text-text-muted border-border' :
+                    route.techStatus === 'moving'    ? 'bg-success/10 text-success border-success/20' :
+                    route.techStatus === 'idle'      ? 'bg-warning/10 text-warning border-warning/20' :
+                    route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                    route.techStatus === 'stopped'   ? 'bg-text-muted/10 text-text-muted border-border' :
                     'bg-surface-raised text-text-muted border-border'
                   )}>
-                    {route.techStatus === 'moving' ? 'En campo' : route.techStatus === 'idle' ? 'Inactivo' : route.techStatus === 'stopped' ? 'Detenido' : 'Sin conexión'}
+                    {route.techStatus === 'moving' ? t('leaderStats.statusField') : route.techStatus === 'idle' ? t('leaderStats.statusIdle') : route.techStatus === 'no_signal' ? t('leaderStats.statusNoSignal') : route.techStatus === 'stopped' ? t('leaderStats.statusStopped') : t('leaderStats.statusOffline')}
                   </span>
 
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {confirmDelete === route.id ? (
                       <>
                         <button type="button" onClick={e => { e.stopPropagation(); deleteRoute(route.id) }}
-                          className="text-xs px-2 py-1 bg-danger text-white rounded-lg font-medium">Eliminar</button>
+                          className="text-xs px-2 py-1 bg-danger text-white rounded-lg font-medium">{t('common.delete')}</button>
                         <button type="button" onClick={e => { e.stopPropagation(); setConfirmDelete(null) }}
-                          className="text-xs px-2 py-1 border border-border-soft text-text-muted rounded-lg hover:bg-surface">Cancelar</button>
+                          className="text-xs px-2 py-1 border border-border-soft text-text-muted rounded-lg hover:bg-surface">{t('common.cancel')}</button>
                       </>
                     ) : (
                       <button type="button" onClick={e => { e.stopPropagation(); setConfirmDelete(route.id) }}
-                        className="p-1.5 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-danger/10" title="Eliminar ruta">
+                        className="p-1.5 text-text-muted hover:text-danger transition-colors rounded-lg hover:bg-danger/10" title={t('routes.deleteRouteTitle')}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -361,23 +366,23 @@ export function RoutesView() {
                                 {ITEM_STATUSES.map(opt => (
                                   <button key={opt.value} type="button" onClick={() => updateStatus(item.id, opt.value)}
                                     className={cn('px-2 py-0.5 rounded border text-xs text-left hover:opacity-80 transition-opacity', opt.cls)}>
-                                    {opt.label}
+                                    {t(opt.labelKey)}
                                   </button>
                                 ))}
                                 <button type="button" onClick={() => setEditingItem(null)}
                                   className="px-2 py-0.5 rounded border border-border text-text-muted text-xs">
-                                  Cancelar
+                                  {t('common.cancel')}
                                 </button>
                               </div>
                             ) : (
                               <div className="flex items-center gap-1">
                                 <button type="button" onClick={() => setEditingItem(item.id)}
                                   className={cn('px-2 py-0.5 rounded-md border text-xs cursor-pointer hover:opacity-80 transition-opacity', statusCfg.cls)}
-                                  title="Cambiar estado">
-                                  {statusCfg.label}
+                                  title={t('routes.changeStatus')}>
+                                  {t(statusCfg.labelKey)}
                                 </button>
                                 <button type="button" onClick={() => deleteItem(route.id, item.id)}
-                                  className="p-1 text-text-muted hover:text-danger transition-colors rounded" title="Eliminar">
+                                  className="p-1 text-text-muted hover:text-danger transition-colors rounded" title={t('common.delete')}>
                                   <X className="w-3 h-3" />
                                 </button>
                               </div>

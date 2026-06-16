@@ -3,11 +3,13 @@ import { Bell, BellRing, BellOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { enablePushNotifications, pushSupported, syncPushIfGranted } from '@/lib/push'
+import { useI18n } from '@/lib/i18n/i18n'
 
 type State = 'idle' | 'enabled' | 'denied' | 'unsupported' | 'working'
 
 /** Botón para activar notificaciones push (alertas con el navegador cerrado). */
 export function EnablePushButton({ className }: { className?: string }) {
+  const { t } = useI18n()
   const [state, setState] = useState<State>('idle')
 
   useEffect(() => {
@@ -27,16 +29,16 @@ export function EnablePushButton({ className }: { className?: string }) {
     const result = await enablePushNotifications()
     if (result === 'enabled') {
       setState('enabled')
-      toast.success('Notificaciones activadas', { description: 'Recibirás alertas aunque cierres el navegador.' })
+      toast.success(t('push.enabled'), { description: t('push.enabledDesc') })
     } else if (result === 'denied') {
       setState('denied')
-      toast.error('Permiso denegado', { description: 'Habilita las notificaciones del sitio en el navegador.' })
+      toast.error(t('push.denied'), { description: t('push.deniedDesc') })
     } else if (result === 'no-key') {
       setState('idle')
-      toast.error('Falta configuración VAPID en el servidor.')
+      toast.error(t('push.noKey'))
     } else {
       setState('idle')
-      toast.error('No se pudieron activar las notificaciones.')
+      toast.error(t('push.failed'))
     }
   }
 
@@ -48,9 +50,9 @@ export function EnablePushButton({ className }: { className?: string }) {
       onClick={handleClick}
       disabled={enabled || state === 'working'}
       title={
-        enabled ? 'Notificaciones activadas'
-          : state === 'denied' ? 'Permiso denegado — habilítalo en el navegador'
-            : 'Activar notificaciones push'
+        enabled ? t('push.enabled')
+          : state === 'denied' ? t('push.deniedTitle')
+            : t('push.enableTitle')
       }
       className={cn(
         'flex items-center gap-1 text-xs px-1.5 py-1 rounded-lg transition-colors',
@@ -59,7 +61,7 @@ export function EnablePushButton({ className }: { className?: string }) {
       )}
     >
       <Icon className="w-3.5 h-3.5" />
-      {enabled ? 'Alertas on' : state === 'working' ? '…' : 'Activar alertas'}
+      {enabled ? t('push.alertsOn') : state === 'working' ? '…' : t('push.enableAlerts')}
     </button>
   )
 }

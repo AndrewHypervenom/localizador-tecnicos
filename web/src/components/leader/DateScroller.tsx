@@ -4,8 +4,8 @@ import {
   format, addDays, subDays, startOfWeek, parseISO,
   isToday,
 } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface Props {
   selected: string          // 'YYYY-MM-DD'
@@ -16,6 +16,8 @@ interface Props {
 }
 
 export function DateScroller({ selected, onChange, weekStart, onWeekChange, markedDates = [] }: Props) {
+  const { t, lang } = useI18n()
+  const es = getDateLocale(lang)
   const markedSet   = useMemo(() => new Set(markedDates), [markedDates])
   const dateInputRef = useRef<HTMLInputElement>(null)
 
@@ -45,7 +47,7 @@ export function DateScroller({ selected, onChange, weekStart, onWeekChange, mark
     const sy    = format(start, 'yyyy')
     if (sm === em) return `${sm} ${sy}`
     return `${sm} / ${em} ${sy}`
-  }, [weekStart])
+  }, [weekStart, es])
 
   return (
     <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden select-none">
@@ -61,7 +63,7 @@ export function DateScroller({ selected, onChange, weekStart, onWeekChange, mark
         {/* Month label — click to open calendar picker */}
         <button
           onClick={openCalendar}
-          title="Ir a una fecha"
+          title={t('dateScroller.goToDate')}
           className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-surface-raised transition-colors group"
         >
           <CalendarDays className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />

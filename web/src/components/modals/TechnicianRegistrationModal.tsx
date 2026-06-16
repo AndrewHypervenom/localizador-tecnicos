@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n } from '@/lib/i18n/i18n'
 
 interface Props {
   open: boolean
@@ -33,6 +34,7 @@ const inputCls = cn(
 )
 
 export function TechnicianRegistrationModal({ open, onOpenChange, existingTechnician }: Props) {
+  const { t } = useI18n()
   const [step, setStep]       = useState<Step>(existingTechnician ? 'qr' : 'form')
   const [name, setName]       = useState('')
   const [phone, setPhone]     = useState('')
@@ -141,13 +143,13 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
   }
 
   async function handleCreate() {
-    if (!name.trim())        { setError('El nombre es obligatorio'); return }
-    if (!country)            { setError('El país es obligatorio'); return }
-    if (!city)               { setError('La ciudad es obligatoria'); return }
-    if (!selectedCompanyId)  { setError('Debes seleccionar una empresa'); return }
-    if (!selectedCampaignId) { setError('Debes seleccionar una campaña'); return }
+    if (!name.trim())        { setError(t('techForm.errName')); return }
+    if (!country)            { setError(t('techForm.errCountry')); return }
+    if (!city)               { setError(t('techForm.errCity')); return }
+    if (!selectedCompanyId)  { setError(t('techForm.errCompany')); return }
+    if (!selectedCampaignId) { setError(t('techForm.errCampaign')); return }
     if (companyCountry && country !== companyCountry) {
-      setError(`Esta empresa solo puede tener técnicos de ${companyCountry}`)
+      setError(t('techForm.errCompanyCountry', { country: companyCountry }))
       return
     }
     setLoading(true)
@@ -180,7 +182,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
       setTechName(tech.name)
       setStep('qr')
     } catch (err: any) {
-      setError(err.message ?? 'Error al crear técnico')
+      setError(err.message ?? t('regTech.createError'))
     } finally {
       setLoading(false)
     }
@@ -194,7 +196,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
       const token = await generateQR(existingTechnician.id)
       setQrToken(token)
     } catch (err: any) {
-      setError(err.message ?? 'Error al generar QR')
+      setError(err.message ?? t('qr.genError'))
     } finally {
       setLoading(false)
     }
@@ -234,10 +236,10 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
             }
             <div>
               <p className="font-bold text-text-primary text-sm leading-none">
-                {step === 'form' ? 'Nuevo técnico' : 'Código QR de registro'}
+                {step === 'form' ? t('regTech.newTech') : t('qr.titleRegister')}
               </p>
               <p className="text-xs text-text-muted mt-0.5">
-                {step === 'form' ? 'Completa los datos del técnico' : `Escanear desde la app · ${techName}`}
+                {step === 'form' ? t('regTech.completeData') : t('qr.scanFromAppShort', { name: techName })}
               </p>
             </div>
           </div>
@@ -251,7 +253,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
 
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-4 px-6 py-2.5 border-b border-border-soft bg-base/30">
-          {([{ key: 'form', label: 'Datos' }, { key: 'qr', label: 'Código QR' }] as const).map(({ key, label }, i) => {
+          {([{ key: 'form', label: t('regTech.stepData') }, { key: 'qr', label: t('regTech.stepQr') }] as const).map(({ key, label }, i) => {
             const isActive = step === key
             const isDone   = key === 'form' && step === 'qr'
             return (
@@ -275,11 +277,11 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-1 h-4 bg-primary rounded-full" />
-                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Datos del técnico</p>
+                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('techForm.sectionData')}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <Field label="Nombre completo" required>
+                  <Field label={t('techForm.fullName')} required>
                     <input
                       type="text"
                       value={name}
@@ -291,7 +293,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <Field label="Teléfono">
+                  <Field label={t('techForm.phone')}>
                     <input
                       type="tel"
                       value={phone}
@@ -302,21 +304,21 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <Field label="Email">
+                  <Field label={t('techForm.email')}>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <input
                         type="email"
                         value={email}
                         onChange={e => setEmail(e.target.value)}
-                        placeholder="tecnico@ejemplo.com"
+                        placeholder={t('techForm.emailPlaceholder')}
                         className={cn(inputCls, 'pl-8')}
                       />
                     </div>
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <Field label="País" required>
+                  <Field label={t('techForm.country')} required>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -325,19 +327,19 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                         disabled={!!companyCountry}
                         className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-80')}
                       >
-                        <option value="">Seleccionar país</option>
+                        <option value="">{t('techForm.selectCountry')}</option>
                         {availableCountries.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     {companyCountry && (
                       <p className="text-[11px] text-warning mt-1.5">
-                        Esta empresa solo opera en {companyCountry}
+                        {t('techForm.companyOnlyCountry', { country: companyCountry })}
                       </p>
                     )}
                   </Field>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <Field label="Ciudad" required>
+                  <Field label={t('techForm.city')} required>
                     <div className="relative">
                       <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -346,7 +348,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                         disabled={!country}
                         className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
                       >
-                        <option value="">{!country ? 'Seleccionar país primero' : 'Seleccionar ciudad'}</option>
+                        <option value="">{!country ? t('techForm.selectCountryFirst') : t('techForm.selectCity')}</option>
                         {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
@@ -354,11 +356,11 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                 </div>
                 {/* Horario */}
                 <div className="col-span-2">
-                  <Field label="Horario de trabajo">
+                  <Field label={t('techForm.workSchedule')}>
                     <div className="flex items-center gap-2">
-                      <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder="Inicio" className="flex-1" />
-                      <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
-                      <TimeSelect value={shiftEnd} onChange={setShiftEnd} placeholder="Fin" className="flex-1" />
+                      <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder={t('techForm.shiftStart')} className="flex-1" />
+                      <span className="text-text-muted text-xs font-medium flex-shrink-0">{t('techForm.until')}</span>
+                      <TimeSelect value={shiftEnd} onChange={setShiftEnd} placeholder={t('techForm.shiftEnd')} className="flex-1" />
                     </div>
                   </Field>
                 </div>
@@ -369,11 +371,11 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-1 h-4 bg-accent rounded-full" />
-                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Organización</p>
+                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('techForm.sectionOrg')}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Field label="Empresa" required>
+                  <Field label={t('techForm.company')} required>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -382,14 +384,14 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                         disabled={loadingOrgs}
                         className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-60')}
                       >
-                        <option value="">{loadingOrgs ? 'Cargando…' : 'Sin empresa'}</option>
+                        <option value="">{loadingOrgs ? t('techForm.loadingShort') : t('techForm.noCompany')}</option>
                         {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                   </Field>
                 </div>
                 <div>
-                  <Field label="Campaña" required>
+                  <Field label={t('techForm.campaign')} required>
                     <div className="relative">
                       <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                       <select
@@ -400,10 +402,10 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                       >
                         <option value="">
                           {!selectedCompanyId
-                            ? 'Seleccionar empresa primero'
+                            ? t('techForm.selectCompanyFirst')
                             : filteredCampaigns.length === 0
-                              ? 'Sin campañas activas'
-                              : 'Sin campaña'}
+                              ? t('techForm.noActiveCampaigns')
+                              : t('techForm.noCampaign')}
                         </option>
                         {filteredCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
@@ -417,15 +419,15 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-1 h-4 bg-warning rounded-full" />
-                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Notas</p>
-                <span className="text-xs text-text-muted">(opcional)</span>
+                <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{t('techForm.sectionNotes')}</p>
+                <span className="text-xs text-text-muted">{t('techForm.optional')}</span>
               </div>
               <div className="relative">
                 <FileText className="absolute left-3 top-3 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  placeholder="Información adicional sobre el técnico…"
+                  placeholder={t('techForm.notesPlaceholder')}
                   rows={2}
                   className={cn(inputCls, 'pl-8 resize-none leading-relaxed')}
                 />
@@ -443,7 +445,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                 onClick={handleClose}
                 className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreate}
@@ -456,7 +458,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
               >
                 {loading
                   ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <><UserPlus className="w-4 h-4" />Crear y generar QR</>
+                  : <><UserPlus className="w-4 h-4" />{t('regTech.createGenQr')}</>
                 }
               </button>
             </div>
@@ -468,7 +470,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
           <div className="px-6 py-6 flex flex-col items-center gap-4">
             <div className="text-center">
               <p className="text-text-primary font-semibold">{techName}</p>
-              <p className="text-text-muted text-xs mt-0.5">Escanear desde la app del técnico</p>
+              <p className="text-text-muted text-xs mt-0.5">{t('qr.scanFromApp')}</p>
             </div>
 
             {loading ? (
@@ -482,10 +484,10 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                 </div>
                 <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-xl px-3 py-2 text-xs text-success">
                   <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  Válido por 24 horas · Un solo uso
+                  {t('qr.validOneUse')}
                 </div>
                 <p className="text-text-muted text-xs text-center">
-                  El técnico debe abrir la app y apuntar la cámara a este código.
+                  {t('qr.scanHint')}
                 </p>
                 {existingTechnician && (
                   <button
@@ -493,12 +495,12 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
                     className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Regenerar QR
+                    {t('qr.regenerate')}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-danger text-sm">{error ?? 'Error al generar QR'}</p>
+              <p className="text-danger text-sm">{error ?? t('qr.genError')}</p>
             )}
           </div>
         )}

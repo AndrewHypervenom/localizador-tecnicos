@@ -13,6 +13,7 @@ import { reverseGeocode, geocodeAddress, geocodeWithClaude, resolveMapsLink, isS
 import { COUNTRIES, CITIES_BY_COUNTRY, parseShift, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/lib/i18n/i18n'
 
 const HOME_PREVIEW_ICON = L.divIcon({
   html: `<div style="width:32px;height:32px;border-radius:50%;background:#10B98120;border:2px solid #10B981;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 12px rgba(0,0,0,0.55);">🏠</div>`,
@@ -53,12 +54,12 @@ const inputCls = cn(
   'placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors',
 )
 
-function SectionLabel({ color, label, optional }: { color: string; label: string; optional?: boolean }) {
+function SectionLabel({ color, label, optional, optionalLabel }: { color: string; label: string; optional?: boolean; optionalLabel?: string }) {
   return (
     <div className="flex items-center gap-2 mb-3">
       <div className={cn('w-1 h-4 rounded-full', color)} />
       <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">{label}</p>
-      {optional && <span className="text-xs text-text-muted">(opcional)</span>}
+      {optional && <span className="text-xs text-text-muted">{optionalLabel}</span>}
     </div>
   )
 }
@@ -78,6 +79,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
   onSave:  (id: string, data: Partial<TechnicianEditable>) => Promise<void>
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [name,    setName]    = useState(tech.name)
   const [phone,   setPhone]   = useState(tech.phone   ?? '')
   const [email,   setEmail]   = useState(tech.email   ?? '')
@@ -181,11 +183,11 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         .eq('id', tech.id)
         .single()
       if (!data?.lat || !data?.lng) {
-        toast.error('No hay datos de GPS recientes para este técnico')
+        toast.error(t('editTech.noGps'))
         return
       }
       const result = await reverseGeocode(data.lat, data.lng)
-      if (!result) { toast.error('No se pudo detectar la ciudad'); return }
+      if (!result) { toast.error(t('editTech.cantDetectCity')); return }
 
       const matchedCountry = COUNTRIES.find(c => c.toLowerCase() === result.country.toLowerCase()) ?? ''
       const availCities    = matchedCountry ? (CITIES_BY_COUNTRY[matchedCountry] ?? []) : []
@@ -199,9 +201,9 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
       const label = [matchedCity || result.city, matchedCountry || result.country].filter(Boolean).join(', ')
       setCitySuggestion(label)
-      if (!matchedCity) toast.info(`Detectado: ${result.city}, ${result.country} — selecciona la ciudad manualmente`)
+      if (!matchedCity) toast.info(t('editTech.detectedManual', { city: result.city, country: result.country }))
     } catch {
-      toast.error('Error al detectar ubicación')
+      toast.error(t('editTech.detectError'))
     } finally {
       setDetectingCity(false)
     }
@@ -215,17 +217,17 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
       // Link de Google Maps (largo o corto maps.app.goo.gl) → extraer coordenadas
       const raw = homeAddress.trim()
       const isShort = isShortMapsLink(raw)
-      if (isShort) toast.loading('Resolviendo link de Google Maps…', { id: 'gm-resolve' })
+      if (isShort) toast.loading(t('editTech.resolvingLink'), { id: 'gm-resolve' })
       const gmCoords = await resolveMapsLink(raw)
       if (isShort) toast.dismiss('gm-resolve')
       if (gmCoords) {
         setHomeLat(gmCoords.lat)
         setHomeLng(gmCoords.lng)
-        toast.success('Coordenadas extraídas del link de Google Maps')
+        toast.success(t('editTech.coordsFromLink'))
         return
       }
       if (isShort) {
-        toast.error('No se pudo resolver el link corto de Google Maps. Intenta con el link largo (el que muestra la dirección en la barra).')
+        toast.error(t('editTech.shortLinkError'))
         return
       }
 
@@ -240,25 +242,25 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
         const res = await geocodeAddress(query)
         if (res) { lat = res.lat; lng = res.lng }
       }
-      if (!lat || !lng) { toast.error('No se encontró la dirección'); return }
+      if (!lat || !lng) { toast.error(t('editTech.addressNotFound')); return }
       setHomeLat(lat)
       setHomeLng(lng)
-      toast.success('Coordenadas de casa obtenidas')
+      toast.success(t('editTech.homeCoordsOk'))
     } catch {
-      toast.error('Error al geocodificar')
+      toast.error(t('editTech.geocodeError'))
     } finally {
       setGeocodingHome(false)
     }
   }
 
   async function handleSave() {
-    if (!name.trim())         { setError('El nombre es obligatorio'); return }
-    if (!country)             { setError('El país es obligatorio'); return }
-    if (!city)                { setError('La ciudad es obligatoria'); return }
-    if (!selectedCompanyId)   { setError('Debes seleccionar una empresa'); return }
-    if (!selectedCampaignId)  { setError('Debes seleccionar una campaña'); return }
+    if (!name.trim())         { setError(t('techForm.errName')); return }
+    if (!country)             { setError(t('techForm.errCountry')); return }
+    if (!city)                { setError(t('techForm.errCity')); return }
+    if (!selectedCompanyId)   { setError(t('techForm.errCompany')); return }
+    if (!selectedCampaignId)  { setError(t('techForm.errCampaign')); return }
     if (companyCountry && country !== companyCountry) {
-      setError(`Esta empresa solo puede tener técnicos de ${companyCountry}`)
+      setError(t('techForm.errCompanyCountry', { country: companyCountry }))
       return
     }
     setSaving(true)
@@ -304,7 +306,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
       })
       onClose()
     } catch (err: any) {
-      setError(err.message ?? 'Error al guardar')
+      setError(err.message ?? t('editTech.saveError'))
     } finally {
       setSaving(false)
     }
@@ -327,7 +329,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               <Edit2 className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <p className="font-bold text-text-primary text-sm leading-none">Editar técnico</p>
+              <p className="font-bold text-text-primary text-sm leading-none">{t('editTech.title')}</p>
               <p className="text-xs text-text-muted mt-0.5">{tech.name}</p>
             </div>
           </div>
@@ -343,48 +345,48 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
           {/* ── Datos personales ── */}
           <div>
-            <SectionLabel color="bg-primary" label="Datos del técnico" />
+            <SectionLabel color="bg-primary" label={t('techForm.sectionData')} />
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <FieldLabel label="Nombre completo" required />
+                <FieldLabel label={t('techForm.fullName')} required />
                 <input
                   type="text" value={name} onChange={e => setName(e.target.value)}
                   placeholder="Carlos Ramírez" className={inputCls} autoFocus
                 />
               </div>
               <div>
-                <FieldLabel label="Teléfono" />
+                <FieldLabel label={t('techForm.phone')} />
                 <input
                   type="tel" value={phone} onChange={e => setPhone(e.target.value)}
                   placeholder="+57 300 000 0000" className={inputCls}
                 />
               </div>
               <div>
-                <FieldLabel label="Email" />
+                <FieldLabel label={t('techForm.email')} />
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                   <input
                     type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="tecnico@ejemplo.com" className={cn(inputCls, 'pl-8')}
+                    placeholder={t('techForm.emailPlaceholder')} className={cn(inputCls, 'pl-8')}
                   />
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-text-muted font-medium">País <span className="text-danger">*</span></label>
+                  <label className="text-xs text-text-muted font-medium">{t('techForm.country')} <span className="text-danger">*</span></label>
                   {tech.device_id && (
                     <button
                       type="button" onClick={handleDetectCity} disabled={detectingCity}
                       className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
                     >
                       {detectingCity ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Locate className="w-2.5 h-2.5" />}
-                      Detectar por GPS
+                      {t('editTech.detectByGps')}
                     </button>
                   )}
                 </div>
                 {citySuggestion && (
                   <p className="text-[10px] text-success mb-1.5 flex items-center gap-1">
-                    <Locate className="w-2.5 h-2.5" /> Detectado: {citySuggestion}
+                    <Locate className="w-2.5 h-2.5" /> {t('editTech.detected', { label: citySuggestion })}
                   </p>
                 )}
                 <div className="relative">
@@ -394,12 +396,12 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                     disabled={!!companyCountry}
                     className={cn(inputCls, 'pl-8 appearance-none cursor-pointer disabled:opacity-80')}
                   >
-                    <option value="">Sin especificar</option>
+                    <option value="">{t('editTech.unspecified')}</option>
                     {availableCountries.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   {companyCountry && (
                     <p className="text-[11px] text-warning mt-1.5">
-                      Esta empresa solo opera en {companyCountry}
+                      {t('techForm.companyOnlyCountry', { country: companyCountry })}
                     </p>
                   )}
                 </div>
@@ -407,14 +409,14 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
               {country && (
                 <div className="col-span-2">
-                  <FieldLabel label="Ciudad" required />
+                  <FieldLabel label={t('techForm.city')} required />
                   <div className="relative">
                     <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                     <select
                       value={city} onChange={e => setCity(e.target.value)}
                       className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
                     >
-                      <option value="">Seleccionar ciudad</option>
+                      <option value="">{t('techForm.selectCity')}</option>
                       {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
@@ -422,11 +424,11 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               )}
 
               <div className="col-span-2">
-                <FieldLabel label="Horario de trabajo" />
+                <FieldLabel label={t('techForm.workSchedule')} />
                 <div className="flex items-center gap-2">
-                  <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder="Inicio" className="flex-1" />
-                  <span className="text-text-muted text-xs font-medium flex-shrink-0">hasta</span>
-                  <TimeSelect value={shiftEnd}   onChange={setShiftEnd}   placeholder="Fin"   className="flex-1" />
+                  <TimeSelect value={shiftStart} onChange={setShiftStart} placeholder={t('techForm.shiftStart')} className="flex-1" />
+                  <span className="text-text-muted text-xs font-medium flex-shrink-0">{t('techForm.until')}</span>
+                  <TimeSelect value={shiftEnd}   onChange={setShiftEnd}   placeholder={t('techForm.shiftEnd')}   className="flex-1" />
                 </div>
               </div>
             </div>
@@ -434,16 +436,16 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
           {/* ── Organización ── */}
           <div>
-            <SectionLabel color="bg-accent" label="Organización" />
+            <SectionLabel color="bg-accent" label={t('techForm.sectionOrg')} />
             {loadingOrgs ? (
               <div className="flex items-center gap-2 text-xs text-text-muted py-2">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Cargando empresas y campañas…
+                {t('editTech.loadingOrgs')}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <FieldLabel label="Empresa" required />
+                  <FieldLabel label={t('techForm.company')} required />
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                     <select
@@ -451,13 +453,13 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                       onChange={e => handleCompanyChange(e.target.value)}
                       className={cn(inputCls, 'pl-8 appearance-none cursor-pointer')}
                     >
-                      <option value="">Seleccionar empresa</option>
+                      <option value="">{t('techForm.selectCompany')}</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <FieldLabel label="Campaña" required />
+                  <FieldLabel label={t('techForm.campaign')} required />
                   <div className="relative">
                     <FolderOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
                     <select
@@ -468,10 +470,10 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                     >
                       <option value="">
                         {!selectedCompanyId
-                          ? 'Seleccionar empresa primero'
+                          ? t('techForm.selectCompanyFirst')
                           : filteredCampaigns.length === 0
-                            ? 'Sin campañas activas'
-                            : 'Seleccionar campaña'}
+                            ? t('techForm.noActiveCampaigns')
+                            : t('techForm.selectCampaign')}
                       </option>
                       {filteredCampaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -483,12 +485,12 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
           {/* ── Notas ── */}
           <div>
-            <SectionLabel color="bg-warning" label="Notas" optional />
+            <SectionLabel color="bg-warning" label={t('techForm.sectionNotes')} optional optionalLabel={t('techForm.optional')} />
             <div className="relative">
               <FileText className="absolute left-3 top-3 w-3.5 h-3.5 text-text-muted pointer-events-none" />
               <textarea
                 value={notes} onChange={e => setNotes(e.target.value)}
-                placeholder="Información adicional…"
+                placeholder={t('techForm.notesPlaceholderShort')}
                 rows={2} className={cn(inputCls, 'pl-8 resize-none leading-relaxed')}
               />
             </div>
@@ -496,7 +498,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
 
           {/* ── Dirección de casa ── */}
           <div>
-            <SectionLabel color="bg-success" label="Dirección de casa" optional />
+            <SectionLabel color="bg-success" label={t('editTech.homeAddress')} optional optionalLabel={t('techForm.optional')} />
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
@@ -505,7 +507,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                   value={homeAddress}
                   onChange={e => { setHomeAddress(e.target.value); setHomeLat(null); setHomeLng(null) }}
                   onKeyDown={e => { if (e.key === 'Enter') handleGeocodeHome() }}
-                  placeholder="Calle 45 #12-30 o pega un link de Google Maps"
+                  placeholder={t('editTech.homePlaceholder')}
                   className={cn(inputCls, 'pl-8')}
                 />
               </div>
@@ -513,7 +515,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                 type="button"
                 onClick={handleGeocodeHome}
                 disabled={geocodingHome || !homeAddress.trim()}
-                title="Buscar coordenadas"
+                title={t('editTech.searchCoords')}
                 className="px-3 rounded-xl bg-success/10 hover:bg-success/20 text-success transition-colors disabled:opacity-50 flex items-center"
               >
                 {geocodingHome ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -523,7 +525,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               <>
                 <p className="text-[11px] text-success mt-1.5 flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
-                  Ubicado · {homeLat.toFixed(4)}, {homeLng.toFixed(4)}
+                  {t('editTech.located', { coords: `${homeLat.toFixed(4)}, ${homeLng.toFixed(4)}` })}
                 </p>
                 <div style={{ height: 160, borderRadius: 12, overflow: 'hidden', marginTop: 8, border: '1px solid #10B98140' }}>
                   <MapContainer
@@ -547,7 +549,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
                 {/* Tamaño del círculo de la casa */}
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs text-text-muted font-medium">Tamaño del círculo</label>
+                    <label className="text-xs text-text-muted font-medium">{t('editTech.circleSize')}</label>
                     <span className="text-[11px] font-mono font-semibold text-success">{homeRadius} m</span>
                   </div>
                   <input
@@ -567,7 +569,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               </>
             ) : homeAddress ? (
               <p className="text-[11px] text-text-muted mt-1.5">
-                Presiona el botón buscar para geolocalizar la dirección
+                {t('editTech.pressSearch')}
               </p>
             ) : null}
           </div>
@@ -583,7 +585,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               onClick={onClose}
               className="flex-1 border border-border-soft text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl py-2.5 transition-colors hover:bg-surface-raised"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleSave}
@@ -591,7 +593,7 @@ export function TechnicianEditModal({ tech, onSave, onClose }: {
               className="flex-1 bg-primary hover:bg-primary-hover text-base font-semibold text-sm rounded-xl py-2.5 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Guardando…' : 'Guardar cambios'}
+              {saving ? t('editTech.saving') : t('editTech.saveChanges')}
             </button>
           </div>
         </div>

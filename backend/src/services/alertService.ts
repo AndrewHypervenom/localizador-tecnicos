@@ -65,18 +65,29 @@ const LABELS: Record<string, string> = {
 
 const CRITICAL = new Set(['accident', 'sos'])
 
-// Eventos que se REGISTRAN (para el panel/historial) pero nunca disparan push.
-// "offline" (sin señal) es un estado, no una emergencia: perder GPS unos minutos
-// es normal (edificios, túneles, ahorro de batería) y no debe notificar por
-// técnico — con muchos técnicos sería spam y no escala.
-const SILENT_PUSH_TYPES = new Set(['offline'])
+// "offline" sin causa declarada (severidad 70): el técnico dejó de enviar puntos
+// Y de latir, en horario laboral, sin que el teléfono reportara apagar GPS/datos
+// ni detener el rastreo → firma de app cerrada a la fuerza o batería restringida
+// matando el servicio. ESO sí avisa al líder (para que llame); el offline normal
+// (sev 50, con causa) sigue siendo silencioso.
+const UNEXPLAINED_OFFLINE_SEVERITY = 70
+
+function isUnexplainedOffline(ev: Pick<MotionEventRow, 'event_type' | 'severity'>): boolean {
+  return ev.event_type === 'offline' && (ev.severity ?? 0) >= UNEXPLAINED_OFFLINE_SEVERITY
+}
 
 function buildPayload(ev: MotionEventRow, escalation = false): AlertPayload {
-  const label = LABELS[ev.event_type] ?? 'Evento de conducción'
+  const unexplained = isUnexplainedOffline(ev)
+  const label = unexplained
+    ? '📡 Rastreo caído — sin latido'
+    : (LABELS[ev.event_type] ?? 'Evento de conducción')
   const name  = ev.tech_name ?? 'Técnico'
+  const body  = unexplained
+    ? `${name} — sin señal y sin latido (posible app cerrada o batería restringida)`
+    : (escalation ? `${name} — nadie ha reconocido la alerta` : name)
   return {
     title:    escalation ? `${label} (sin atender)` : label,
-    body:     escalation ? `${name} — nadie ha reconocido la alerta` : name,
+    body,
     tag:      `motion-${ev.id}`,
     critical: CRITICAL.has(ev.event_type),
     data:     { eventId: ev.id, technicianId: ev.technician_id, type: ev.event_type, ts: ev.ts },
@@ -105,10 +116,13 @@ export async function dispatchMotionEvent(eventId: string, escalation = false): 
   if (!ev) return
   if (!escalation && ev.notified_at) return // ya notificado por otro disparador
 
-  // Estado silencioso (sin señal): se marca como atendido y NO se envía push.
-  // Este es el único punto por el que pasan el cron y el webhook de Supabase,
-  // así que silenciar aquí cubre ambos caminos.
-  if (SILENT_PUSH_TYPES.has(ev.event_type)) {
+  // 'offline' (sin señal) es normalmente silencioso: perder GPS unos minutos es
+  // normal (edificios, túneles, ahorro de batería) y no debe notificar por
+  // técnico. EXCEPCIÓN: el "sin causa declarada" (sev 70) SÍ avisa — es la firma
+  // de app cerrada/batería matando el rastreo. Este es el único punto por el que
+  // pasan el cron y el webhook de Supabase, así que la regla cubre ambos caminos
+  // y el dedup por notified_at evita el doble envío.
+  if (ev.event_type === 'offline' && !isUnexplainedOffline(ev)) {
     if (!ev.notified_at) await query(`UPDATE motion_events SET notified_at = now() WHERE id = $1`, [eventId])
     return
   }
@@ -150,7 +164,7 @@ const OFFLINE_CAUSE_LOOKBACK_MIN = OFFLINE_THRESHOLD_MIN + 10
  * latido), se comporta como antes (la condición de heartbeat se cumple con NULL).
  */
 export async function detectOfflineTechnicians(): Promise<void> {
-  await query(
+  const inserted = await query<{ id: string }>(
     `INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
      SELECT t.id, now(), 'offline',
             -- severidad 50 = silencio con causa declarada (GPS/datos off, etc.);
@@ -181,9 +195,12 @@ export async function detectOfflineTechnicians(): Promise<void> {
     [OFFLINE_THRESHOLD_MIN, OFFLINE_RECENT_HOURS, OFFLINE_DEDUP_MIN,
      OFFLINE_CAUSE_TYPES, OFFLINE_CAUSE_LOOKBACK_MIN, HEARTBEAT_STALE_MIN],
   )
-  // No se despacha push: 'offline' es silencioso (ver SILENT_PUSH_TYPES). Los
-  // registros quedan en motion_events para el panel/historial del líder, donde la
-  // severidad distingue "sin causa declarada" (sabotaje probable) del normal.
+  // Despachar cada offline recién insertado: dispatchMotionEvent silencia los de
+  // sev 50 (con causa declarada) y envía push SOLO los de sev 70 (sin causa = sin
+  // señal y sin latido en horario laboral → probable app cerrada/batería). El
+  // dedup de 30 min (OFFLINE_DEDUP_MIN, en el INSERT) ya evita repetir el aviso
+  // del mismo técnico, así que el líder no recibe spam.
+  for (const r of inserted) await dispatchMotionEvent(r.id)
 }
 
 // ── Reloj manipulado ──────────────────────────────────────────────────────────
@@ -200,7 +217,7 @@ const CLOCK_SKEW_DEDUP_HOURS  = 6
 export async function detectClockSkew(): Promise<void> {
   const inserted = await query<{ id: string }>(
     `INSERT INTO motion_events (technician_id, ts, event_type, severity, location)
-     SELECT DISTINCT le.technician_id, now(), 'clock_skew', 60, NULL
+     SELECT DISTINCT le.technician_id, now(), 'clock_skew', 60, NULL::geography
        FROM location_events le
        JOIN technicians t ON t.id = le.technician_id
       WHERE t.active = true

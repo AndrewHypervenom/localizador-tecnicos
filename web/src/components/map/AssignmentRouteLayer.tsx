@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { format, isToday, isTomorrow } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useTechnicianAssignments } from '@/hooks/useTechnicianAssignments'
 import { supabase } from '@/lib/supabase'
 import { TechnicianAssignment, AssignmentStatus, ASSIGNMENT_STATUS_CFG } from '@/types/assignments'
+import { useI18n, getDateLocale, type TFunc, type Lang } from '@/lib/i18n/i18n'
 
 function createAssignmentIcon(index: number, a: TechnicianAssignment): L.DivIcon {
   const cfg    = ASSIGNMENT_STATUS_CFG[a.status]
@@ -54,22 +54,22 @@ function createHomeIcon(): L.DivIcon {
   })
 }
 
-function buildPopup(a: TechnicianAssignment): string {
+function buildPopup(a: TechnicianAssignment, t: TFunc, lang: Lang): string {
   const cfg  = ASSIGNMENT_STATUS_CFG[a.status]
   const d    = new Date(a.scheduled_at)
-  const day  = isToday(d) ? 'Hoy'
-             : isTomorrow(d) ? 'Mañana'
-             : format(d, "EEEE d 'de' MMMM", { locale: es })
+  const day  = isToday(d) ? t('history.today')
+             : isTomorrow(d) ? t('assign.tomorrow')
+             : format(d, "EEEE d 'de' MMMM", { locale: getDateLocale(lang) })
   const time = format(d, 'HH:mm')
   return `<div style="font-family:system-ui,sans-serif;padding:4px 2px;min-width:170px;">
     <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${a.title}</div>
     ${a.address ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">📍 ${a.address}</div>` : ''}
     <div style="font-size:11px;color:#64748b;margin-bottom:3px;">📅 ${day} · ${time}</div>
-    ${a.estimated_duration_minutes ? `<div style="font-size:11px;color:#64748b;margin-bottom:3px;">⏱ ${a.estimated_duration_minutes} min estimados</div>` : ''}
+    ${a.estimated_duration_minutes ? `<div style="font-size:11px;color:#64748b;margin-bottom:3px;">⏱ ${t('assign.minEstimated', { n: a.estimated_duration_minutes })}</div>` : ''}
     <div style="font-size:11px;display:inline-flex;align-items:center;gap:4px;
       background:${cfg.color}20;border:1px solid ${cfg.color}60;
       border-radius:4px;padding:2px 6px;color:${cfg.color};font-weight:600;margin-top:4px;">
-      ${cfg.label}
+      ${t(cfg.labelKey)}
     </div>
     ${a.notes ? `<div style="font-size:11px;color:#94a3b8;margin-top:6px;border-top:1px solid #1e293b;padding-top:5px;">${a.notes}</div>` : ''}
   </div>`
@@ -77,6 +77,7 @@ function buildPopup(a: TechnicianAssignment): string {
 
 function buildHomePopup(
   name: string, lat: number, lng: number,
+  t: TFunc,
   address?: string | null, city?: string | null, country?: string | null,
   phone?: string | null,
 ): string {
@@ -100,25 +101,26 @@ function buildHomePopup(
       </div>
       <div>
         <div style="font-weight:700;font-size:13px;color:#f1f5f9;line-height:1.2;">${name}</div>
-        <div style="font-size:10px;color:#64748b;margin-top:2px;letter-spacing:0.03em;">Dirección de casa</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px;letter-spacing:0.03em;">${t('assign.homeAddress')}</div>
       </div>
     </div>
     <div style="padding:9px 12px 10px;background:#0f172a;border-top:1px solid #1e293b;">
-      ${showAddress ? row('Dirección', address!) : ''}
-      ${city        ? row('Ciudad',    city + (country ? `, ${country}` : '')) : ''}
-      ${phone       ? row('Teléfono',  phone) : ''}
+      ${showAddress ? row(t('assign.address'), address!) : ''}
+      ${city        ? row(t('assign.city'),    city + (country ? `, ${country}` : '')) : ''}
+      ${phone       ? row(t('assign.phone'),   phone) : ''}
       <a href="${mapsUrl}" target="_blank" rel="noopener"
         style="display:block;text-align:center;margin-top:8px;padding:5px 10px;
           background:#1e40af22;border:1px solid #1e40af55;border-radius:6px;
           font-size:11px;color:#60a5fa;text-decoration:none;font-weight:600;
           transition:background 0.15s;">
-        Ver en Google Maps
+        ${t('assign.viewInMaps')}
       </a>
     </div>
   </div>`
 }
 
 export function AssignmentRouteLayer() {
+  const { t, lang } = useI18n()
   const { selectedTechnicianId, technicians, updateTechnicianMeta } = useTrackingStore()
   const { assignments } = useTechnicianAssignments(selectedTechnicianId)
   const map = useMap()
@@ -180,7 +182,7 @@ export function AssignmentRouteLayer() {
       homeCircleRef.current = circle
 
       const hm = L.marker([homeLat, homeLng], { icon: createHomeIcon(), zIndexOffset: 200 })
-      hm.bindPopup(buildHomePopup(tech?.name ?? 'Técnico', homeLat, homeLng, tech?.home_address, techExtra?.city, techExtra?.country, tech?.phone), { maxWidth: 280 })
+      hm.bindPopup(buildHomePopup(tech?.name ?? t('common.technician'), homeLat, homeLng, t, tech?.home_address, techExtra?.city, techExtra?.country, tech?.phone), { maxWidth: 280 })
       hm.addTo(map)
       homeRef.current = hm
     }
@@ -199,7 +201,7 @@ export function AssignmentRouteLayer() {
         icon: createAssignmentIcon(i, a),
         zIndexOffset: 150 + i,
       })
-      marker.bindPopup(buildPopup(a), { maxWidth: 260 })
+      marker.bindPopup(buildPopup(a, t, lang), { maxWidth: 260 })
       marker.addTo(map)
       markersRef.current.push(marker)
       routePoints.push([a.lat!, a.lng!])
@@ -215,7 +217,7 @@ export function AssignmentRouteLayer() {
       line.addTo(map)
       polylinesRef.current.push(line)
     }
-  }, [selectedTechnicianId, assignments, homeLat, homeLng, homeRadius, technicians, map, techExtra])
+  }, [selectedTechnicianId, assignments, homeLat, homeLng, homeRadius, technicians, map, techExtra, t, lang])
 
   return null
 }

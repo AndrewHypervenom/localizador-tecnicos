@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Clock, RefreshCw, Check, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { useI18n } from '@/lib/i18n/i18n'
 
 // Zonas horarias comunes en LatAm (ampliable).
 const TZ_OPTIONS = [
@@ -24,6 +25,7 @@ interface CompanyRow {
 }
 
 export function LeaderSettings() {
+  const { t } = useI18n()
   const [companies, setCompanies]   = useState<CompanyRow[]>([])
   const [companyId, setCompanyId]   = useState<string>('')
   const [startHour, setStartHour]   = useState(8)
@@ -48,7 +50,7 @@ export function LeaderSettings() {
     setLoading(true); setError(null); setSaved(false)
     try {
       const { companyIds } = await getLeaderScope()
-      if (companyIds.length === 0) { setError('No tienes una empresa asignada.'); return }
+      if (companyIds.length === 0) { setError(t('leaderSettings.noCompany')); return }
 
       const { data, error } = await supabase
         .from('companies')
@@ -61,7 +63,7 @@ export function LeaderSettings() {
       setCompanies(rows)
       if (rows.length) applyCompany(rows[0])
     } catch (err: any) {
-      setError(err.message ?? 'Error al cargar la configuración')
+      setError(err.message ?? t('leaderSettings.loadError'))
     } finally {
       setLoading(false)
     }
@@ -90,7 +92,7 @@ export function LeaderSettings() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (err: any) {
-      setError(err.message ?? 'Error al guardar')
+      setError(err.message ?? t('leaderSettings.saveError'))
     } finally {
       setSaving(false)
     }
@@ -108,11 +110,10 @@ export function LeaderSettings() {
     <div className="max-w-xl mx-auto p-2 space-y-6">
       <div>
         <h2 className="text-text-primary font-semibold text-base flex items-center gap-2">
-          <Clock className="w-4 h-4 text-primary" /> Horario de alertas
+          <Clock className="w-4 h-4 text-primary" /> {t('leaderSettings.alertSchedule')}
         </h2>
         <p className="text-text-muted text-xs mt-1">
-          Las alertas de "sin señal" y batería baja solo se generan dentro de este horario.
-          Accidente y SOS siempre alertan, 24/7.
+          {t('leaderSettings.desc')}
         </p>
       </div>
 
@@ -124,7 +125,7 @@ export function LeaderSettings() {
         <div className="bg-surface border border-border-soft rounded-2xl p-5 space-y-4">
           {companies.length > 1 && (
             <div>
-              <label className="block text-xs text-text-muted font-medium mb-1.5">Empresa</label>
+              <label className="block text-xs text-text-muted font-medium mb-1.5">{t('techForm.company')}</label>
               <select
                 value={companyId}
                 onChange={e => {
@@ -140,7 +141,7 @@ export function LeaderSettings() {
 
           <div className="flex items-end gap-3">
             <div className="flex-1">
-              <label className="block text-xs text-text-muted font-medium mb-1.5">Desde</label>
+              <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.from')}</label>
               <select value={startHour} onChange={e => setStartHour(Number(e.target.value))} className={selectCls}>
                 {Array.from({ length: 25 }, (_, h) => (
                   <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
@@ -148,7 +149,7 @@ export function LeaderSettings() {
               </select>
             </div>
             <div className="flex-1">
-              <label className="block text-xs text-text-muted font-medium mb-1.5">Hasta</label>
+              <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.to')}</label>
               <select value={endHour} onChange={e => setEndHour(Number(e.target.value))} className={selectCls}>
                 {Array.from({ length: 25 }, (_, h) => (
                   <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
@@ -164,11 +165,11 @@ export function LeaderSettings() {
               onChange={e => setSkipWeekends(e.target.checked)}
               className="rounded border-border-soft"
             />
-            <span className="text-sm text-text-secondary">No alertar sábados ni domingos</span>
+            <span className="text-sm text-text-secondary">{t('leaderSettings.skipWeekends')}</span>
           </label>
 
           <div>
-            <label className="block text-xs text-text-muted font-medium mb-1.5">Zona horaria</label>
+            <label className="block text-xs text-text-muted font-medium mb-1.5">{t('leaderSettings.timezone')}</label>
             <select value={tz} onChange={e => setTz(e.target.value)} className={selectCls}>
               {TZ_OPTIONS.map(z => <option key={z} value={z}>{z}</option>)}
             </select>
@@ -184,10 +185,10 @@ export function LeaderSettings() {
             className="bg-primary hover:bg-primary/90 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-60"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Guardar
+            {t('common.save')}
           </button>
-          {saved && <span className="text-success text-sm">Guardado ✓</span>}
-          <button onClick={load} className="ml-auto text-text-muted hover:text-text-primary transition-colors" title="Recargar">
+          {saved && <span className="text-success text-sm">{t('leaderSettings.saved')}</span>}
+          <button onClick={load} className="ml-auto text-text-muted hover:text-text-primary transition-colors" title={t('common.reload')}>
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>

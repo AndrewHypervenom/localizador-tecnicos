@@ -13,8 +13,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { format, parseISO, addDays } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
+import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 
 type DateFilter = 'today' | 'expired' | 'custom'
 
@@ -55,6 +56,7 @@ type Speed = typeof SPEEDS[number]
 const BASE_MS = 250
 
 function RoutePlayback({ points }: { points: RoutePoint[] }) {
+  const { lang } = useI18n()
   const map = useMap()
   const [playhead, setPlayhead] = useState(0)
   const [playing, setPlaying]   = useState(false)
@@ -129,7 +131,7 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
           {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
         </button>
         <span className="font-mono text-xs text-text-secondary min-w-[4.5rem]">
-          {points[playhead] ? format(parseISO(points[playhead].ts), 'hh:mm:ss a') : '--:--:--'}
+          {points[playhead] ? format(parseISO(points[playhead].ts), 'hh:mm:ss a', { locale: getDateLocale(lang) }) : '--:--:--'}
         </span>
         <input
           type="range" min={0} max={points.length - 1} value={playhead}
@@ -182,6 +184,7 @@ function StatBadge({ icon: Icon, value, label, color = 'text-text-secondary' }: 
 }
 
 export function History() {
+  const { t, lang } = useI18n()
   const [technicians, setTechnicians] = useState<any[]>([])
   const [selectedTech, setSelectedTech] = useState<string>('')
   const [dateFilter, setDateFilter]     = useState<DateFilter>('today')
@@ -268,20 +271,21 @@ export function History() {
           <Link to="/" className="p-1.5 rounded-lg hover:bg-surface-raised text-text-muted hover:text-text-primary transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <h1 className="font-bold text-text-primary text-sm flex-1">Historial de Viajes</h1>
+          <h1 className="font-bold text-text-primary text-sm flex-1">{t('history.title')}</h1>
+          <LanguageSwitcher />
         </div>
 
         <div className="p-4 space-y-3 border-b border-border-soft">
           <div>
-            <label className="block text-xs text-text-muted mb-1">Técnico</label>
+            <label className="block text-xs text-text-muted mb-1">{t('common.technician')}</label>
             <select
               value={selectedTech}
               onChange={(e) => setSelectedTech(e.target.value)}
               className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary"
             >
-              <option value="">Seleccionar técnico...</option>
-              {technicians.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+              <option value="">{t('history.selectTech')}</option>
+              {technicians.map((tech) => (
+                <option key={tech.id} value={tech.id}>{tech.name}</option>
               ))}
             </select>
           </div>
@@ -298,7 +302,7 @@ export function History() {
               )}
             >
               <Clock className="w-3 h-3" />
-              Hoy
+              {t('history.today')}
             </button>
             <button
               onClick={() => { setDateFilter('expired'); setCustomDate('') }}
@@ -310,7 +314,7 @@ export function History() {
               )}
             >
               <CalendarX className="w-3 h-3" />
-              Anteriores
+              {t('history.previous')}
             </button>
           </div>
 
@@ -346,18 +350,18 @@ export function History() {
 
           {/* Etiqueta del filtro activo */}
           <div className="text-xs text-text-muted flex items-center gap-1">
-            <span>Mostrando:</span>
+            <span>{t('history.showing')}</span>
             <span className={cn(
               'font-medium',
               dateFilter === 'today'   && 'text-primary',
               dateFilter === 'expired' && 'text-warning',
               dateFilter === 'custom'  && 'text-text-secondary',
             )}>
-              {dateFilter === 'today'   && `hoy (${format(new Date(), "d MMM", { locale: es })})`}
-              {dateFilter === 'expired' && 'últimos 30 días'}
-              {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: es })}
+              {dateFilter === 'today'   && t('history.todayLabel', { date: format(new Date(), 'd MMM', { locale: getDateLocale(lang) }) })}
+              {dateFilter === 'expired' && t('history.last30')}
+              {dateFilter === 'custom'  && customDate && format(new Date(customDate + 'T00:00:00'), "d 'de' MMMM yyyy", { locale: getDateLocale(lang) })}
             </span>
-            {trips.length > 0 && <span className="ml-auto">{trips.length} viajes</span>}
+            {trips.length > 0 && <span className="ml-auto">{t('history.tripsCount', { n: trips.length })}</span>}
           </div>
         </div>
 
@@ -386,13 +390,13 @@ export function History() {
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-medium text-text-primary">
-                    {format(parseISO(trip.started_at), "d MMM, h:mm a", { locale: es })}
+                    {format(parseISO(trip.started_at), 'd MMM, h:mm a', { locale: getDateLocale(lang) })}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {inProgress && (
                       <span className="flex items-center gap-1 text-xs text-success font-medium">
                         <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                        En curso
+                        {t('history.inProgress')}
                       </span>
                     )}
                     {trip.accidents > 0 && (
@@ -418,7 +422,7 @@ export function History() {
           })}
           {trips.length === 0 && !loading && selectedTech && (
             <div className="text-center text-text-muted text-sm py-8">
-              No se encontraron viajes en este rango
+              {t('history.noTrips')}
             </div>
           )}
         </div>
@@ -431,11 +435,11 @@ export function History() {
             <div className="p-4 border-b border-border-soft bg-surface">
               <div className="flex items-center gap-2 mb-3">
                 <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-                  {selectedTrip.status !== 'completed' ? 'Viaje en curso' : 'Análisis del Viaje'} — {format(parseISO(selectedTrip.started_at), "d MMMM yyyy, h:mm a", { locale: es })}
+                  {selectedTrip.status !== 'completed' ? t('history.tripInProgress') : t('history.tripAnalysis')} — {format(parseISO(selectedTrip.started_at), 'd MMMM yyyy, h:mm a', { locale: getDateLocale(lang) })}
                 </h2>
                 {selectedTrip.status !== 'completed' && (
                   <span className="flex items-center gap-1 text-xs text-success font-medium">
-                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> En curso
+                    <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> {t('history.inProgress')}
                   </span>
                 )}
               </div>
@@ -449,14 +453,14 @@ export function History() {
                   : `${Math.round((Date.now() - new Date(selectedTrip.started_at).getTime()) / 60_000)} min`
                 return (
                   <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
-                    <StatBadge icon={Route}          value={distKm + ' km'}   label="Distancia"     color="text-primary" />
-                    <StatBadge icon={Clock}          value={durLabel}          label="Duración"      color="text-text-secondary" />
-                    <StatBadge icon={TrendingUp}     value={maxSpd + ' km/h'} label="Vel. máx"      color="text-danger" />
-                    <StatBadge icon={Gauge}          value={avgSpd + ' km/h'} label="Vel. prom"     color="text-warning" />
-                    <StatBadge icon={AlertTriangle}  value={selectedTrip.accidents}    label="Accidentes"    color={selectedTrip.accidents > 0 ? 'text-danger' : 'text-text-muted'} />
-                    <StatBadge icon={CornerDownLeft} value={selectedTrip.hard_brakes}  label="Frenadas"      color={selectedTrip.hard_brakes > 0 ? 'text-warning' : 'text-text-muted'} />
-                    <StatBadge icon={TrendingUp}     value={selectedTrip.rapid_accels} label="Aceleraciones" color={selectedTrip.rapid_accels > 0 ? 'text-warning' : 'text-text-muted'} />
-                    <StatBadge icon={RotateCcw}      value={selectedTrip.harsh_turns}  label="Giros bruscos" color="text-text-muted" />
+                    <StatBadge icon={Route}          value={distKm + ' km'}   label={t('history.distance')}  color="text-primary" />
+                    <StatBadge icon={Clock}          value={durLabel}          label={t('history.duration')}  color="text-text-secondary" />
+                    <StatBadge icon={TrendingUp}     value={maxSpd + ' km/h'} label={t('history.maxSpeed')}  color="text-danger" />
+                    <StatBadge icon={Gauge}          value={avgSpd + ' km/h'} label={t('history.avgSpeed')}  color="text-warning" />
+                    <StatBadge icon={AlertTriangle}  value={selectedTrip.accidents}    label={t('history.accidents')} color={selectedTrip.accidents > 0 ? 'text-danger' : 'text-text-muted'} />
+                    <StatBadge icon={CornerDownLeft} value={selectedTrip.hard_brakes}  label={t('history.brakes')}    color={selectedTrip.hard_brakes > 0 ? 'text-warning' : 'text-text-muted'} />
+                    <StatBadge icon={TrendingUp}     value={selectedTrip.rapid_accels} label={t('history.accels')}    color={selectedTrip.rapid_accels > 0 ? 'text-warning' : 'text-text-muted'} />
+                    <StatBadge icon={RotateCcw}      value={selectedTrip.harsh_turns}  label={t('history.harshTurns')} color="text-text-muted" />
                   </div>
                 )
               })()}
@@ -470,19 +474,19 @@ export function History() {
               </div>
               <div className="w-72 flex-shrink-0 flex flex-col border-l border-border-soft bg-surface overflow-y-auto p-4 space-y-4">
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Elevación</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{t('history.elevation')}</h4>
                   <ElevationChart data={elevData} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Velocidad</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{t('history.speed')}</h4>
                   <SpeedChart data={routePoints.map((p) => ({ ts: p.ts, speed_kmh: p.speed_kmh, speed_band: p.speed_band }))} />
                 </div>
                 <div>
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Velocidad en ruta</h4>
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{t('history.speedOnRoute')}</h4>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-success" /><span className="text-text-muted">Baja (&lt;30 km/h)</span></div>
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-warning" /><span className="text-text-muted">Media (30-60 km/h)</span></div>
-                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-danger" /><span className="text-text-muted">Alta (&gt;60 km/h)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-success" /><span className="text-text-muted">{t('history.speedLow')}</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-warning" /><span className="text-text-muted">{t('history.speedMedium')}</span></div>
+                    <div className="flex items-center gap-2"><div className="w-6 h-2 rounded bg-danger" /><span className="text-text-muted">{t('history.speedHigh')}</span></div>
                   </div>
                 </div>
               </div>
@@ -494,8 +498,8 @@ export function History() {
           <div className="flex-1 flex items-center justify-center text-text-muted">
             <div className="text-center">
               <Route className="w-16 h-16 mx-auto mb-4 opacity-20" />
-              <p className="text-lg font-medium">Selecciona un viaje</p>
-              <p className="text-sm mt-1">para ver el análisis completo</p>
+              <p className="text-lg font-medium">{t('history.selectTrip')}</p>
+              <p className="text-sm mt-1">{t('history.selectTripHint')}</p>
             </div>
           </div>
         )}

@@ -4,6 +4,7 @@ import L from 'leaflet'
 import api from '@/lib/api'
 import { format } from 'date-fns'
 import { Play, Pause, SkipBack } from 'lucide-react'
+import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { cleanRoute } from '@/lib/routeFilters'
 import { SpeedHeatmap } from './SpeedHeatmap'
@@ -176,6 +177,7 @@ function filterCurrentSession(pts: RoutePoint[]): RoutePoint[] {
 
 // Reproductor del recorrido completo del día para el técnico seleccionado
 function LiveTrackPlayer({ date }: { date: string }) {
+  const { lang } = useI18n()
   const { selectedTechnicianId, technicians } = useTrackingStore()
   const map = useMap()
   // Posición en vivo (realtime) del técnico seleccionado: se mueve en cada
@@ -278,7 +280,7 @@ function LiveTrackPlayer({ date }: { date: string }) {
   }
 
   const cur = points[playhead]
-  const timeLabel = cur ? format(new Date(cur.ts), 'hh:mm:ss a') : '--:--:--'
+  const timeLabel = cur ? format(new Date(cur.ts), 'hh:mm:ss a', { locale: getDateLocale(lang) }) : '--:--:--'
 
   return (
     <>
