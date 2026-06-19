@@ -79,7 +79,7 @@ function toWkt(coords: [number, number][]): string {
 }
 
 // ─── Obtener company_id del usuario actual ────────────────────────────────────
-async function getUserCompanyId(): Promise<string | null> {
+export async function getUserCompanyId(): Promise<string | null> {
   const { data: sessionData } = await supabase.auth.getSession()
   const userId = sessionData?.session?.user?.id
   if (!userId) return null

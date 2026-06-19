@@ -109,7 +109,7 @@ export function Admin() {
               {t('admin.newProject')}
             </button>
             <Link
-              to="/map"
+              to="/admin/map"
               className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors px-2.5 py-1.5 rounded-lg hover:bg-surface-raised"
             >
               <LayoutDashboard className="w-3.5 h-3.5" />

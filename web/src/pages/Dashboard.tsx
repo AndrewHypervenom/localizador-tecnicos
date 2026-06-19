@@ -27,6 +27,7 @@ import { toast } from 'sonner'
 import {
   generateCityZones, previewCityZones, type CityPreview,
   generateRouteZones, previewRouteZones, type RouteZoneResult,
+  getUserCompanyId,
 } from '@/lib/generateCityZones'
 import { geocodeAddress, circlePolygon } from '@/lib/geocoding'
 import { coordsToWkt } from '@/hooks/useZones'
@@ -237,7 +238,10 @@ export function Dashboard() {
       const coords  = circlePolygon(manualGeoResult.lat, manualGeoResult.lng, manualRadius)
       const wkt     = coordsToWkt(coords)
       const { data: session } = await supabase.auth.getSession()
-      const userId  = session?.session?.user?.id
+      const userId    = session?.session?.user?.id
+      // Etiquetar la zona con la empresa del usuario para que quede aislada por
+      // RLS (un líder solo verá las suyas). Superadmin no tiene empresa → null.
+      const companyId = await getUserCompanyId()
       const { error } = await supabase.from('zones').insert({
         name:       manualCity.trim(),
         type:       'service_area',
@@ -245,6 +249,7 @@ export function Dashboard() {
         polygon:    wkt,
         is_active:  true,
         created_by: userId ?? null,
+        company_id: companyId,
       })
       if (error) throw error
       toast.success(t('dashboard.zoneCreated', { name: manualCity.trim() }))

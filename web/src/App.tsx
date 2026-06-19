@@ -5,11 +5,13 @@ import { supabase } from '@/lib/supabase'
 import { getRoleFromSession } from '@/lib/roles'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useZonesStore } from '@/store/zonesStore'
+import { useAppUpdate } from '@/hooks/useAppUpdate'
 import { Dashboard } from '@/pages/Dashboard'
 import { History } from '@/pages/History'
 import { Login } from '@/pages/Login'
 import { Zones } from '@/pages/Zones'
 import { Admin } from '@/pages/Admin'
+import { AdminMapPage } from '@/pages/AdminMapPage'
 import { LeaderPanel } from '@/pages/LeaderPanel'
 import { ChangePassword } from '@/pages/ChangePassword'
 import { Reports } from '@/pages/Reports'
@@ -92,6 +94,9 @@ function LeaderRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Auto-actualiza el sitio cuando hay un despliegue nuevo (sin recargar a mano).
+  useAppUpdate()
+
   useEffect(() => {
     // Limpiar sesión inválida automáticamente (token expirado o revocado)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -128,6 +133,9 @@ export default function App() {
         <Route path="/change-password" element={<ChangePassword />} />
         <Route path="/admin" element={
           <AdminRoute><Admin /></AdminRoute>
+        } />
+        <Route path="/admin/map" element={
+          <AdminRoute><AdminMapPage /></AdminRoute>
         } />
         <Route path="/leader" element={
           <LeaderRoute><LeaderPanel /></LeaderRoute>
