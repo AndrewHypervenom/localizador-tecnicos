@@ -1154,6 +1154,7 @@ export const pt: Record<keyof typeof es, string> = {
   'adminCompanies.empty': 'Sem empresas registradas',
   'adminCompanies.emptyHint': 'Crie a primeira empresa e atribua-a a um líder.',
   'adminCompanies.noCampaigns': 'Sem campanhas ainda.',
+  'adminCompanies.viewAs': 'Ver como esta empresa (sair: Ctrl+Shift+V)',
 
   // ---- histórico (admin) ----
   'adminHistory.deleteTrip': 'Excluir viagem',

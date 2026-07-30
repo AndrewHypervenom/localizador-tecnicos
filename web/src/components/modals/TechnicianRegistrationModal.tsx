@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { COUNTRIES, CITIES_BY_COUNTRY, buildShift } from '@/lib/geo'
 import { TimeSelect } from '@/components/ui/TimeSelect'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { getEffectiveRole } from '@/lib/roles'
 import { useI18n } from '@/lib/i18n/i18n'
 
 interface Props {
@@ -92,8 +93,7 @@ export function TechnicianRegistrationModal({ open, onOpenChange, existingTechni
     if (!open) return
     setLoadingOrgs(true)
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const role = session?.user?.app_metadata?.role as string | undefined
+      const role = await getEffectiveRole()
 
       let companyQuery = supabase.from('companies').select('id, name').order('name')
       let campaignQuery = supabase.from('campaigns').select('id, name, company_id').eq('is_active', true).order('name')

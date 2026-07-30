@@ -1153,6 +1153,7 @@ export const es = {
   'adminCompanies.empty': 'Sin empresas registradas',
   'adminCompanies.emptyHint': 'Crea la primera empresa y asígnala a un líder.',
   'adminCompanies.noCampaigns': 'Sin campañas aún.',
+  'adminCompanies.viewAs': 'Ver como esta empresa (salir: Ctrl+Shift+V)',
 
   // ---- historial (admin) ----
   'adminHistory.deleteTrip': 'Eliminar viaje',

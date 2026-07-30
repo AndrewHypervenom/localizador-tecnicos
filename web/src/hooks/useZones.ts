@@ -1,5 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getEffectiveRole } from '@/lib/roles'
+import { getLeaderScope } from '@/lib/leaderContext'
 import { useZonesStore } from '@/store/zonesStore'
 import type { Zone, ZoneType } from '@/types/zones'
 
@@ -56,17 +58,11 @@ export function useZones(date?: string) {
     const filterDate = dateRef.current
 
     // ── Determinar scope de empresa del usuario ─────────────────────────
-    const { data: { session } } = await supabase.auth.getSession()
-    const role   = session?.user?.app_metadata?.role as string | undefined
-    const userId = session?.user?.id ?? ''
+    const role = await getEffectiveRole()
 
     let companyIds: string[] | null = null
     if (role !== 'superadmin') {
-      const { data: companies } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('created_by', userId)
-      const ids = (companies ?? []).map((c: any) => c.id)
+      const { companyIds: ids } = await getLeaderScope()
       if (ids.length === 0) { setZones([]); return }
       companyIds = ids
     }

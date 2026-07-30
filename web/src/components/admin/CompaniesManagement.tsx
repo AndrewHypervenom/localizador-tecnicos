@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus, Trash2, RefreshCw, X, Building2, FolderOpen,
-  Loader2, ChevronDown, ChevronRight, Pencil, Check, Users, Clock,
+  Loader2, ChevronDown, ChevronRight, Pencil, Check, Users, Clock, Eye,
 } from 'lucide-react'
 import api from '@/lib/api'
+import { setViewAs } from '@/lib/viewAs'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
@@ -226,6 +228,7 @@ function CompanyModal({
 // ── Main component ────────────────────────────────────────────────────────────
 export function CompaniesManagement() {
   const { t, lang } = useI18n()
+  const navigate = useNavigate()
   const [companies, setCompanies]   = useState<CompanyRow[]>([])
   const [leaders, setLeaders]       = useState<Leader[]>([])
   const [loading, setLoading]       = useState(true)
@@ -378,6 +381,19 @@ export function CompaniesManagement() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Entra al panel de líder acotado a esta empresa. Dentro no
+                        queda rastro de administrador: se sale con Ctrl+Shift+V. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewAs({ id: co.id, name: co.name })
+                        navigate('/leader')
+                      }}
+                      className="p-1.5 text-text-muted hover:text-primary transition-colors rounded-lg hover:bg-primary/10"
+                      title={t('adminCompanies.viewAs')}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => { setEditing(co); setModalMode('edit') }}

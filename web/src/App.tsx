@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { getRoleFromSession } from '@/lib/roles'
+import { clearViewAs, getViewAs } from '@/lib/viewAs'
 import { useTrackingStore } from '@/store/trackingStore'
 import { useZonesStore } from '@/store/zonesStore'
 import { useAppUpdate } from '@/hooks/useAppUpdate'
@@ -58,9 +59,38 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
   if (session === undefined) return <Spinner />
   if (!session) return <Navigate to="/login" replace />
   const role = getRoleFromSession(session)
-  if (role === 'superadmin') return <Navigate to="/admin" replace />
+  // Con el modo vista activo, la raíz lleva al panel de líder, no al de admin.
+  if (role === 'superadmin') return <Navigate to={getViewAs() ? '/leader' : '/admin'} replace />
   if (role === 'leader')     return <Navigate to="/leader" replace />
   return <>{children}</>
+}
+
+/**
+ * Salida del modo "ver como empresa". Ctrl/Cmd+Shift+V devuelve al listado de
+ * empresas del panel de administración. No hace nada si el modo está apagado:
+ * se entra desde el icono de ojo, no desde el teclado.
+ */
+function ViewAsExitHotkey() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'V' && e.key !== 'v') return
+      if (!e.shiftKey || (!e.ctrlKey && !e.metaKey)) return
+      if (!getViewAs()) return
+      // Ctrl+Shift+V es "pegar como texto plano": no lo robamos mientras se
+      // escribe, o salir del modo sería un accidente a mitad de un formulario.
+      const el = document.activeElement
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el as HTMLElement)?.isContentEditable) return
+      e.preventDefault()
+      clearViewAs()
+      navigate('/admin?tab=companies', { replace: true })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate])
+
+  return null
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -106,6 +136,8 @@ export default function App() {
     // Limpiar sesión inválida automáticamente (token expirado o revocado)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' && !session) {
+        // Si no, el siguiente que entre en esta pestaña heredaría el modo vista.
+        clearViewAs()
         // Limpiar el estado en memoria para que el siguiente líder no vea
         // técnicos/zonas/alertas del anterior (el store es un singleton).
         useTrackingStore.getState().reset()
@@ -121,6 +153,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ViewAsExitHotkey />
       <Toaster
         theme="dark"
         position="top-right"

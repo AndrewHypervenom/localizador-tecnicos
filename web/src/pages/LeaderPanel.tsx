@@ -15,6 +15,7 @@ import { LeaderReports } from '@/components/leader/LeaderReports'
 import { LeaderAlerts } from '@/components/leader/LeaderAlerts'
 import { LeaderSettings } from '@/components/leader/LeaderSettings'
 import { useI18n } from '@/lib/i18n/i18n'
+import { useViewAs } from '@/lib/viewAs'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 export type LeaderPanelView =
   | 'stats' | 'upload' | 'routes' | 'technicians'
@@ -36,6 +37,7 @@ const PANEL_TITLE_KEYS: Record<NonNullable<LeaderPanelView>, string> = {
 
 export function LeaderPanel() {
   const { t } = useI18n()
+  const viewAs = useViewAs()
   const [openPanel, setOpenPanel]             = useState<LeaderPanelView>(null)
   const [userEmail, setUserEmail]             = useState('')
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null)
@@ -53,6 +55,16 @@ export function LeaderPanel() {
 
   useEffect(() => {
     async function check() {
+      /*
+       * Viendo como empresa: la cuenta de empresas propias sería 0 y saltaría el
+       * asistente de alta, que no viene a cuento. La empresa ya existe — solo la
+       * estamos mirando desde fuera.
+       */
+      if (viewAs) {
+        setUserEmail('')
+        setNeedsOnboarding(false)
+        return
+      }
       const { data: { session } } = await supabase.auth.getSession()
       setUserEmail(session?.user?.email ?? '')
       const { count } = await supabase
@@ -62,7 +74,7 @@ export function LeaderPanel() {
       setNeedsOnboarding((count ?? 0) === 0)
     }
     check()
-  }, [])
+  }, [viewAs])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -81,6 +93,18 @@ export function LeaderPanel() {
 
   return (
     <div className="h-screen bg-base flex flex-col overflow-hidden">
+      {/*
+       * Único rastro del modo vista: una línea de 2px en el borde superior.
+       * Se reconoce si sabes que está, y no se lee como una insignia de rol en
+       * una captura o una pantalla compartida.
+       */}
+      {viewAs && (
+        <div
+          aria-hidden
+          className="fixed top-0 left-0 right-0 h-[2px] z-[999] pointer-events-none bg-gradient-to-r from-primary/50 via-accent/40 to-primary/50"
+        />
+      )}
+
       {needsOnboarding && (
         <LeaderOnboarding onComplete={() => {
           setNeedsOnboarding(false)
@@ -107,8 +131,12 @@ export function LeaderPanel() {
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {userEmail && (
-              <span className="hidden lg:block text-text-muted text-xs truncate max-w-48">{userEmail}</span>
+            {/* En modo vista va el nombre de la empresa donde iría el correo del
+                líder: ocupa el mismo hueco y no delata la cuenta de admin. */}
+            {(viewAs?.name || userEmail) && (
+              <span className="hidden lg:block text-text-muted text-xs truncate max-w-48">
+                {viewAs?.name || userEmail}
+              </span>
             )}
             <LanguageSwitcher />
             <button

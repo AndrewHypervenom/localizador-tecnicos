@@ -1,4 +1,6 @@
 import { supabase } from './supabase'
+import { getRoleFromSession } from './roles'
+import { getViewAs } from './viewAs'
 
 export async function getLeaderScope(): Promise<{
   userId: string
@@ -13,11 +15,23 @@ export async function getLeaderScope(): Promise<{
   const { data: { session } } = await supabase.auth.getSession()
   const userId = session?.user?.id ?? ''
 
-  const { data: companies } = await supabase
-    .from('companies')
-    .select('id')
-    .eq('created_by', userId)
-  const companyIds = (companies ?? []).map((c: any) => c.id)
+  /*
+   * Punto único por el que pasa todo el panel de líder, así que también es el
+   * único sitio donde hay que redirigir el alcance cuando el superadmin está
+   * "viendo como" una empresa: los doce componentes heredan el cambio.
+   */
+  const viewAs = getRoleFromSession(session) === 'superadmin' ? getViewAs() : null
+
+  let companyIds: string[]
+  if (viewAs) {
+    companyIds = [viewAs.id]
+  } else {
+    const { data: companies } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('created_by', userId)
+    companyIds = (companies ?? []).map((c: any) => c.id)
+  }
 
   if (companyIds.length === 0) {
     return { userId, companyIds: [], technicianIds: [], allTechnicianIds: [] }

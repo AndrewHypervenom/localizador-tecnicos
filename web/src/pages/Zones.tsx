@@ -20,6 +20,7 @@ import {
 } from '@/types/zones'
 import { deleteAllZones } from '@/lib/generateCityZones'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { getEffectiveRole } from '@/lib/roles'
 import { geocodeAddress, geocodeWithClaude, GeocodingResult, circlePolygon, fetchCityBoundary, CityBoundaryResult, resolveMapsLink, isShortMapsLink } from '@/lib/geocoding'
 import { useI18n } from '@/lib/i18n/i18n'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
@@ -543,8 +544,7 @@ export function Zones() {
 
   useEffect(() => {
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const role = session?.user?.app_metadata?.role as string | undefined
+      const role = await getEffectiveRole()
 
       let q = supabase.from('technicians').select('city, country').eq('active', true)
       if (role !== 'superadmin') {
@@ -566,20 +566,22 @@ export function Zones() {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const userId = session?.user?.id ?? ''
-      const role   = session?.user?.app_metadata?.role as string | undefined
+    ;(async () => {
+      const role = await getEffectiveRole()
       setIsSuperAdmin(role === 'superadmin')
-      const query  = supabase.from('companies').select('id, name').order('name')
-      const scoped = role === 'superadmin' ? query : query.eq('created_by', userId)
-      scoped.then(({ data }) => {
-        const list = data ?? []
-        setCompanies(list)
-        // Líderes siempre tienen su empresa pre-seleccionada — no pueden dejarla vacía
-        if (role !== 'superadmin' && list.length > 0) setZoneCompanyId(list[0].id)
-        else if (list.length === 1) setZoneCompanyId(list[0].id)
-      })
-    })
+      const query = supabase.from('companies').select('id, name').order('name')
+      // `in(id)` en vez de `created_by`: cubre por igual al líder real y al
+      // superadmin que está viendo como una empresa concreta.
+      const scoped = role === 'superadmin'
+        ? query
+        : query.in('id', (await getLeaderScope()).companyIds)
+      const { data } = await scoped
+      const list = data ?? []
+      setCompanies(list)
+      // Líderes siempre tienen su empresa pre-seleccionada — no pueden dejarla vacía
+      if (role !== 'superadmin' && list.length > 0) setZoneCompanyId(list[0].id)
+      else if (list.length === 1) setZoneCompanyId(list[0].id)
+    })()
   }, [])
 
   // Cargar campañas de la empresa seleccionada y resetear campaña al cambiar empresa
