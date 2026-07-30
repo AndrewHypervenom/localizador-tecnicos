@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, Check, KeyRound, Building2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Plus, Trash2, RefreshCw, X, Shield, User, Loader2, ChevronDown, Copy, Check, KeyRound, Building2, Users } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { supabase } from '@/lib/supabase'
+import { fadeUp, SPRING, stagger } from '@/lib/motion'
+import { Card } from '@/components/ui/Card'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/PageHeader'
 
 interface WebUser {
   id: string
@@ -459,35 +464,46 @@ export function UserManagement() {
           {!loading && <span className="text-text-muted font-normal ml-2">({users.length})</span>}
         </h2>
         <div className="flex items-center gap-2 ml-auto">
-          <button
+          <motion.button
+            whileHover={{ rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
+            transition={SPRING.snappy}
             onClick={load}
             title={t('common.refresh')}
-            className="text-text-muted hover:text-text-primary transition-colors"
+            className="text-text-muted hover:text-primary transition-colors p-1.5 rounded-lg hover:bg-surface-raised"
           >
             <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.03, y: -1 }}
+            whileTap={{ scale: 0.97 }}
+            transition={SPRING.snappy}
             onClick={() => setCreateOpen(true)}
-            className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-base text-xs font-semibold px-3.5 py-2 rounded-xl shadow-glow-primary transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> {t('adminUsers.newUser')}
-          </button>
+          </motion.button>
         </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonRows rows={6} />
       ) : error ? (
-        <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-xl px-4 py-3">
+        <motion.div
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-xl px-4 py-3"
+        >
           {error}
-        </div>
+        </motion.div>
       ) : users.length === 0 ? (
-        <div className="text-center py-16 text-text-muted text-sm">{t('adminUsers.empty')}</div>
+        <EmptyState icon={Users} title={t('adminUsers.empty')} />
       ) : (
-        <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        // `scroll-x`: la tabla tiene 6 columnas y el email va en monoespaciada,
+        // asi que en pantallas angostas debe scrollear en horizontal, no recortarse.
+        <Card className="overflow-hidden p-0">
+          <div className="scroll-x">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border-soft">
                 <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminUsers.colEmail')}</th>
@@ -498,7 +514,7 @@ export function UserManagement() {
                 <th className="text-right text-xs text-text-muted font-medium px-4 py-3">{t('adminUsers.colActions')}</th>
               </tr>
             </thead>
-            <tbody>
+            <motion.tbody variants={stagger(0.035)} initial="hidden" animate="visible">
               {users.map(user => {
                 const isSelf = user.id === currentId
                 const isChanging = changingId === user.id
@@ -506,7 +522,11 @@ export function UserManagement() {
                 const isResetting = resettingId === user.id
                 const userCompanies = companies.filter(c => c.leaderId === user.id)
                 return (
-                  <tr key={user.id} className="border-b border-border-soft last:border-0 hover:bg-surface-raised transition-colors">
+                  <motion.tr
+                    key={user.id}
+                    variants={fadeUp}
+                    className="border-b border-border-soft last:border-0 hover:bg-surface-raised/70 transition-colors"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-text-primary text-xs font-mono">{user.email}</span>
@@ -581,12 +601,13 @@ export function UserManagement() {
                         )}
                       </div>
                     </td>
-                  </tr>
+                  </motion.tr>
                 )
               })}
-            </tbody>
+            </motion.tbody>
           </table>
-        </div>
+          </div>
+        </Card>
       )}
 
       <CreateUserModal

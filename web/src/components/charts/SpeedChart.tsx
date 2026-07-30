@@ -4,12 +4,15 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { Gauge } from 'lucide-react'
+import { fmtNum } from '@/lib/utils'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
+// speed_kmh/speed_band son nullable: salen de AVG/MAX sobre location_events.speed,
+// que es NULLABLE, así que un bucket sin velocidad devuelve null en ambos.
 interface SpeedPoint {
   ts: string
-  speed_kmh: number
-  speed_band: 'low' | 'medium' | 'high'
+  speed_kmh: number | null
+  speed_band: 'low' | 'medium' | 'high' | null
 }
 
 interface SpeedChartProps {
@@ -26,7 +29,7 @@ function CustomTooltip({ active, payload }: any) {
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-2.5 shadow-xl text-xs">
       <div className="font-mono font-bold" style={{ color }}>
-        {d.speed_kmh.toFixed(1)} km/h
+        {fmtNum(d.speed_kmh, 1)} km/h
       </div>
       <div className="text-text-muted mt-1">
         {format(new Date(d.ts), 'hh:mm:ss a', { locale: getDateLocale(lang) })}
@@ -48,11 +51,17 @@ export function SpeedChart({ data, className }: SpeedChartProps) {
     )
   }
 
-  const maxSpeed = Math.max(...data.map((d) => d.speed_kmh))
-  const avgSpeed = data.reduce((s, d) => s + d.speed_kmh, 0) / data.length
+  // Solo velocidades reales: un null se cuela como 0 en Math.max/reduce y hunde
+  // el máximo y el promedio que el líder lee.
+  const speeds = data
+    .map((d) => d.speed_kmh)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  const maxSpeed = speeds.length ? Math.max(...speeds) : 0
+  const avgSpeed = speeds.length ? speeds.reduce((s, v) => s + v, 0) / speeds.length : 0
   // A pie las velocidades son bajas; con 0 decimales un promedio de 3.4 km/h
   // se mostraría como "0". Usamos 1 decimal por debajo de 10 km/h.
-  const fmtSpeed = (v: number) => (v < 10 ? v.toFixed(1) : v.toFixed(0))
+  const fmtSpeed = (v: number | null | undefined) =>
+    typeof v === 'number' && Number.isFinite(v) ? (v < 10 ? v.toFixed(1) : v.toFixed(0)) : '—'
 
   return (
     <div className={className}>

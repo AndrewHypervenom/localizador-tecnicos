@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useTrackingStore, STATUS_THRESHOLDS, noSignalReason } from '@/store/trackingStore'
+import { useTrackingStore, STATUS_THRESHOLDS } from '@/store/trackingStore'
+import { describeStatus, type StatusDescriptor } from '@/lib/technicianStatus'
 import { ElevationChart } from '@/components/charts/ElevationChart'
 import { SpeedChart }     from '@/components/charts/SpeedChart'
 import { supabase } from '@/lib/supabase'
@@ -57,27 +58,23 @@ function StatCard({ icon: Icon, label, value, unit, color = 'text-primary' }: {
   )
 }
 
-function ActiveStatusCard({ isActive, isAccident, noSignal, hint }: {
-  isActive: boolean; isAccident: boolean; noSignal?: boolean; hint?: string
-}) {
-  // 'no_signal' = la app SIGUE VIVA (latido fresco) pero sin señal GPS: ámbar,
-  // distinto del gris "Inactivo/Desconectado". Es la refutación visual directa
-  // del "la app no sirve": el líder ve que la app está activa.
+/**
+ * Tarjeta de conexión. Usa el MISMO descriptor que las listas para que abrir la
+ * ficha de un técnico nunca contradiga el color con el que aparecía en la lista.
+ */
+function ActiveStatusCard({ st }: { st: StatusDescriptor }) {
   const { t } = useI18n()
-  const dotColor  = isAccident ? 'bg-danger animate-pulse' : isActive ? 'bg-success animate-pulse' : noSignal ? 'bg-amber-500 animate-pulse' : 'bg-text-muted'
-  const textColor = isAccident ? 'text-danger' : isActive ? 'text-success' : noSignal ? 'text-amber-500' : 'text-text-muted'
-  const label     = isAccident ? t('detail.alert') : isActive ? t('status.idle') : noSignal ? t('detail.appActive') : t('detail.inactive')
   return (
     <div className="bg-surface-raised rounded-xl p-3 flex flex-col gap-1">
       <div className="flex items-center gap-1.5 text-text-muted">
         <Signal className="w-3.5 h-3.5" />
         <span className="text-xs">{t('detail.connection')}</span>
       </div>
-      <div className={cn('font-bold text-xl leading-none flex items-center gap-2', textColor)}>
-        <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', dotColor)} />
-        {label}
+      <div className={cn('font-bold text-lg leading-tight flex items-center gap-2', st.text)}>
+        <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', st.dot, st.pulse && 'animate-pulse')} />
+        {st.label}
       </div>
-      {noSignal && hint && <span className="text-[10px] text-amber-500/80 leading-tight mt-0.5">{hint}</span>}
+      <span className="text-[10px] text-text-muted leading-tight">{st.reason}</span>
     </div>
   )
 }
@@ -296,6 +293,12 @@ export function TechnicianDetail() {
       .slice(0, 20)
   }, [tech?.id, deviceLog, alerts])
 
+  // Un solo descriptor para toda la ficha: la tarjeta de conexión y el pie de
+  // "última actualización" deben coincidir entre sí y con la lista.
+  const st = tech
+    ? describeStatus(t, { ...tech, hasDevice: !!tech.deviceId }, getDateLocale(lang))
+    : null
+
   return (
     <AnimatePresence>
       {tech && (
@@ -305,7 +308,7 @@ export function TechnicianDetail() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 20 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="flex flex-col h-full overflow-y-auto"
+          className="flex flex-col h-full min-h-0 scroll-y"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-soft sticky top-0 bg-surface z-10">
@@ -372,12 +375,7 @@ export function TechnicianDetail() {
               color="text-text-secondary"
             />
             <TripDurationCard secs={activeSecs} isActive={isActive} hasData={effectiveTrip !== null} />
-            <ActiveStatusCard
-              isActive={isActive}
-              isAccident={tech.status === 'accident'}
-              noSignal={!isActive && tech.status === 'no_signal'}
-              hint={tech.status === 'no_signal' ? noSignalReason(tech) : undefined}
-            />
+            {st && <ActiveStatusCard st={st} />}
           </div>
 
           {/* Última actualización */}
@@ -385,9 +383,8 @@ export function TechnicianDetail() {
             <div className="flex items-center gap-1.5 text-xs text-text-muted">
               <div className={cn(
                 'w-1.5 h-1.5 rounded-full',
-                tech.status === 'moving'   ? 'bg-success animate-pulse'
-                : tech.status === 'accident' ? 'bg-danger animate-pulse'
-                : 'bg-text-muted',
+                st?.dot ?? 'bg-text-muted',
+                st?.pulse && 'animate-pulse',
               )} />
               {tech.lastSeen
                 ? t('detail.updated', { time: formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: getDateLocale(lang) }) })

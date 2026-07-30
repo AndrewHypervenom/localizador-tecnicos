@@ -123,9 +123,9 @@ function ScopeSidebar({ scopeIds }: { scopeIds: string[] | undefined }) {
 
   return (
     <>
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {selectedTechnicianId ? (
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 scroll-y">
             <button
               onClick={() => selectTechnician(null)}
               className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
@@ -136,7 +136,7 @@ function ScopeSidebar({ scopeIds }: { scopeIds: string[] | undefined }) {
             <TechnicianDetail />
           </div>
         ) : (
-          <TechnicianList className="flex-1 overflow-hidden" variant="admin" />
+          <TechnicianList className="flex-1 min-h-0 overflow-hidden" variant="admin" />
         )}
       </div>
 

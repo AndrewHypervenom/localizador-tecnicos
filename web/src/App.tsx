@@ -18,8 +18,13 @@ import { Reports } from '@/pages/Reports'
 import type { Session } from '@supabase/supabase-js'
 
 const Spinner = () => (
-  <div className="min-h-screen bg-base flex items-center justify-center">
-    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+  <div className="h-full bg-base flex items-center justify-center">
+    {/* Doble anillo contrarrotante: se lee como carga real, no como cuelgue. */}
+    <div className="relative w-10 h-10">
+      <div className="absolute inset-0 border-2 border-primary/20 rounded-full" />
+      <div className="absolute inset-0 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="absolute inset-2 border-2 border-accent/40 border-b-transparent rounded-full animate-spin-slow" />
+    </div>
   </div>
 )
 

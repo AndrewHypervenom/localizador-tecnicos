@@ -11,24 +11,17 @@ import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegis
 import { TechnicianEditModal, type TechnicianEditable } from '@/components/modals/TechnicianEditModal'
 import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { describeStatus } from '@/lib/technicianStatus'
+import { StatusLegend } from '@/components/ui/StatusLegend'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 type Tech = TechnicianEditable & {
   status?: string
   last_seen?: string | null
-}
-
-const STATUS_CFG: Record<string, { dot: string; labelKey: string; text: string }> = {
-  moving:    { dot: 'bg-success animate-pulse', labelKey: 'status.moving',            text: 'text-success' },
-  // 'idle' = quieto pero con app/GPS al día: verde (todo bien), no ámbar. El ámbar
-  // queda para estados de atención (no_signal/offline) que el líder sí debe revisar.
-  idle:      { dot: 'bg-success',               labelKey: 'status.idle',             text: 'text-success' },
-  stopped:   { dot: 'bg-text-muted',            labelKey: 'zone.statusStopped',      text: 'text-text-muted' },
-  // 'no_signal' = la app sigue viva (heartbeat fresco) pero sin punto GPS reciente:
-  // típico al quedarse quieto (GPS a 30s + Doze en segundo plano). NO es desconexión.
-  // Sin este caso caía al fallback 'offline' y se veía rojo "Sin conexión" en falso.
-  no_signal: { dot: 'bg-amber-500',             labelKey: 'status.no_signal',        text: 'text-amber-500' },
-  offline:   { dot: 'bg-danger',                labelKey: 'leaderStats.statusOffline', text: 'text-danger' },
+  last_speed?: number | null
+  hb_gps_on?: boolean | null
+  hb_net_on?: boolean | null
+  hb_perm?: 'full' | 'partial' | 'none' | null
 }
 
 function initials(name: string) {
@@ -63,20 +56,34 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
       if (error) throw error
 
       const ids = (techData ?? []).filter(t => t.active).map(t => t.id)
-      let statusMap = new Map<string, { status: string; last_seen: string | null }>()
+      let statusMap = new Map<string, any>()
+      let hbMap     = new Map<string, any>()
       if (ids.length > 0) {
-        const { data: st } = await supabase
-          .from('technician_current_status')
-          .select('id, status, last_seen')
-          .in('id', ids)
-        statusMap = new Map(st?.map(s => [s.id, { status: s.status, last_seen: s.last_seen }]) ?? [])
+        // El latido explica el ámbar (GPS apagado / sin datos / permiso);
+        // sin él el líder solo ve un color y tiene que adivinar.
+        const [statusRes, hbRes] = await Promise.all([
+          supabase.from('technician_current_status')
+            .select('id, status, last_seen, last_speed').in('id', ids),
+          supabase.from('technician_heartbeat')
+            .select('technician_id, gps_on, net_on, perm').in('technician_id', ids),
+        ])
+        statusMap = new Map(statusRes.data?.map((s: any) => [s.id, s]) ?? [])
+        hbMap     = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
       }
 
-      setTechs((techData ?? []).map(t => ({
-        ...t,
-        status:    statusMap.get(t.id)?.status ?? 'offline',
-        last_seen: statusMap.get(t.id)?.last_seen ?? null,
-      })))
+      setTechs((techData ?? []).map(t => {
+        const cs = statusMap.get(t.id)
+        const hb = hbMap.get(t.id)
+        return {
+          ...t,
+          status:     cs?.status ?? 'offline',
+          last_seen:  cs?.last_seen ?? null,
+          last_speed: cs?.last_speed ?? null,
+          hb_gps_on:  hb?.gps_on ?? null,
+          hb_net_on:  hb?.net_on ?? null,
+          hb_perm:    hb?.perm ?? null,
+        }
+      }))
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -179,6 +186,8 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
         </div>
       ) : (
         <div className="space-y-5">
+          <StatusLegend />
+
           {/* Active technicians */}
           {active.length > 0 && (
             <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
@@ -187,7 +196,15 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
               </div>
               <div className="divide-y divide-border-soft">
                 {active.map(t => {
-                  const cfg = STATUS_CFG[t.status ?? 'offline'] ?? STATUS_CFG.offline
+                  const st = describeStatus(tr, {
+                    status:    t.status,
+                    lastSeen:  t.last_seen,
+                    lastSpeed: t.last_speed,
+                    hasDevice: !!t.device_id,
+                    hbGpsOn:   t.hb_gps_on,
+                    hbNetOn:   t.hb_net_on,
+                    hbPerm:    t.hb_perm,
+                  }, getDateLocale(lang))
                   const isToggling = toggling === t.id
                   return (
                     <div key={t.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface-raised transition-colors">
@@ -200,8 +217,11 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-text-primary text-sm font-semibold truncate">{t.name}</p>
-                          <div className={cn('w-2 h-2 rounded-full flex-shrink-0', cfg.dot)} title={tr(cfg.labelKey)} />
+                          <div className={cn('w-2 h-2 rounded-full flex-shrink-0', st.dot, st.pulse && 'animate-pulse')} />
+                          <span className={cn('text-xs font-medium flex-shrink-0', st.text)}>{st.label}</span>
                         </div>
+                        {/* El motivo del color, siempre visible. */}
+                        <p className="text-text-muted text-xs mt-0.5 truncate">{st.reason}</p>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                           {t.phone && (
                             <span className="text-text-muted text-xs flex items-center gap-1">

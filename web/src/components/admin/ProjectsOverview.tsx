@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Building2, FolderOpen, Users, MapPin, Plus, ChevronDown,
   ChevronRight, RefreshCw, Loader2, Trash2, Edit2, X, Check, Save,
@@ -7,6 +8,9 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
+import { collapse, EASE, SPRING, stagger } from '@/lib/motion'
+import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/PageHeader'
 import { OnboardingWizard } from './OnboardingWizard'
 
 const STATUS_CFG = {
@@ -170,8 +174,15 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
       </div>
 
       {/* Technicians list */}
+      <AnimatePresence initial={false}>
       {expanded && (
-        <div className="border-t border-border-soft/40 px-4 py-3 bg-base/20">
+        <motion.div
+          variants={collapse}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          className="border-t border-border-soft/40 px-4 py-3 bg-base/20 overflow-hidden"
+        >
           {loadingTechs ? (
             <div className="flex justify-center py-3">
               <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -189,17 +200,24 @@ function ProjectRow({ project, onDelete, onUpdate, onAddTechnicians }: {
                 <Users className="w-3 h-3" />
                 {t(techs.length === 1 ? 'adminProjects.techCount_one' : 'adminProjects.techCount_other', { n: techs.length })}
               </p>
-              {techs.map(t => (
-                <div key={t.id} className="flex items-center gap-2 text-sm">
+              {techs.map((tech, i) => (
+                <motion.div
+                  key={tech.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.03, duration: 0.25, ease: EASE.out }}
+                  className="flex items-center gap-2 text-sm"
+                >
                   <div className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" />
-                  <span className="text-text-secondary font-medium">{t.name}</span>
-                  {t.phone && <span className="text-text-muted text-xs">{t.phone}</span>}
-                </div>
+                  <span className="text-text-secondary font-medium">{tech.name}</span>
+                  {tech.phone && <span className="text-text-muted text-xs">{tech.phone}</span>}
+                </motion.div>
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -330,25 +348,34 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
       )}
 
       {clients.length === 0 ? (
-        <div className="border border-dashed border-border-soft rounded-2xl px-6 py-16 text-center">
-          <Building2 className="w-10 h-10 text-text-muted/40 mx-auto mb-3" />
-          <p className="text-text-muted text-sm font-medium">{t('adminProjects.noClients')}</p>
-          <p className="text-text-muted/60 text-xs mt-1 mb-4">{t('adminProjects.noClientsHint')}</p>
-          <button onClick={onOpenWizard}
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-base text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-            <Plus className="w-4 h-4" /> {t('adminProjects.startSetup')}
-          </button>
+        <div className="border border-dashed border-border-soft rounded-2xl">
+          <EmptyState
+            icon={Building2}
+            title={t('adminProjects.noClients')}
+            description={t('adminProjects.noClientsHint')}
+            action={
+              <motion.button
+                whileHover={{ scale: 1.04, y: -1 }}
+                whileTap={{ scale: 0.97 }}
+                transition={SPRING.snappy}
+                onClick={onOpenWizard}
+                className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-base text-sm font-semibold px-4 py-2.5 rounded-xl shadow-glow-primary transition-colors"
+              >
+                <Plus className="w-4 h-4" /> {t('adminProjects.startSetup')}
+              </motion.button>
+            }
+          />
         </div>
       ) : (
-        <div className="space-y-4">
+        <motion.div variants={stagger(0.05)} initial="hidden" animate="visible" className="space-y-4">
           {clients.map(client => {
             const cProjects = clientProjects(client.id)
             const expanded = expandedClients.has(client.id)
 
             return (
-              <div key={client.id} className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
+              <Card key={client.id} className="overflow-hidden">
                 {/* Client header */}
-                <div className="flex items-center gap-3 px-5 py-4 hover:bg-surface-raised transition-colors">
+                <div className="flex items-center gap-3 px-5 py-4 hover:bg-surface-raised/60 transition-colors">
                   <button
                     onClick={() => setExpandedClients(prev => {
                       const n = new Set(prev)
@@ -389,8 +416,15 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
                 </div>
 
                 {/* Projects list */}
+                <AnimatePresence initial={false}>
                 {expanded && (
-                  <div className="border-t border-border-soft px-4 py-3 space-y-2">
+                  <motion.div
+                    variants={collapse}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="border-t border-border-soft px-4 py-3 space-y-2 overflow-hidden"
+                  >
                     {cProjects.length === 0 ? (
                       <div className="flex items-center justify-between py-2">
                         <p className="text-xs text-text-muted">{t('adminProjects.noProjectsInClient')}</p>
@@ -411,12 +445,13 @@ export function ProjectsOverview({ onOpenWizard }: { onOpenWizard: () => void })
                         />
                       ))
                     )}
-                  </div>
+                  </motion.div>
                 )}
-              </div>
+                </AnimatePresence>
+              </Card>
             )
           })}
-        </div>
+        </motion.div>
       )}
 
       <OnboardingWizard

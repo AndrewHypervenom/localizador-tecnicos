@@ -8,13 +8,128 @@
 
 @layer base {
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  /*
+   * El shell es de alto fijo y el scroll vive SIEMPRE en un contenedor interno
+   * (`.scroll-y`), nunca en el documento. Es lo que permite que el sidebar y la
+   * barra superior queden clavados mientras el contenido corre por debajo.
+   * Ojo: cualquier pagina de alto libre debe envolver su contenido en
+   * `.scroll-y`, porque aca el documento no scrollea y se recortaria.
+   */
   html, body, #root { height: 100%; width: 100%; overflow: hidden; }
-  body { font-family: 'Inter', system-ui, sans-serif; background: #0A0A14; color: #F1F5F9; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0A0A14;
+    color: #F1F5F9;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #141420; }
-  ::-webkit-scrollbar-thumb { background: #252540; border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: #303050; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: #252540;
+    border-radius: 99px;
+    /* Borde transparente = el thumb se ve delgado pero el area de agarre es ancha. */
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #3A3A5C; background-clip: padding-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+
+  /* Foco visible coherente en toda la app (solo teclado). */
+  :focus-visible {
+    outline: 2px solid rgba(0, 214, 50, 0.7);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Los select nativos heredaban el fondo del sistema y salian en blanco. */
+  select option { background: #141420; color: #F1F5F9; }
+}
+
+@layer utilities {
+  /*
+   * Contenedor de scroll estandar. `overscroll-contain` evita que al llegar al
+   * final de una lista el gesto se propague y mueva el panel de atras.
+   */
+  .scroll-y {
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+  }
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
+  /* Superficie de vidrio — barras superiores, popovers y overlays sobre mapa. */
+  .glass {
+    background: rgba(20, 20, 32, 0.72);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+  }
+  .glass-strong {
+    background: rgba(10, 10, 20, 0.88);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #F1F5F9 0%, #94A3B8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-gradient-primary {
+    background: linear-gradient(135deg, #33E055 0%, #00D632 55%, #7B2FF7 140%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Borde degradado sin pseudo-elementos extra en el markup. */
+  .border-gradient {
+    border: 1px solid transparent;
+    background-image:
+      linear-gradient(#141420, #141420),
+      linear-gradient(135deg, rgba(0,214,50,0.5), rgba(123,47,247,0.35) 60%, rgba(37,37,64,0.2));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+  }
+
+  /* Barrido de luz para skeletons y estados de carga. */
+  .shimmer { position: relative; overflow: hidden; }
+  .shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.07) 50%, transparent 80%);
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(37,37,64,0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37,37,64,0.35) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* Cifras alineadas en columna — evita el baile de digitos al contar. */
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+/* Respeta la preferencia del sistema: sin animaciones decorativas. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Leaflet dark theme overrides */

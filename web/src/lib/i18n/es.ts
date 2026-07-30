@@ -165,6 +165,55 @@ export const es = {
   'status.offline': 'Desconectado',
   'status.accident': 'ACCIDENTE',
 
+  // ---- semáforo de estado (etiqueta + motivo) ----
+  // Vocabulario ÚNICO para todo el sitio: lo consume lib/technicianStatus.ts.
+  // Cada estado trae su "por qué" para que el color nunca aparezca mudo.
+  'techStatus.ago': 'hace {time}',
+
+  'techStatus.moving.label': 'En movimiento',
+  'techStatus.moving.reason': 'Rastreo al día · {speed} km/h',
+  'techStatus.moving.reasonNoSpeed': 'Rastreo al día',
+
+  'techStatus.idle.label': 'En sitio',
+  'techStatus.idle.reason': 'Rastreo al día · sin moverse {ago}',
+  'techStatus.idle.reasonNoTime': 'Rastreo al día · sin moverse',
+
+  'techStatus.no_signal.label': 'Sin señal',
+  'techStatus.no_signal.gpsOff': 'Apagó el GPS del teléfono',
+  'techStatus.no_signal.netOff': 'Sin datos ni Wi-Fi',
+  'techStatus.no_signal.perm': 'El permiso de ubicación no es «Permitir siempre»',
+  'techStatus.no_signal.roof': 'Bajo techo o sin cobertura · la app sigue abierta',
+
+  'techStatus.stopped.label': 'Rastreo detenido',
+  'techStatus.stopped.reason': 'La app dejó de reportar · último punto {ago}',
+  'techStatus.stopped.reasonNoTime': 'La app dejó de reportar',
+
+  'techStatus.offline.label': 'Sin conexión',
+  'techStatus.offline.reason': 'Sin señales de la app {ago} · hay que llamarlo',
+  'techStatus.offline.never': 'Nunca ha reportado desde que se instaló la app',
+
+  'techStatus.accident.label': 'ACCIDENTE',
+  'techStatus.accident.reason': 'Impacto detectado · revisar de inmediato',
+
+  'techStatus.noDevice.label': 'Sin dispositivo',
+  'techStatus.noDevice.reason': 'Falta vincular el teléfono escaneando el QR',
+
+  // ---- contadores por tono (deben leerse como el semáforo, no como categorías sueltas) ----
+  'techStatus.count.ok': 'App sirviendo',
+  'techStatus.count.warn': 'Sin señal',
+  'techStatus.count.down': 'Rastreo caído',
+
+  // ---- leyenda de colores ----
+  'techStatus.legend.title': 'Qué significa cada color',
+  'techStatus.legend.ok': 'Verde · la app está sirviendo',
+  'techStatus.legend.okDesc': 'Llegan posiciones al día. Da igual si va manejando o está parado en una instalación: el rastreo funciona y no hay nada que hacer.',
+  'techStatus.legend.warn': 'Ámbar · la app vive, pero el rastreo falla',
+  'techStatus.legend.warnDesc': 'El teléfono avisa que la app sigue abierta, pero no llegan posiciones. Al lado del nombre siempre dice el motivo exacto: GPS apagado, sin datos, permiso incompleto o bajo techo.',
+  'techStatus.legend.down': 'Rojo · el rastreo se cayó',
+  'techStatus.legend.downDesc': 'Ni posiciones ni señal de vida de la app: hay que llamar al técnico. En rojo aparece también un accidente detectado.',
+  'techStatus.legend.none': 'Gris · sin teléfono vinculado',
+  'techStatus.legend.noneDesc': 'El técnico existe en el sistema pero todavía no escaneó el QR de registro. No hay nada que rastrear.',
+
   // ---- lista de técnicos ----
   'tech.noDevice': 'Sin dispositivo',
   'tech.generateQr': 'Generar QR de registro',
@@ -901,6 +950,26 @@ export const es = {
   'admin.tab.activity': 'Actividad',
   'admin.tab.projects': 'Proyectos',
   'admin.tab.history': 'Historial',
+  'admin.tab.map': 'Mapa en vivo',
+
+  // ---- navegación lateral ----
+  'nav.collapse': 'Colapsar',
+  'nav.expand': 'Expandir menú',
+  'nav.closeMenu': 'Cerrar menú',
+  'nav.openMenu': 'Abrir menú',
+  'nav.hide': 'Ocultar menú',
+  'nav.showMenu': 'Mostrar menú',
+  'admin.section.overview': 'General',
+  'admin.section.manage': 'Gestión',
+  'admin.section.ops': 'Operación',
+  'admin.sub.stats': 'Estado del sistema y métricas globales',
+  'admin.sub.map': 'Ubicación de todos los técnicos en tiempo real',
+  'admin.sub.users': 'Cuentas, roles y accesos al sitio',
+  'admin.sub.technicians': 'Registro, vinculación de dispositivos y estado',
+  'admin.sub.companies': 'Empresas cliente y sus proyectos',
+  'admin.sub.activity': 'Registro de eventos y acciones recientes',
+  'admin.sub.projects': 'Proyectos activos por cliente',
+  'admin.sub.history': 'Recorridos y rutas por técnico y fecha',
 
   // ---- resumen / estadísticas (admin) ----
   'adminStats.confirmZones': '¿Borrar TODAS las zonas? Esta acción no se puede deshacer.',

@@ -16,6 +16,7 @@ import type { Locale } from 'date-fns'
 import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { describeStatus, type StatusSignals } from '@/lib/technicianStatus'
 import { toast } from 'sonner'
 import {
   deleteAllZones,
@@ -71,6 +72,8 @@ interface RouteRow {
   campaign_id: string | null
   am: number; pm: number; done: number; total: number
   techStatus: string
+  /** Señales crudas del semáforo; el descriptor se arma al renderizar. */
+  signals: StatusSignals
 }
 
 function dayLabel(d: string, t: TFunc, locale: Locale) {
@@ -147,17 +150,24 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
         .order('technician_name')
 
       const techIds = (data ?? []).map(r => r.technician_id).filter(Boolean) as string[]
-      let statusMap = new Map<string, string>()
+      let statusMap = new Map<string, any>()
+      let hbMap     = new Map<string, any>()
       if (techIds.length > 0) {
-        const { data: st } = await supabase
-          .from('technician_current_status')
-          .select('id, status')
-          .in('id', techIds)
-        statusMap = new Map(st?.map(s => [s.id, s.status]) ?? [])
+        // El latido es lo que permite explicar el ámbar en vez de solo pintarlo.
+        const [statusRes, hbRes] = await Promise.all([
+          supabase.from('technician_current_status')
+            .select('id, status, last_seen, last_speed, device_id').in('id', techIds),
+          supabase.from('technician_heartbeat')
+            .select('technician_id, gps_on, net_on, perm').in('technician_id', techIds),
+        ])
+        statusMap = new Map(statusRes.data?.map((s: any) => [s.id, s]) ?? [])
+        hbMap     = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
       }
 
       setRoutes((data ?? []).map(r => {
         const items = r.route_items as Array<{ franja: string; status: string }>
+        const cs = r.technician_id ? statusMap.get(r.technician_id) : undefined
+        const hb = r.technician_id ? hbMap.get(r.technician_id) : undefined
         return {
           id: r.id,
           technician_name: r.technician_name,
@@ -167,7 +177,17 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
           pm:    items.filter(i => i.franja === 'PM').length,
           done:  items.filter(i => i.status === 'completed').length,
           total: items.length,
-          techStatus: r.technician_id ? (statusMap.get(r.technician_id) ?? 'offline') : 'offline',
+          techStatus: cs?.status ?? 'offline',
+          signals: {
+            status:    cs?.status ?? 'offline',
+            lastSeen:  cs?.last_seen ?? null,
+            lastSpeed: cs?.last_speed ?? null,
+            // Ruta sin técnico vinculado: no hay nada que rastrear → gris.
+            hasDevice: r.technician_id ? cs?.device_id != null : false,
+            hbGpsOn:   hb?.gps_on ?? null,
+            hbNetOn:   hb?.net_on ?? null,
+            hbPerm:    hb?.perm ?? null,
+          },
         }
       }))
     } finally {
@@ -221,14 +241,6 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
     } finally {
       setClearingZones(false)
     }
-  }
-
-  const statusDot = {
-    moving:    'bg-success animate-pulse',
-    idle:      'bg-success',
-    stopped:   'bg-text-muted',
-    no_signal: 'bg-amber-500',
-    offline:   'bg-border',
   }
 
   const realtimeCfg = {
@@ -310,7 +322,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
           {/* Content */}
           {sideTab === 'techs' ? (
             selectedTechnicianId ? (
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 min-h-0 scroll-y">
                 <button
                   onClick={() => selectTechnician(null)}
                   className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-text-muted hover:text-text-primary hover:bg-surface-raised transition-colors border-b border-border-soft"
@@ -324,7 +336,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
               <TechnicianList className="flex-1 overflow-hidden" variant="leader" />
             )
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 scroll-y">
               {loading ? (
                 <div className="flex justify-center py-10">
                   <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -363,7 +375,9 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                     ) : (
                       <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                         <div className="divide-y divide-border-soft">
-                          {routes.map(r => (
+                          {routes.map(r => {
+                            const st = describeStatus(t, r.signals, locale)
+                            return (
                             <div
                               key={r.id}
                               onClick={() => r.technician_id && selectTechnician(r.technician_id)}
@@ -378,9 +392,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                               )}
                             >
                               <div className="flex items-center gap-2">
-                                <div className={cn('w-2 h-2 rounded-full flex-shrink-0',
-                                  statusDot[r.techStatus as keyof typeof statusDot] ?? 'bg-border'
-                                )} />
+                                <div className={cn('w-2 h-2 rounded-full flex-shrink-0', st.dot, st.pulse && 'animate-pulse')} />
                                 <p className="text-text-primary text-xs font-semibold flex-1 truncate">{r.technician_name}</p>
                                 {r.done > 0 && (
                                   <span className="text-xs text-success font-medium flex items-center gap-0.5">
@@ -388,6 +400,8 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                                   </span>
                                 )}
                               </div>
+                              {/* El motivo del color, siempre visible. */}
+                              <p className="text-text-muted text-xs truncate mt-0.5 pl-4">{st.reason}</p>
                               <div className="flex items-center gap-1.5 mt-1.5 pl-4">
                                 {r.am > 0 && (
                                   <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex items-center gap-1">
@@ -411,7 +425,8 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
                                 )}
                               </div>
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </motion.div>
                     )}

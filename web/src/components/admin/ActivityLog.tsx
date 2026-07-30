@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, Filter } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { RefreshCw, Filter, Activity } from 'lucide-react'
 import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
+import { fadeUp, stagger } from '@/lib/motion'
+import { Card } from '@/components/ui/Card'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/PageHeader'
 
 interface LogEntry {
   id: string
@@ -105,20 +110,18 @@ export function ActivityLog() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonRows rows={8} />
       ) : error ? (
         <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-xl px-4 py-3">
           {error}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-text-muted text-sm">
-          {t('adminLog.empty')}
-        </div>
+        <EmptyState icon={Activity} title={t('adminLog.empty')} />
       ) : (
-        <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        <Card className="overflow-hidden p-0">
+          {/* La tabla tiene columna de detalle libre: en angosto scrollea en X. */}
+          <div className="scroll-x">
+          <table className="w-full text-sm min-w-[620px]">
             <thead>
               <tr className="border-b border-border-soft">
                 <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colDateTime')}</th>
@@ -127,12 +130,13 @@ export function ActivityLog() {
                 <th className="text-left text-xs text-text-muted font-medium px-4 py-3">{t('adminLog.colDetail')}</th>
               </tr>
             </thead>
-            <tbody>
+            <motion.tbody variants={stagger(0.025)} initial="hidden" animate="visible">
               {filtered.map((entry, i) => (
-                <tr
+                <motion.tr
                   key={entry.id}
+                  variants={fadeUp}
                   className={cn(
-                    'border-b border-border-soft last:border-0 hover:bg-surface-raised transition-colors',
+                    'border-b border-border-soft last:border-0 hover:bg-surface-raised/70 transition-colors',
                     i % 2 === 0 ? '' : 'bg-base/30',
                   )}
                 >
@@ -153,16 +157,17 @@ export function ActivityLog() {
                   <td className="px-4 py-3 text-text-muted text-xs">
                     {getDetails(entry) || '—'}
                   </td>
-                </tr>
+                </motion.tr>
               ))}
-            </tbody>
+            </motion.tbody>
           </table>
+          </div>
           <div className="px-4 py-2 border-t border-border-soft">
             <p className="text-text-muted text-xs">
               {t('adminLog.showing', { filtered: filtered.length, total: logs.length })}
             </p>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   )

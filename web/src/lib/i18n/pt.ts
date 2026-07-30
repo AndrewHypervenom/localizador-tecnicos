@@ -166,6 +166,55 @@ export const pt: Record<keyof typeof es, string> = {
   'status.offline': 'Desconectado',
   'status.accident': 'ACIDENTE',
 
+  // ---- semáforo de estado (rótulo + motivo) ----
+  // Vocabulário ÚNICO para todo o site: consumido por lib/technicianStatus.ts.
+  // Cada estado traz o seu "porquê" para que a cor nunca apareça muda.
+  'techStatus.ago': 'há {time}',
+
+  'techStatus.moving.label': 'Em movimento',
+  'techStatus.moving.reason': 'Rastreamento em dia · {speed} km/h',
+  'techStatus.moving.reasonNoSpeed': 'Rastreamento em dia',
+
+  'techStatus.idle.label': 'No local',
+  'techStatus.idle.reason': 'Rastreamento em dia · parado {ago}',
+  'techStatus.idle.reasonNoTime': 'Rastreamento em dia · parado',
+
+  'techStatus.no_signal.label': 'Sem sinal',
+  'techStatus.no_signal.gpsOff': 'Desligou o GPS do telefone',
+  'techStatus.no_signal.netOff': 'Sem dados nem Wi-Fi',
+  'techStatus.no_signal.perm': 'A permissão de localização não é «Permitir sempre»',
+  'techStatus.no_signal.roof': 'Em local fechado ou sem cobertura · o app continua aberto',
+
+  'techStatus.stopped.label': 'Rastreamento parado',
+  'techStatus.stopped.reason': 'O app parou de reportar · último ponto {ago}',
+  'techStatus.stopped.reasonNoTime': 'O app parou de reportar',
+
+  'techStatus.offline.label': 'Sem conexão',
+  'techStatus.offline.reason': 'Sem sinais do app {ago} · é preciso ligar para ele',
+  'techStatus.offline.never': 'Nunca reportou desde que o app foi instalado',
+
+  'techStatus.accident.label': 'ACIDENTE',
+  'techStatus.accident.reason': 'Impacto detectado · verificar imediatamente',
+
+  'techStatus.noDevice.label': 'Sem dispositivo',
+  'techStatus.noDevice.reason': 'Falta vincular o telefone lendo o QR',
+
+  // ---- contadores por tom (devem ler-se como o semáforo, não como categorias soltas) ----
+  'techStatus.count.ok': 'App funcionando',
+  'techStatus.count.warn': 'Sem sinal',
+  'techStatus.count.down': 'Rastreamento caído',
+
+  // ---- legenda de cores ----
+  'techStatus.legend.title': 'O que significa cada cor',
+  'techStatus.legend.ok': 'Verde · o app está funcionando',
+  'techStatus.legend.okDesc': 'As posições chegam em dia. Não importa se está dirigindo ou parado numa instalação: o rastreamento funciona e não há nada a fazer.',
+  'techStatus.legend.warn': 'Âmbar · o app está vivo, mas o rastreamento falha',
+  'techStatus.legend.warnDesc': 'O telefone avisa que o app continua aberto, mas não chegam posições. Ao lado do nome sempre aparece o motivo exato: GPS desligado, sem dados, permissão incompleta ou local fechado.',
+  'techStatus.legend.down': 'Vermelho · o rastreamento caiu',
+  'techStatus.legend.downDesc': 'Nem posições nem sinal de vida do app: é preciso ligar para o técnico. Em vermelho aparece também um acidente detectado.',
+  'techStatus.legend.none': 'Cinza · sem telefone vinculado',
+  'techStatus.legend.noneDesc': 'O técnico existe no sistema mas ainda não leu o QR de cadastro. Não há nada para rastrear.',
+
   // ---- lista de técnicos ----
   'tech.noDevice': 'Sem dispositivo',
   'tech.generateQr': 'Gerar QR de registro',
@@ -902,6 +951,26 @@ export const pt: Record<keyof typeof es, string> = {
   'admin.tab.activity': 'Atividade',
   'admin.tab.projects': 'Projetos',
   'admin.tab.history': 'Histórico',
+  'admin.tab.map': 'Mapa ao vivo',
+
+  // ---- navegação lateral ----
+  'nav.collapse': 'Recolher',
+  'nav.expand': 'Expandir menu',
+  'nav.closeMenu': 'Fechar menu',
+  'nav.openMenu': 'Abrir menu',
+  'nav.hide': 'Ocultar menu',
+  'nav.showMenu': 'Mostrar menu',
+  'admin.section.overview': 'Geral',
+  'admin.section.manage': 'Gestão',
+  'admin.section.ops': 'Operação',
+  'admin.sub.stats': 'Estado do sistema e métricas globais',
+  'admin.sub.map': 'Localização de todos os técnicos em tempo real',
+  'admin.sub.users': 'Contas, funções e acessos ao site',
+  'admin.sub.technicians': 'Cadastro, vinculação de dispositivos e estado',
+  'admin.sub.companies': 'Empresas clientes e seus projetos',
+  'admin.sub.activity': 'Registro de eventos e ações recentes',
+  'admin.sub.projects': 'Projetos ativos por cliente',
+  'admin.sub.history': 'Percursos e rotas por técnico e data',
 
   // ---- resumo / estatísticas (admin) ----
   'adminStats.confirmZones': 'Excluir TODAS as zonas? Esta ação não pode ser desfeita.',

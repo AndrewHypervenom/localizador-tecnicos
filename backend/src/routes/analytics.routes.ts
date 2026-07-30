@@ -86,12 +86,18 @@ router.get('/trips/:id/route', async (req: Request, res: Response) => {
          to_timestamp(floor(extract(epoch from ts) / 5) * 5)::text  AS ts,
          ROUND(AVG(ST_Y(location::geometry))::numeric, 6)::float AS lat,
          ROUND(AVG(ST_X(location::geometry))::numeric, 6)::float AS lng,
-         ROUND(AVG(speed * 3.6)::numeric, 1)::float              AS speed_kmh,
+         -- location_events.speed es NULLABLE: un bucket entero sin velocidad
+         -- hacía AVG(...) = NULL y el front reventaba con
+         -- "Cannot read properties of null (reading 'toFixed')". 0 km/h es la
+         -- lectura correcta: sin dato de velocidad, no hubo movimiento medido.
+         ROUND(COALESCE(AVG(speed * 3.6), 0)::numeric, 1)::float  AS speed_kmh,
          ROUND(COALESCE(AVG(altitude), 0)::numeric, 1)::float    AS altitude,
          ROUND(COALESCE(AVG(bearing),  0)::numeric, 1)::float    AS bearing,
          CASE
-           WHEN MAX(speed * 3.6) < 30 THEN 'low'
-           WHEN MAX(speed * 3.6) < 60 THEN 'medium'
+           -- MAX(speed) también es NULL con todos los puntos sin velocidad, y
+           -- un CASE sin ELSE-cubierto devolvía speed_band NULL.
+           WHEN COALESCE(MAX(speed * 3.6), 0) < 30 THEN 'low'
+           WHEN COALESCE(MAX(speed * 3.6), 0) < 60 THEN 'medium'
            ELSE 'high'
          END                                                      AS speed_band
        FROM location_events
@@ -155,7 +161,10 @@ router.get('/technicians/:id/elevation', async (req: Request, res: Response) => 
          SELECT
            date_trunc('minute', ts)                    AS minute,
            AVG(altitude)                               AS altitude,
-           AVG(speed * 3.6)                            AS speed_kmh,
+           -- speed es NULLABLE: sin COALESCE, un minuto sin velocidad devolvía
+           -- speed_kmh = null y el tooltip de la gráfica reventaba al hacer
+           -- .toFixed() sobre null. El filtro de abajo solo exige altitude.
+           COALESCE(AVG(speed * 3.6), 0)               AS speed_kmh,
            AVG(ST_X(location::geometry))               AS avg_x,
            AVG(ST_Y(location::geometry))               AS avg_y,
            ROW_NUMBER() OVER (ORDER BY date_trunc('minute', ts)) AS rn

@@ -1,0 +1,13 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Localizador" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Pantalla inicial: fondo sólido de la marca mientras arranca Compose. -->
+    <style name="Theme.Localizador.Splash" parent="Theme.Localizador">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>

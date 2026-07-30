@@ -411,9 +411,14 @@ export function Reports() {
   ) ?? 0
 
   return (
-    <div className="min-h-screen bg-base text-text-primary">
+    /*
+     * `h-full scroll-y` y no `min-h-screen`: el documento no scrollea (ver
+     * index.css), asi que una pagina de alto libre necesita su propio
+     * contenedor de scroll o el contenido de abajo queda inalcanzable.
+     */
+    <div className="h-full scroll-y bg-base text-text-primary">
       {/* Top Nav */}
-      <div className="sticky top-0 z-50 bg-surface/95 backdrop-blur-sm border-b border-border-soft">
+      <div className="sticky top-0 z-50 glass border-b border-border-soft">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link

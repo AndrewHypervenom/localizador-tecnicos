@@ -1,0 +1,8 @@
+<resources>
+    <!-- Identidad heredada de la app React Native -->
+    <color name="brand_green">#FF00D632</color>
+    <color name="brand_green_dark">#FF00B82B</color>
+    <color name="background">#FF0A0A14</color>
+    <color name="surface">#FF141420</color>
+    <color name="ic_launcher_background">#FF11D452</color>
+</resources>

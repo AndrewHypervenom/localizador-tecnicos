@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Plus, Trash2, RefreshCw, X, Building2, FolderOpen,
   Loader2, ChevronDown, ChevronRight, Pencil, Check, Users, Clock,
@@ -8,6 +9,10 @@ import api from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
+import { collapse, SPRING, stagger } from '@/lib/motion'
+import { Card } from '@/components/ui/Card'
+import { SkeletonRows } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/ui/PageHeader'
 
 interface CampaignRow { id: string; name: string; is_active: boolean }
 interface CompanyRow {
@@ -300,42 +305,45 @@ export function CompaniesManagement() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonRows rows={5} />
       ) : error ? (
         <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-xl px-4 py-3">{error}</div>
       ) : companies.length === 0 ? (
-        <div className="text-center py-16 bg-surface border border-border-soft rounded-2xl">
-          <Building2 className="w-10 h-10 text-text-muted/30 mx-auto mb-3" />
-          <p className="text-text-primary font-medium text-sm">{t('adminCompanies.empty')}</p>
-          <p className="text-text-muted text-xs mt-1">{t('adminCompanies.emptyHint')}</p>
-        </div>
+        <EmptyState
+          icon={Building2}
+          title={t('adminCompanies.empty')}
+          description={t('adminCompanies.emptyHint')}
+        />
       ) : (
-        <div className="space-y-2">
+        <motion.div variants={stagger(0.05)} initial="hidden" animate="visible" className="space-y-2">
           {companies.map(co => {
             const isExpanded = expanded.has(co.id)
             const isDeleting = deletingId === co.id
 
             return (
-              <div key={co.id} className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
+              <Card key={co.id} className="overflow-hidden">
                 {/* Company row */}
                 <div className="flex items-center gap-3 px-4 py-4">
                   {/* Expand */}
-                  <button
+                  <motion.button
                     type="button"
                     onClick={() => toggleExpand(co.id)}
-                    className="text-text-muted hover:text-text-primary transition-colors flex-shrink-0"
+                    animate={{ rotate: isExpanded ? 90 : 0 }}
+                    transition={SPRING.snappy}
+                    className="text-text-muted hover:text-primary transition-colors flex-shrink-0"
+                    aria-expanded={isExpanded}
                   >
-                    {isExpanded
-                      ? <ChevronDown className="w-4 h-4" />
-                      : <ChevronRight className="w-4 h-4" />}
-                  </button>
+                    <ChevronRight className="w-4 h-4" />
+                  </motion.button>
 
                   {/* Icon */}
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <motion.div
+                    whileHover={{ scale: 1.08, rotate: -4 }}
+                    transition={SPRING.bouncy}
+                    className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"
+                  >
                     <Building2 className="w-5 h-5 text-primary" />
-                  </div>
+                  </motion.div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
@@ -411,14 +419,21 @@ export function CompaniesManagement() {
                 </div>
 
                 {/* Expanded: campaigns */}
+                <AnimatePresence initial={false}>
                 {isExpanded && (
-                  <div className="border-t border-border-soft bg-base/40">
+                  <motion.div
+                    variants={collapse}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="border-t border-border-soft bg-base/40 overflow-hidden"
+                  >
                     {co.campaigns.length === 0 ? (
                       <div className="px-14 py-4 text-text-muted text-xs">{t('adminCompanies.noCampaigns')}</div>
                     ) : (
                       <div className="divide-y divide-border-soft">
                         {co.campaigns.map(cp => (
-                          <div key={cp.id} className="flex items-center gap-3 px-14 py-3">
+                          <div key={cp.id} className="flex items-center gap-3 px-14 py-3 hover:bg-surface-raised/40 transition-colors">
                             <FolderOpen className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                             <span className="text-text-primary text-xs flex-1">{cp.name}</span>
                             <span className={cn(
@@ -433,12 +448,13 @@ export function CompaniesManagement() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 )}
-              </div>
+                </AnimatePresence>
+              </Card>
             )
           })}
-        </div>
+        </motion.div>
       )}
 
       {modalMode && (

@@ -102,7 +102,9 @@ function RoutePlayback({ points }: { points: RoutePoint[] }) {
       {segments.map((seg, i) => (
         <Polyline key={i} positions={seg.points} pathOptions={{ color: seg.color, weight: 4, opacity: 0.9 }} />
       ))}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-surface/95 backdrop-blur-sm border border-border-soft rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3">
+      {/* `max-w` + `flex-wrap`: en pantallas angostas la barra se reacomoda en
+          vez de desbordar el mapa por los lados. */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] max-w-[calc(100%-1.5rem)] glass-strong border border-border-soft rounded-2xl px-4 py-3 shadow-elev-3 flex items-center justify-center flex-wrap gap-3">
         <button onClick={() => { setPlayhead(0); setPlaying(false) }}
           className="p-1.5 rounded-lg hover:bg-surface-raised text-text-secondary hover:text-text-primary transition-colors">
           <SkipBack className="w-4 h-4" />
@@ -254,9 +256,15 @@ export function AdminHistory() {
   }
 
   return (
-    <div className="flex rounded-2xl overflow-hidden border border-border-soft bg-surface" style={{ height: 'calc(100vh - 180px)' }}>
-      {/* Panel izquierdo */}
-      <div className="w-72 flex-shrink-0 flex flex-col border-r border-border-soft">
+    /*
+     * Alto heredado del shell (`fullBleed`), no calculado a mano: antes era
+     * `calc(100vh - 180px)`, que quedaba desfasado cada vez que cambiaba el
+     * alto del encabezado y dejaba el panel cortado o con hueco.
+     * En pantallas angostas los dos paneles se apilan; en fila no caben.
+     */
+    <div className="flex flex-col lg:flex-row h-full overflow-hidden bg-surface">
+      {/* Panel izquierdo: lista de recorridos */}
+      <div className="w-full lg:w-72 flex-shrink-0 flex flex-col min-h-0 h-2/5 lg:h-full border-b lg:border-b-0 lg:border-r border-border-soft">
         <div className="p-4 space-y-3 border-b border-border-soft">
           <div>
             <label className="block text-xs text-text-muted mb-1">{t('common.technician')}</label>
@@ -333,7 +341,9 @@ export function AdminHistory() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* `min-h-0` es obligatorio: sin el, un hijo flex con overflow crece en
+            vez de scrollear y la lista se sale del panel. */}
+        <div className="flex-1 min-h-0 scroll-y p-3 space-y-2">
           {trips.map(trip => {
             const inProgress = trip.status !== 'completed'
             const durationLabel = trip.duration_min != null
@@ -412,12 +422,12 @@ export function AdminHistory() {
         </div>
       </div>
 
-      {/* Panel derecho */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      {/* Panel derecho: mapa + analitica del recorrido */}
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden relative">
         {selectedTrip && (
           <>
-            <div className="p-4 border-b border-border-soft bg-surface">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="p-4 border-b border-border-soft bg-surface flex-shrink-0">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
                   {selectedTrip.status !== 'completed' ? t('history.tripInProgress') : t('history.tripAnalysis')} — {format(parseISO(selectedTrip.started_at), "d MMMM yyyy, h:mm a", { locale: getDateLocale(lang) })}
                 </h2>
@@ -449,8 +459,8 @@ export function AdminHistory() {
                 )
               })()}
             </div>
-            <div className="flex-1 flex overflow-hidden">
-              <div className="flex-1 relative">
+            <div className="flex-1 min-h-0 flex flex-col xl:flex-row overflow-hidden">
+              <div className="flex-1 min-h-0 min-w-0 relative">
                 <MapContainer center={[14.0723, -87.2061]} zoom={12}
                   style={{ height: '100%', width: '100%' }}
                   zoomControl={false} attributionControl={false}>
@@ -458,7 +468,8 @@ export function AdminHistory() {
                   {routePoints.length > 0 && <RoutePlayback points={routePoints} />}
                 </MapContainer>
               </div>
-              <div className="w-64 flex-shrink-0 flex flex-col border-l border-border-soft bg-surface overflow-y-auto p-4 space-y-4">
+              {/* Analitica: columna al lado en pantallas anchas, franja abajo en angostas. */}
+              <div className="w-full xl:w-64 flex-shrink-0 flex flex-col min-h-0 max-h-[45%] xl:max-h-none border-t xl:border-t-0 xl:border-l border-border-soft bg-surface scroll-y p-4 space-y-4">
                 <div>
                   <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{t('history.elevation')}</h4>
                   <ElevationChart data={elevData} />

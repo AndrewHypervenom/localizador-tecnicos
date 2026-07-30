@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { describeStatus, type StatusSignals } from '@/lib/technicianStatus'
+import { StatusLegend } from '@/components/ui/StatusLegend'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 
 interface TechRouteRow {
@@ -16,6 +18,9 @@ interface TechRouteRow {
   total: number
   done: number
   techStatus: string
+  /** Señales crudas para explicar el color; el descriptor se arma al renderizar
+   *  para que el "hace X min" no se congele con el resultado de la consulta. */
+  signals: StatusSignals
 }
 
 function StatCard({ icon: Icon, label, value, color, sub }: {
@@ -64,17 +69,30 @@ export function LeaderStats() {
       if (routesError) throw routesError
 
       const techIds = (routesData ?? []).map(r => r.technician_id).filter(Boolean) as string[]
-      let statusMap = new Map<string, string>()
+      let statusMap = new Map<string, any>()
+      let hbMap     = new Map<string, any>()
       if (techIds.length > 0) {
-        const { data: statuses } = await supabase
-          .from('technician_current_status')
-          .select('id, status')
-          .in('id', techIds)
-        statusMap = new Map(statuses?.map(s => [s.id, s.status]) ?? [])
+        // El latido es lo que permite decir POR QUÉ un técnico está en ámbar
+        // (GPS apagado / sin datos / permiso incompleto) en vez de solo pintarlo.
+        const [statusRes, hbRes] = await Promise.all([
+          supabase
+            .from('technician_current_status')
+            .select('id, status, last_seen, last_speed, device_id')
+            .in('id', techIds),
+          supabase
+            .from('technician_heartbeat')
+            .select('technician_id, gps_on, net_on, perm')
+            .in('technician_id', techIds),
+        ])
+        statusMap = new Map(statusRes.data?.map(s => [s.id, s]) ?? [])
+        // El latido es opcional (APK antigua): si falta, el motivo cae al genérico.
+        hbMap = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
       }
 
       setRoutes((routesData ?? []).map(r => {
         const items = r.route_items as Array<{ franja: string; status: string }>
+        const cs = r.technician_id ? statusMap.get(r.technician_id) : undefined
+        const hb = r.technician_id ? hbMap.get(r.technician_id) : undefined
         return {
           id: r.id,
           technician_name: r.technician_name,
@@ -84,7 +102,17 @@ export function LeaderStats() {
           pm_count: items.filter(i => i.franja === 'PM').length,
           total: items.length,
           done: items.filter(i => i.status === 'completed').length,
-          techStatus: r.technician_id ? (statusMap.get(r.technician_id) ?? 'offline') : 'offline',
+          techStatus: cs?.status ?? 'offline',
+          signals: {
+            status:    cs?.status ?? 'offline',
+            lastSeen:  cs?.last_seen ?? null,
+            lastSpeed: cs?.last_speed ?? null,
+            // Una ruta sin técnico vinculado no tiene nada que rastrear: gris.
+            hasDevice: r.technician_id ? cs?.device_id != null : false,
+            hbGpsOn:   hb?.gps_on ?? null,
+            hbNetOn:   hb?.net_on ?? null,
+            hbPerm:    hb?.perm ?? null,
+          },
         }
       }))
     } catch (err: any) {
@@ -95,6 +123,10 @@ export function LeaderStats() {
   }
 
   useEffect(() => { load() }, [])
+
+  // El descriptor se arma aquí (no en load) para que el motivo con tiempo
+  // relativo — "sin moverse hace 4 minutos" — se recalcule en cada render.
+  const rows = routes.map(r => ({ ...r, st: describeStatus(t, r.signals, getDateLocale(lang)) }))
 
   const totalAM        = routes.reduce((s, r) => s + r.am_count, 0)
   const totalPM        = routes.reduce((s, r) => s + r.pm_count, 0)
@@ -165,21 +197,22 @@ export function LeaderStats() {
               <span className="text-xs text-success font-medium">{t('leaderStats.pctComplete', { pct: completionPct })}</span>
             )}
           </div>
+          <div className="px-4 py-2 border-b border-border-soft">
+            <StatusLegend />
+          </div>
           <div className="divide-y divide-border-soft">
-            {routes.map(route => (
+            {rows.map(route => (
               <div key={route.id} className="px-4 py-3.5 flex items-center gap-3">
                 <div className={cn(
                   'w-2 h-2 rounded-full flex-shrink-0',
-                  route.techStatus === 'moving'    ? 'bg-success animate-pulse' :
-                  route.techStatus === 'idle'      ? 'bg-success' :
-                  route.techStatus === 'stopped'   ? 'bg-text-muted' :
-                  route.techStatus === 'no_signal' ? 'bg-amber-500' :
-                  'bg-border'
+                  route.st.dot, route.st.pulse && 'animate-pulse',
                 )} />
                 <div className="flex-1 min-w-0">
                   <p className="text-text-primary text-sm font-medium truncate">{route.technician_name}</p>
+                  {/* El motivo del color, en la misma fila donde se ve el color. */}
+                  <p className="text-text-muted text-xs truncate">{route.st.reason}</p>
                   {route.technician_cedula && (
-                    <p className="text-text-muted text-xs">{t('leaderStats.cedula', { value: route.technician_cedula })}</p>
+                    <p className="text-text-muted/60 text-xs">{t('leaderStats.cedula', { value: route.technician_cedula })}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -204,18 +237,8 @@ export function LeaderStats() {
                     </span>
                   )}
                 </div>
-                <span className={cn(
-                  'text-xs px-2 py-0.5 rounded-full border flex-shrink-0',
-                  route.techStatus === 'moving'    ? 'bg-success/10 text-success border-success/20' :
-                  route.techStatus === 'idle'      ? 'bg-success/10 text-success border-success/20' :
-                  route.techStatus === 'stopped'   ? 'bg-text-muted/10 text-text-muted border-border' :
-                  route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                  'bg-surface-raised text-text-muted border-border'
-                )}>
-                  {route.techStatus === 'moving'    ? t('leaderStats.statusField') :
-                   route.techStatus === 'idle'      ? t('leaderStats.statusIdle') :
-                   route.techStatus === 'stopped'   ? t('leaderStats.statusStopped') :
-                   route.techStatus === 'no_signal' ? t('leaderStats.statusNoSignal') : t('leaderStats.statusOffline')}
+                <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0', route.st.pill)}>
+                  {route.st.label}
                 </span>
               </div>
             ))}

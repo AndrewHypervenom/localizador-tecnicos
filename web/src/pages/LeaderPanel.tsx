@@ -148,7 +148,7 @@ export function LeaderPanel() {
                 {openPanel ? t(PANEL_TITLE_KEYS[openPanel]) : ''}
               </h2>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 scroll-y">
               <div className="max-w-7xl mx-auto w-full px-4 py-6">
                 <RouteUpload onUploaded={() => setOpenPanel('routes')} />
               </div>
@@ -188,11 +188,11 @@ export function LeaderPanel() {
                 </h2>
               </div>
               {openPanel === 'history' ? (
-                <div className="flex-1 overflow-y-auto lg:overflow-hidden p-2 sm:p-4">
+                <div className="flex-1 min-h-0 scroll-y lg:overflow-hidden p-2 sm:p-4">
                   <LeaderHistory />
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 min-h-0 scroll-y">
                   <div className="p-4">
                     {openPanel === 'stats'       && <LeaderStats />}
                     {openPanel === 'routes'      && <RoutesView />}

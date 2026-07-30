@@ -986,7 +986,7 @@ export function Zones() {
             </div>
 
             {/* Lista */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <div className="flex-1 min-h-0 scroll-y p-3 space-y-2">
               {filteredZones.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 text-text-muted gap-3">
                   <Layers className="w-10 h-10 opacity-20" />
@@ -1115,7 +1115,7 @@ export function Zones() {
 
         {/* ── CREATING: formulario + dibujar/guardar ── */}
         {mode === 'creating' && (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 min-h-0 scroll-y p-4">
             {/* ── Visibilidad / scope de la zona ── */}
             <div className="mb-4 space-y-2">
               <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">{t('zonesPage.visibleFor')}</label>
@@ -1391,7 +1391,7 @@ export function Zones() {
 
         {/* ── EDITING: formulario + controles de vértices ── */}
         {mode === 'editing' && editingZone && (
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 min-h-0 scroll-y p-4">
             <div className="mb-4 space-y-2">
               <label className="block text-xs text-text-muted uppercase tracking-wider mb-1">{t('zonesPage.visibleFor')}</label>
 

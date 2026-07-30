@@ -10,6 +10,8 @@ import type { Locale } from 'date-fns'
 import { toast } from 'sonner'
 import { DateScroller, getWeekStart } from './DateScroller'
 import { getLeaderScope } from '@/lib/leaderContext'
+import { describeStatus, type StatusSignals } from '@/lib/technicianStatus'
+import { StatusLegend } from '@/components/ui/StatusLegend'
 import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 
 interface RouteItem {
@@ -23,6 +25,9 @@ interface TechRoute {
   id: string
   technician_name: string; technician_cedula: string | null; technician_id: string | null
   campaign_id: string | null; items: RouteItem[]; expanded: boolean; techStatus: string
+  /** Señales crudas del semáforo; el descriptor se arma al renderizar para que
+   *  el tiempo relativo del motivo no se congele con la consulta. */
+  signals: StatusSignals
 }
 
 interface Company  { id: string; name: string }
@@ -111,24 +116,47 @@ export function RoutesView() {
       if (error) throw error
 
       const techIds = (data ?? []).map(r => r.technician_id).filter(Boolean) as string[]
-      let statusMap = new Map<string, string>()
+      let statusMap = new Map<string, any>()
+      let hbMap     = new Map<string, any>()
       if (techIds.length > 0) {
-        const { data: st } = await supabase.from('technician_current_status').select('id, status').in('id', techIds)
-        statusMap = new Map(st?.map(s => [s.id, s.status]) ?? [])
+        // Junto al estado traemos el latido: es lo que convierte un punto ámbar
+        // mudo en "apagó el GPS" o "sin datos", que es lo accionable.
+        const [statusRes, hbRes] = await Promise.all([
+          supabase.from('technician_current_status')
+            .select('id, status, last_seen, last_speed, device_id').in('id', techIds),
+          supabase.from('technician_heartbeat')
+            .select('technician_id, gps_on, net_on, perm').in('technician_id', techIds),
+        ])
+        statusMap = new Map(statusRes.data?.map((s: any) => [s.id, s]) ?? [])
+        hbMap     = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
       }
 
-      setRoutes((data ?? []).map(r => ({
-        id: r.id, technician_name: r.technician_name,
-        technician_cedula: r.technician_cedula, technician_id: r.technician_id,
-        campaign_id: r.campaign_id,
-        items: [...(r.route_items as RouteItem[])].sort((a, b) => {
-          if (a.franja === 'AM' && b.franja !== 'AM') return -1
-          if (a.franja !== 'AM' && b.franja === 'AM') return 1
-          return a.order_index - b.order_index
-        }),
-        expanded: false,
-        techStatus: r.technician_id ? (statusMap.get(r.technician_id) ?? 'offline') : 'offline',
-      })))
+      setRoutes((data ?? []).map(r => {
+        const cs = r.technician_id ? statusMap.get(r.technician_id) : undefined
+        const hb = r.technician_id ? hbMap.get(r.technician_id) : undefined
+        return {
+          id: r.id, technician_name: r.technician_name,
+          technician_cedula: r.technician_cedula, technician_id: r.technician_id,
+          campaign_id: r.campaign_id,
+          items: [...(r.route_items as RouteItem[])].sort((a, b) => {
+            if (a.franja === 'AM' && b.franja !== 'AM') return -1
+            if (a.franja !== 'AM' && b.franja === 'AM') return 1
+            return a.order_index - b.order_index
+          }),
+          expanded: false,
+          techStatus: cs?.status ?? 'offline',
+          signals: {
+            status:    cs?.status ?? 'offline',
+            lastSeen:  cs?.last_seen ?? null,
+            lastSpeed: cs?.last_speed ?? null,
+            // Ruta sin técnico vinculado: no hay nada que rastrear → gris.
+            hasDevice: r.technician_id ? cs?.device_id != null : false,
+            hbGpsOn:   hb?.gps_on ?? null,
+            hbNetOn:   hb?.net_on ?? null,
+            hbPerm:    hb?.perm ?? null,
+          },
+        }
+      }))
     } catch (err: any) { setError(err.message) }
     finally { setLoading(false) }
   }, [selectedDate, filterCampaign])
@@ -262,9 +290,11 @@ export function RoutesView() {
         </div>
       ) : (
         <div className="space-y-3 overflow-y-auto max-h-[60vh] pr-1">
+          <StatusLegend />
           {routes.map(route => {
             const routeCampaign = campaigns.find(c => c.id === route.campaign_id)
             const routeCompany  = routeCampaign ? companies.find(c => c.id === routeCampaign.company_id) : null
+            const st = describeStatus(t, route.signals, locale)
             return (
               <div key={route.id} className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
                 {/* Route header */}
@@ -272,12 +302,7 @@ export function RoutesView() {
                   className="flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none hover:bg-surface-raised transition-colors"
                   onClick={() => toggleExpand(route.id)}
                 >
-                  <div className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0',
-                    route.techStatus === 'moving'    ? 'bg-success animate-pulse' :
-                    route.techStatus === 'idle'      ? 'bg-success' :
-                    route.techStatus === 'no_signal' ? 'bg-amber-500' :
-                    route.techStatus === 'stopped'   ? 'bg-text-muted' : 'bg-border'
-                  )} />
+                  <div className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', st.dot, st.pulse && 'animate-pulse')} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-text-primary text-sm font-semibold truncate">{route.technician_name}</p>
@@ -285,8 +310,10 @@ export function RoutesView() {
                         <span className="text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 flex-shrink-0">{t('routes.unlinked')}</span>
                       )}
                     </div>
+                    {/* El motivo del color, junto al color. */}
+                    <p className="text-text-muted text-xs truncate mt-0.5">{st.reason}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      {route.technician_cedula && <span className="text-text-muted text-xs">{t('routes.cedulaShort', { value: route.technician_cedula })}</span>}
+                      {route.technician_cedula && <span className="text-text-muted/60 text-xs">{t('routes.cedulaShort', { value: route.technician_cedula })}</span>}
                       {routeCompany && <span className="text-text-muted/60 text-xs">· {routeCompany.name}</span>}
                       {routeCampaign && <span className="text-primary/70 text-xs">· {routeCampaign.name}</span>}
                     </div>
@@ -310,14 +337,8 @@ export function RoutesView() {
                     )}
                   </div>
 
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0 hidden md:inline-flex',
-                    route.techStatus === 'moving'    ? 'bg-success/10 text-success border-success/20' :
-                    route.techStatus === 'idle'      ? 'bg-success/10 text-success border-success/20' :
-                    route.techStatus === 'no_signal' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
-                    route.techStatus === 'stopped'   ? 'bg-text-muted/10 text-text-muted border-border' :
-                    'bg-surface-raised text-text-muted border-border'
-                  )}>
-                    {route.techStatus === 'moving' ? t('leaderStats.statusField') : route.techStatus === 'idle' ? t('leaderStats.statusIdle') : route.techStatus === 'no_signal' ? t('leaderStats.statusNoSignal') : route.techStatus === 'stopped' ? t('leaderStats.statusStopped') : t('leaderStats.statusOffline')}
+                  <span className={cn('text-xs px-2 py-0.5 rounded-full border flex-shrink-0 hidden md:inline-flex', st.pill)}>
+                    {st.label}
                   </span>
 
                   <div className="flex items-center gap-1 flex-shrink-0">

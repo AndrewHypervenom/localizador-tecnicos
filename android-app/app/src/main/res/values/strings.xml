@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Localizador PositivoS+</string>
+
+    <!-- Notificación persistente del servicio de rastreo -->
+    <string name="channel_tracking_name">Rastreo activo</string>
+    <string name="channel_tracking_desc">Aviso permanente mientras se envía la ubicación. No se puede ocultar: es un requisito de Android para rastrear en segundo plano.</string>
+    <string name="channel_alerts_name">Avisos del rastreo</string>
+    <string name="channel_alerts_desc">Avisa cuando algo interrumpe la localización (GPS apagado, permiso retirado, sin conexión).</string>
+
+    <string name="notif_tracking_title">Localizador PositivoS+ activo</string>
+    <string name="notif_tracking_body">Enviando ubicación en segundo plano</string>
+</resources>

@@ -56,10 +56,11 @@ export function ChangePassword() {
   }
 
   return (
-    <div className="min-h-screen bg-base flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-success/5 rounded-full blur-3xl" />
+    // `h-full scroll-y`: ver Login — el documento no scrollea por diseño.
+    <div className="h-full scroll-y bg-base flex items-center justify-center p-4">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-aurora" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl animate-aurora [animation-delay:-9s]" />
       </div>
 
       <div className="absolute top-4 right-4 z-10">

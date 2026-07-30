@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Plus, RefreshCw, Trash2, Edit2, QrCode,
   Loader2, Smartphone, WifiOff, Search, X,
@@ -17,6 +18,9 @@ import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
 import { to12h } from '@/components/ui/TimeSelect'
 import { parseShift } from '@/lib/geo'
+import { fadeUp, stagger } from '@/lib/motion'
+import { Card } from '@/components/ui/Card'
+import { SkeletonRows } from '@/components/ui/Skeleton'
 
 type Technician = TechnicianEditable
 
@@ -408,9 +412,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-7 h-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
+        <SkeletonRows rows={7} />
       ) : error ? (
         <div className="bg-danger/10 border border-danger/30 text-danger text-sm rounded-xl px-4 py-3">{error}</div>
       ) : filtered.length === 0 ? (
@@ -433,9 +435,9 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
           )}
         </div>
       ) : (
-        <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <Card className="overflow-hidden p-0">
+          <div className="scroll-x">
+            <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="border-b border-border-soft bg-base/50">
                   <th className="px-4 py-3 w-8">
@@ -461,7 +463,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <motion.tbody variants={stagger(0.03)} initial="hidden" animate="visible">
                 {filtered.map(tech => {
                   const st = statuses[tech.id]
                   const cfg = STATUS_CFG[st?.status ?? 'offline'] ?? STATUS_CFG['offline']
@@ -471,7 +473,7 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                   const isSelected = selectedIds.has(tech.id)
 
                   return (
-                    <tr key={tech.id} className={cn(
+                    <motion.tr key={tech.id} variants={fadeUp} className={cn(
                       'border-b border-border-soft/60 last:border-0 transition-colors hover:bg-surface-raised/50',
                       !tech.active && 'opacity-50',
                       isSelected && 'bg-danger/5',
@@ -624,13 +626,13 @@ export function TechnicianManagement({ onOpenWizard }: { onOpenWizard?: () => vo
                           </button>
                         </div>
                       </td>
-                    </tr>
+                    </motion.tr>
                   )
                 })}
-              </tbody>
+              </motion.tbody>
             </table>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Modals */}

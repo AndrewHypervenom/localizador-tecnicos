@@ -465,8 +465,8 @@ export function AlertsPanel({ className }: AlertsPanelProps) {
         </div>
       </div>
 
-      {/* Lista */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {/* Lista — `min-h-0` para que scrollee dentro del panel flex. */}
+      <div className="flex-1 min-h-0 scroll-y p-3 space-y-2">
         {unified.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-text-muted">
             <BellOff className="w-8 h-8 mb-2 opacity-30" />

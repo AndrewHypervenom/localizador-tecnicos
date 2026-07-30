@@ -175,13 +175,9 @@ function computeStatus(
   return 'offline'
 }
 
-/** Motivo legible de un estado 'no_signal', según el último latido. */
-export function noSignalReason(tech: Pick<TechnicianState, 'hbGpsOn' | 'hbNetOn' | 'hbPerm'>): string {
-  if (tech.hbGpsOn === false) return 'App activa — GPS apagado'
-  if (tech.hbNetOn === false) return 'App activa — sin datos/Wi-Fi'
-  if (tech.hbPerm && tech.hbPerm !== 'full') return 'App activa — permiso incompleto'
-  return 'App activa — sin señal GPS'
-}
+// El motivo legible de 'no_signal' vivía aquí con los textos en español fijos
+// (se saltaba el i18n) y solo lo usaba un panel. Ahora es parte del descriptor
+// único de estado: ver `describeStatus` en @/lib/technicianStatus.
 
 export const useTrackingStore = create<TrackingStore>()(
   immer((set) => ({

@@ -1,45 +1,16 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useTrackingStore, TechnicianState, TechnicianStatus } from '@/store/trackingStore'
+import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
 import { useZonesStore } from '@/store/zonesStore'
 import { getZonesForPoint } from '@/lib/geoUtils'
-import { Battery, MapPin, Wifi, WifiOff, AlertTriangle, ChevronRight, UserPlus, QrCode } from 'lucide-react'
+import { Battery, MapPin, ChevronRight, UserPlus, QrCode } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatDistanceToNow } from 'date-fns'
 import { QrCodeModal } from '@/components/modals/QrCodeModal'
 import { OnboardingWizard } from '@/components/admin/OnboardingWizard'
 import { TechnicianRegistrationModal } from '@/components/modals/TechnicianRegistrationModal'
+import { StatusLegend } from '@/components/ui/StatusLegend'
+import { describeStatus, type StatusDescriptor } from '@/lib/technicianStatus'
 import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
-
-export const STATUS_LABEL_KEYS: Record<TechnicianStatus, string> = {
-  moving:    'status.moving',
-  idle:      'status.idle',
-  stopped:   'status.stopped',
-  no_signal: 'status.no_signal',
-  offline:   'status.offline',
-  accident:  'status.accident',
-}
-
-const STATUS_COLORS: Record<TechnicianStatus, string> = {
-  moving:    'text-success',
-  // 'idle' = quieto pero con GPS/app al día (todo bien). Verde, NO ámbar: el ámbar
-  // lo reservamos para estados de atención (no_signal/stopped) y los líderes lo
-  // confundían con "desconectado". Se distingue de 'moving' por el punto sin parpadeo.
-  idle:      'text-success',
-  stopped:   'text-warning/60',
-  no_signal: 'text-amber-500',
-  offline:   'text-text-muted',
-  accident:  'text-danger animate-pulse',
-}
-
-const STATUS_DOT: Record<TechnicianStatus, string> = {
-  moving:    'bg-success animate-pulse',
-  idle:      'bg-success',
-  stopped:   'bg-warning/50',
-  no_signal: 'bg-amber-500',
-  offline:   'bg-surface-raised',
-  accident:  'bg-danger animate-pulse',
-}
 
 function BatteryIndicator({ level }: { level?: number }) {
   if (level == null) return <span className="text-text-muted text-xs">--</span>
@@ -54,18 +25,16 @@ function BatteryIndicator({ level }: { level?: number }) {
 
 interface TechnicianRowProps {
   tech: TechnicianState
+  /** Color + etiqueta + motivo, ya resueltos por la lista (mismo criterio que el contador). */
+  st: StatusDescriptor
   onQrClick: (tech: TechnicianState) => void
 }
 
-function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
-  const { t, lang } = useI18n()
+function TechnicianRow({ tech, st, onQrClick }: TechnicianRowProps) {
+  const { t } = useI18n()
   const { selectTechnician, selectedTechnicianId } = useTrackingStore()
   const { zones } = useZonesStore()
   const isSelected  = selectedTechnicianId === tech.id
-  const speedKmh    = tech.lastSpeed ? Math.round(tech.lastSpeed * 3.6) : 0
-  const lastSeen    = tech.lastSeen
-    ? formatDistanceToNow(new Date(tech.lastSeen), { addSuffix: true, locale: getDateLocale(lang) })
-    : t('common.noData')
   const noDevice    = !tech.deviceId
 
   const currentZones = tech.lat && tech.lng
@@ -100,7 +69,7 @@ function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
           </div>
           <span className={cn(
             'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-base',
-            STATUS_DOT[tech.status]
+            st.dot, st.pulse && 'animate-pulse'
           )} />
         </div>
 
@@ -110,15 +79,9 @@ function TechnicianRow({ tech, onQrClick }: TechnicianRowProps) {
             <span className="font-semibold text-text-primary text-sm truncate">{tech.name}</span>
             <BatteryIndicator level={tech.battery} />
           </div>
-          <div className="flex items-center justify-between mt-0.5">
-            <span className={cn('text-xs font-medium', STATUS_COLORS[tech.status])}>
-              {noDevice
-                ? <span className="text-warning">{t('tech.noDevice')}</span>
-                : <>{t(STATUS_LABEL_KEYS[tech.status])}{tech.status === 'moving' && speedKmh > 0 && ` • ${speedKmh} km/h`}</>
-              }
-            </span>
-            <span className="text-xs text-text-muted">{noDevice ? '' : lastSeen}</span>
-          </div>
+          <span className={cn('text-xs font-medium', st.text)}>{st.label}</span>
+          {/* El motivo SIEMPRE visible: sin esto el color es una adivinanza. */}
+          <p className="text-xs text-text-muted leading-tight mt-0.5">{st.reason}</p>
           {currentZones.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {currentZones.map((z) => (
@@ -163,7 +126,7 @@ interface TechnicianListProps {
 }
 
 export function TechnicianList({ className, variant = 'admin' }: TechnicianListProps) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { technicians } = useTrackingStore()
   const techList = Object.values(technicians)
 
@@ -176,17 +139,22 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
     setQrModalOpen(true)
   }
 
-  const sortedTechs = [...techList].sort((a, b) => {
-    const order: Record<TechnicianStatus, number> = {
-      accident: 0, moving: 1, idle: 2, stopped: 3, no_signal: 4, offline: 5,
-    }
-    return (order[a.status] ?? 6) - (order[b.status] ?? 6)
-  })
+  // Descriptor por técnico, calculado una vez: ordena y cuenta con el MISMO
+  // criterio con el que se pinta cada fila, así el contador nunca contradice a
+  // los puntos de color que el líder tiene debajo.
+  const described = techList.map((tech) => ({
+    tech,
+    st: describeStatus(t, { ...tech, hasDevice: !!tech.deviceId }, getDateLocale(lang)),
+  }))
 
+  // Lo que exige acción va primero: accidente → sin conexión → sin señal → ok.
+  const sortedTechs = [...described].sort((a, b) => a.st.order - b.st.order)
+
+  // Los contadores son los mismos 3 tonos del semáforo, no categorías inventadas.
   const counts = {
-    active:   techList.filter((t) => t.status === 'moving' || t.status === 'idle').length,
-    inactive: techList.filter((t) => t.status === 'stopped' || t.status === 'no_signal' || t.status === 'offline').length,
-    alert:    techList.filter((t) => t.status === 'accident').length,
+    ok:   described.filter((d) => d.st.tone === 'ok').length,
+    warn: described.filter((d) => d.st.tone === 'warn').length,
+    down: described.filter((d) => d.st.tone === 'down').length,
   }
 
   return (
@@ -207,24 +175,29 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-success/10 rounded-lg px-2 py-1.5 text-center">
-              <div className="text-success font-mono font-bold text-lg">{counts.active}</div>
-              <div className="text-success/70 text-xs">{t('tech.activeCount')}</div>
+              <div className="text-success font-mono font-bold text-lg">{counts.ok}</div>
+              <div className="text-success/70 text-xs">{t('techStatus.count.ok')}</div>
             </div>
-            <div className="bg-text-muted/10 rounded-lg px-2 py-1.5 text-center">
-              <div className={cn('font-mono font-bold text-lg', counts.inactive > 0 ? 'text-warning/70' : 'text-text-muted')}>{counts.inactive}</div>
-              <div className="text-text-muted/70 text-xs">{t('status.stopped')}</div>
+            <div className="bg-warning/10 rounded-lg px-2 py-1.5 text-center">
+              <div className={cn('font-mono font-bold text-lg', counts.warn > 0 ? 'text-warning' : 'text-text-muted')}>{counts.warn}</div>
+              <div className="text-warning/70 text-xs">{t('techStatus.count.warn')}</div>
             </div>
             <div className="bg-danger/10 rounded-lg px-2 py-1.5 text-center">
-              <div className={cn('font-mono font-bold text-lg', counts.alert > 0 ? 'text-danger animate-pulse' : 'text-text-muted')}>
-                {counts.alert}
+              <div className={cn('font-mono font-bold text-lg', counts.down > 0 ? 'text-danger' : 'text-text-muted')}>
+                {counts.down}
               </div>
-              <div className="text-xs text-text-muted">{t('tech.alertsCount')}</div>
+              <div className="text-danger/70 text-xs">{t('techStatus.count.down')}</div>
             </div>
           </div>
         </div>
 
-        {/* Lista */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* Leyenda: la referencia de qué significa cada color, siempre a mano. */}
+        <div className="px-3 pt-3">
+          <StatusLegend />
+        </div>
+
+        {/* Lista — `min-h-0` para que scrollee dentro del panel flex. */}
+        <div className="flex-1 min-h-0 scroll-y p-3 space-y-2">
           {sortedTechs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-text-muted gap-2">
               <MapPin className="w-8 h-8 opacity-30" />
@@ -238,8 +211,8 @@ export function TechnicianList({ className, variant = 'admin' }: TechnicianListP
             </div>
           ) : (
             <AnimatePresence>
-              {sortedTechs.map((tech) => (
-                <TechnicianRow key={tech.id} tech={tech} onQrClick={openQrForTech} />
+              {sortedTechs.map(({ tech, st }) => (
+                <TechnicianRow key={tech.id} tech={tech} st={st} onQrClick={openQrForTech} />
               ))}
             </AnimatePresence>
           )}

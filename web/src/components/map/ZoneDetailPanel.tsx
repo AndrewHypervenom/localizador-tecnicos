@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useTrackingStore } from '@/store/trackingStore'
 import { pointInPolygon } from '@/lib/geoUtils'
+import { describeStatus } from '@/lib/technicianStatus'
 import { reverseGeocode } from '@/lib/geocoding'
 import { cn } from '@/lib/utils'
 import type { Zone } from '@/types/zones'
@@ -42,21 +43,6 @@ function areaKm2(coords: [number, number][]): number {
     area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2))
   }
   return Math.abs((area * R * R) / 2)
-}
-
-const STATUS_DOT: Record<string, string> = {
-  moving:   'bg-success animate-pulse',
-  idle:     'bg-success',
-  stopped:  'bg-text-muted',
-  offline:  'bg-danger',
-  accident: 'bg-danger animate-pulse',
-}
-const STATUS_LABEL_KEY: Record<string, string> = {
-  moving:   'status.moving',
-  idle:     'status.idle',
-  stopped:  'zone.statusStopped',
-  offline:  'status.offline',
-  accident: 'zone.statusAccident',
 }
 
 interface Props {
@@ -207,23 +193,22 @@ export function ZoneDetailPanel({ zone, onClose, className, actions }: Props) {
           <p className="text-xs text-text-muted/60">{t('zone.noTechsInZone')}</p>
         ) : (
           <div className="space-y-1.5">
-            {techsInside.map(tech => (
-              <div key={tech.id} className="flex items-center gap-2 bg-base/50 rounded-lg px-2.5 py-1.5">
-                <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', STATUS_DOT[tech.status] ?? 'bg-text-muted')} />
-                <span className="text-xs text-text-primary font-medium truncate flex-1">{tech.name}</span>
-                <span className={cn(
-                  'text-[10px] flex-shrink-0',
-                  tech.status === 'moving' || tech.status === 'idle' ? 'text-success' : 'text-text-muted',
-                )}>
-                  {t(STATUS_LABEL_KEY[tech.status] ?? 'status.offline')}
-                </span>
-                {tech.lastSpeed != null && tech.lastSpeed > 0.5 && (
-                  <span className="text-[10px] text-warning font-mono flex-shrink-0 ml-1">
-                    {(tech.lastSpeed * 3.6).toFixed(0)} km/h
-                  </span>
-                )}
-              </div>
-            ))}
+            {techsInside.map(tech => {
+              const st = describeStatus(t, { ...tech, hasDevice: !!tech.deviceId }, getDateLocale(lang))
+              return (
+                <div key={tech.id} className="flex items-center gap-2 bg-base/50 rounded-lg px-2.5 py-1.5"
+                     title={`${st.label} · ${st.reason}`}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', st.dot, st.pulse && 'animate-pulse')} />
+                  <span className="text-xs text-text-primary font-medium truncate flex-1">{tech.name}</span>
+                  <span className={cn('text-[10px] flex-shrink-0', st.text)}>{st.label}</span>
+                  {tech.lastSpeed != null && tech.lastSpeed > 0.5 && (
+                    <span className="text-[10px] text-warning font-mono flex-shrink-0 ml-1">
+                      {(tech.lastSpeed * 3.6).toFixed(0)} km/h
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

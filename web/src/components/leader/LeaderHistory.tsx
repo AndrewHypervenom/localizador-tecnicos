@@ -353,7 +353,7 @@ export function LeaderHistory() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-72 lg:max-h-none">
+        <div className="flex-1 min-h-0 scroll-y p-3 space-y-2 max-h-72 lg:max-h-none">
           {trips.map(trip => {
             const inProgress = trip.status !== 'completed'
             const durationLabel = trip.duration_min != null

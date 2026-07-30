@@ -3,9 +3,11 @@ import { MapContainer, useMap, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import api from '@/lib/api'
 import { format } from 'date-fns'
+import type { Locale } from 'date-fns'
 import { Play, Pause, SkipBack } from 'lucide-react'
-import { useI18n, getDateLocale } from '@/lib/i18n/i18n'
+import { useI18n, getDateLocale, type TFunc } from '@/lib/i18n/i18n'
 import { useTrackingStore, TechnicianState } from '@/store/trackingStore'
+import { describeStatus } from '@/lib/technicianStatus'
 import { cleanRoute } from '@/lib/routeFilters'
 import { SpeedHeatmap } from './SpeedHeatmap'
 import { ZonesLayer } from './ZonesLayer'
@@ -32,24 +34,29 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-const STATUS_COLORS: Record<string, string> = {
-  moving:    '#10B981',
-  // 'idle' (quieto pero activo) = verde como 'moving': todo bien, NO ámbar. En el
-  // mapa se distingue de 'moving' por la flecha de rumbo que solo dibuja 'moving'.
-  idle:      '#10B981',
-  stopped:   '#64748B',
-  no_signal: '#F97316',
-  offline:   '#1E1E30',
-  accident:  '#EF4444',
+/** El nombre del técnico viene de la carga de Excel: se escapa antes de inyectarlo. */
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ))
 }
 
-function createTechMarkerIcon(tech: TechnicianState): L.DivIcon {
+function createTechMarkerIcon(tech: TechnicianState, t: TFunc, locale: Locale): L.DivIcon {
+  // Mismo semáforo que las listas: el pin del mapa y la fila del panel lateral no
+  // pueden mostrar colores distintos para el mismo técnico. Antes el mapa usaba
+  // su propia paleta (naranja #F97316 para no_signal, casi-negro para offline)
+  // que no coincidía con ninguna otra pantalla.
+  const st = describeStatus(t, { ...tech, hasDevice: !!tech.deviceId }, locale)
   const speedKmh = tech.lastSpeed ? Math.round(tech.lastSpeed * 3.6) : 0
   const speedText = tech.status === 'moving' ? ` • ${speedKmh} km/h` : ''
-  const color = STATUS_COLORS[tech.status] ?? '#64748B'
+  const color = st.hex
+
+  // El motivo va en el title: en el mapa no cabe como texto, pero al pasar el
+  // cursor el líder ve por qué el pin está de ese color sin abrir la ficha.
+  const tip = escapeHtml(`${tech.name} — ${st.label} · ${st.reason}`)
 
   const html = `
-    <div class="tech-marker">
+    <div class="tech-marker" title="${tip}">
       <div class="tech-marker-dot ${tech.status}" style="background:${color}; transform: rotate(${tech.bearing ?? 0}deg)">
         ${tech.status === 'moving' ? `<div style="
           position:absolute; top:-4px; left:50%; transform:translateX(-50%);
@@ -57,7 +64,7 @@ function createTechMarkerIcon(tech: TechnicianState): L.DivIcon {
           border-right:4px solid transparent; border-bottom:6px solid ${color};
         "></div>` : ''}
       </div>
-      <div class="tech-marker-label">${tech.name.split(' ')[0]}${speedText}</div>
+      <div class="tech-marker-label">${escapeHtml(tech.name.split(' ')[0])}${speedText}</div>
     </div>
   `
 
@@ -90,6 +97,8 @@ function MapSizeInvalidator() {
 // Componente interno que gestiona los marcadores imperativamente
 function MarkersLayer() {
   const { technicians, selectedTechnicianId, selectTechnician } = useTrackingStore()
+  const { t, lang } = useI18n()
+  const locale = getDateLocale(lang)
   const map = useMap()
   const markersRef  = useRef<Record<string, L.Marker>>({})
   const prevTechRef = useRef<Record<string, TechnicianState>>({})
@@ -111,9 +120,9 @@ function MarkersLayer() {
         const posChanged = prevTech?.lat !== tech.lat || prevTech?.lng !== tech.lng
         const stateChanged = prevTech?.status !== tech.status || prevTech?.bearing !== tech.bearing || prevTech?.lastSpeed !== tech.lastSpeed
         if (posChanged) existing.setLatLng(latlng)
-        if (posChanged || stateChanged) existing.setIcon(createTechMarkerIcon(tech))
+        if (posChanged || stateChanged) existing.setIcon(createTechMarkerIcon(tech, t, locale))
       } else {
-        const icon = createTechMarkerIcon(tech)
+        const icon = createTechMarkerIcon(tech, t, locale)
         const marker = L.marker(latlng, { icon })
         marker.on('click', () => selectTechnician(tech.id))
         marker.addTo(map)
@@ -130,7 +139,7 @@ function MarkersLayer() {
     })
 
     prevTechRef.current = technicians
-  }, [technicians, map, selectTechnician])
+  }, [technicians, map, selectTechnician, t, locale])
 
   // Ref para acceder a technicians sin disparar el efecto en cada actualización de posición
   const techniciansRef = useRef(technicians)
