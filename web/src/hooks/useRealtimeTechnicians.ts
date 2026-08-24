@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useTrackingStore } from '@/store/trackingStore'
 import type { TechnicianState } from '@/store/trackingStore'
+import { isDemoMode, buildDemoTechnicians } from '@/lib/demoData'
 import { toast } from 'sonner'
 
 let audioCtx: AudioContext | null = null
@@ -68,6 +69,29 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
   const alertsFnRef = useRef<() => Promise<void>>()
 
   useEffect(() => {
+    // ── Modo demo (solo `npm run dev` + `?demo=1`; ver `lib/demoData.ts`) ──
+    // Se siembra la flota sintética y se corta AQUÍ, antes de abrir ninguna
+    // consulta ni suscripción. Que el corte esté arriba del todo es lo que
+    // garantiza que el panel en demo no lee ni escribe nada de la flota real:
+    // no hay forma de que una captura mezcle las dos cosas.
+    // El `import.meta.env.DEV` explícito NO es redundante con el que hay dentro
+    // de `isDemoMode()`: Vite lo sustituye por el literal `false` al compilar, y
+    // sólo así Rollup ve un `false && …` y puede tirar el bloque entero — y con
+    // él los nombres ficticios, que si no viajan como datos muertos dentro del
+    // bundle de producción (comprobado: sin esto aparecen al grepear `dist/`).
+    if (import.meta.env.DEV && isDemoMode()) {
+      console.warn(
+        '[DEMO] Flota sintética con personas ficticias. Esta pantalla NO refleja ' +
+        'el estado real de ningún técnico ni de ninguna empresa.'
+      )
+      const seed = () => replaceTechnicians(buildDemoTechnicians())
+      seed()
+      // Re-sembrar con marcas de tiempo nuevas mantiene coherente el "hace X
+      // min" de cada fila mientras la pestaña sigue abierta.
+      const demoInterval = setInterval(() => { if (!document.hidden) seed() }, 30_000)
+      return () => clearInterval(demoInterval)
+    }
+
     async function loadInitialState() {
       const ids = filterRef.current
       if (ids === null) return
