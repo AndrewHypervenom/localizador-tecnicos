@@ -106,7 +106,12 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           deviceId:     row.device_id,
           phone:        row.phone,
           supervisorId: row.supervisor_id,
-          lastSeen:     row.last_seen,
+          // `last_contact` lo sella el SERVIDOR al insertar; `last_seen` lo sella
+          // el TELÉFONO. Con el reloj del aparato desajustado (medido en campo:
+          // hasta 72 h de desfase) el técnico salía desconectado enviando puntos
+          // con normalidad. Se prefiere el reloj del servidor y solo se cae a
+          // `last_seen` si la vista aún no expone la columna.
+          lastSeen:     row.last_contact ?? row.last_seen,
           lat:          row.lat,
           lng:          row.lng,
           lastSpeed:    row.last_speed,

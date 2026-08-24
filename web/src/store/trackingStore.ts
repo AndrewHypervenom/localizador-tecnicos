@@ -10,14 +10,26 @@ export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'no_signal' | 'of
 // puntos en lotes cada 30 s: el punto más reciente puede llegar con hasta ~35 s
 // (en movimiento) o ~65 s (detenida) de antigüedad SIN que nada esté mal. Los
 // umbrales deben cubrir ese desfase para no parpadear entre estados.
+// OJO: estos umbrales tienen que ir SIEMPRE alineados con los de la vista
+// `technician_current_status` en la base. El front no consume el `status` que
+// calcula la vista: lo recalcula aquí (ver `computeStatus`), así que si los dos
+// juegos de números se separan, el sitio contradice a la base y gana el front.
+// Pasó el 2026-08-24: se corrigió la vista y en pantalla no cambió nada.
 export const STATUS_THRESHOLDS = {
-  MOVING_FRESH_S:    45,    // captura 5s + flush 30s + latencia → 45s evita parpadeo verde→ámbar
-  IDLE_S:            150,   // captura 30s + flush 30s + un fix perdido → sigue "Inactivo", no "Detenido"
-  STOPPED_S:         900,   // < 15 min → stopped (sin movimiento, pero visto hace poco)
-  // Tras 15 min sin punto GPS: si la app sigue latiendo (heartbeat fresco dentro
-  // de este lapso) → 'no_signal' (app viva sin señal); si no → 'offline' (muerta).
-  // 1200 s = 20 min, alineado con HEARTBEAT_STALE_MIN del backend.
-  HEARTBEAT_FRESH_S: 1200,
+  MOVING_FRESH_S:    90,    // = '00:01:30' de la vista. Cubre el lote de 30 s + red.
+  IDLE_S:            300,   // = '00:05:00' de la vista. Por debajo estaba en 150 s y
+                            // un técnico entre 2.5 y 5 min salía ÁMBAR en el sitio y
+                            // verde en la base: la misma fila con dos colores.
+  // 8 h = "envió algo hoy" → ÁMBAR, no rojo. Subido desde 15 min el 2026-08-24:
+  // la flota está en la APK 1.2.8, cuyo servicio de subida lo duerme el SO
+  // durante horas mientras el técnico trabaja con normalidad. Con 15 min, un
+  // técnico normal caía a 'offline' (rojo, "hay que llamarlo") y los líderes
+  // dejaron de creerse el color. PARCHE: estrechar cuando la flota esté en Kotlin.
+  STOPPED_S:         28800,
+  // Sin punto GPS dentro de STOPPED_S: si la app sigue latiendo dentro de este
+  // lapso → 'no_signal' (app viva sin señal); si no → 'offline' (muerta).
+  // 7200 s = 2 h: el latido de la 1.2.8 se duerme junto al resto del proceso.
+  HEARTBEAT_FRESH_S: 7200,
 }
 
 export interface TechnicianState {
@@ -118,7 +130,11 @@ interface TrackingStore {
 
 interface LocationPayload {
   technician_id: string
+  /** Reloj del TELÉFONO. No usar para decidir estado: viene desajustado. */
   ts: string
+  /** Reloj del SERVIDOR al insertar. Es el bueno. Opcional porque las filas
+   *  anteriores a la columna no lo traen. */
+  received_at?: string
   lat: number
   lng: number
   speed?: number
@@ -261,14 +277,20 @@ export const useTrackingStore = create<TrackingStore>()(
         )
         if (recentAccident) status = 'accident'
 
+        // Igual que en la carga inicial: manda el reloj del SERVIDOR. Si no
+        // viniera `received_at` en el payload se cae a `ts`, pero entonces el
+        // hueco se mide contra un reloj distinto, así que se comparan las dos
+        // marcas homólogas y no una de cada tipo.
+        const contact = payload.received_at ?? payload.ts
+
         // Limpiar trail si hubo una pausa larga (nueva sesión de rastreo)
         const TRAIL_RESET_GAP_S = 120
         if (tech.lastSeen) {
-          const gapSecs = (new Date(payload.ts).getTime() - new Date(tech.lastSeen).getTime()) / 1000
+          const gapSecs = (new Date(contact).getTime() - new Date(tech.lastSeen).getTime()) / 1000
           if (gapSecs > TRAIL_RESET_GAP_S) tech.trail = []
         }
 
-        tech.lastSeen   = payload.ts
+        tech.lastSeen   = contact
         tech.lat        = payload.lat
         tech.lng        = payload.lng
         tech.lastSpeed  = payload.speed
