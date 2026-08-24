@@ -134,10 +134,35 @@
 
 /* Leaflet dark theme overrides */
 .leaflet-container {
-  background: #0e0e1c !important;
+  /* Color de fondo mientras cargan las teselas. Antes era casi negro (#0e0e1c) y
+     al arrastrar el mapa asomaban huecos negros entre teselas, que con la base
+     clara cantaban muchísimo. Este gris es el del propio mapa, así que el hueco
+     deja de notarse. */
+  background: #e8e8e4 !important;
   font-family: 'Inter', sans-serif !important;
 }
-.leaflet-control-attribution { display: none; }
+
+/* Ajustes por base. Solo afectan a la capa base: marcadores, rutas y zonas van en
+   otras capas y conservan su color exacto.
+
+   En la base clara se baja un punto el contraste y la saturación para que el mapa
+   quede en segundo plano y los marcadores de estado sean lo más llamativo de la
+   pantalla. La base oscura lleva luz extra porque de origen es casi negra —aun
+   así se distingue mal, por eso no es la predeterminada. */
+.capa-base--claro    { filter: contrast(0.94) saturate(0.85); }
+.capa-base--colorido { filter: saturate(0.9); }
+.capa-base--oscuro   { filter: brightness(1.9) contrast(0.9) saturate(1.1); }
+
+/* Usar CARTO/OpenStreetMap obliga a mostrar la atribución, así que ya no se
+   oculta; se deja discreta. */
+.leaflet-control-attribution {
+  background: rgba(15, 17, 23, 0.7) !important;
+  color: #6b7280 !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  backdrop-filter: blur(4px);
+}
+.leaflet-control-attribution a { color: #8b97ab !important; }
 .leaflet-control-zoom a {
   background: #141420 !important;
   color: #94A3B8 !important;
