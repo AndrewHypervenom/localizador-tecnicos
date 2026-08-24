@@ -134,21 +134,28 @@
 
 /* Leaflet dark theme overrides */
 .leaflet-container {
-  /* Color de fondo mientras cargan las teselas. Antes era casi negro (#0e0e1c) y
-     al arrastrar el mapa asomaban huecos negros entre teselas, que con la base
-     clara cantaban muchísimo. Este gris es el del propio mapa, así que el hueco
-     deja de notarse. */
-  background: #e8e8e4 !important;
+  /* Color de fondo mientras cargan las teselas: al arrastrar el mapa asoman
+     huecos entre teselas y este color es el que se ve en ellos. Tiene que ser
+     el de la base EN PANTALLA, o sea el de la tesela YA FILTRADA: el filtro se
+     aplica a la capa de teselas, no al contenedor.
+     Dark Matter tiene el fondo en rgb(9,9,9); pasado por el brightness(1.9) de
+     `.capa-base--oscuro` queda en #1c1c1c, que es este valor. */
+  background: #1c1c1c !important;
   font-family: 'Inter', sans-serif !important;
 }
 
 /* Ajustes por base. Solo afectan a la capa base: marcadores, rutas y zonas van en
    otras capas y conservan su color exacto.
 
+   La base oscura es la PREDETERMINADA y su filtro no es cosmético: la tesela
+   cruda de Dark Matter es casi negra (fondo rgb(9,9,9)) y sin este realce no se
+   distinguen ni las calles ni las etiquetas. Comprobado sobre la tesela real de
+   Bogotá: con brightness(1.9) los nombres de vía se leen sin esfuerzo. Si se
+   toca este filtro, hay que volver a mirar el mapa, no solo el número.
+
    En la base clara se baja un punto el contraste y la saturación para que el mapa
    quede en segundo plano y los marcadores de estado sean lo más llamativo de la
-   pantalla. La base oscura lleva luz extra porque de origen es casi negra —aun
-   así se distingue mal, por eso no es la predeterminada. */
+   pantalla. */
 .capa-base--claro    { filter: contrast(0.94) saturate(0.85); }
 .capa-base--colorido { filter: saturate(0.9); }
 .capa-base--oscuro   { filter: brightness(1.9) contrast(0.9) saturate(1.1); }

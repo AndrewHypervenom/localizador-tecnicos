@@ -9,11 +9,18 @@ const ESTILO_CARTO        = import.meta.env.VITE_MAP_STYLE as string | undefined
 
 // Bases de CARTO. No necesitan clave ni facturación y nunca estampan nada encima.
 //
-// El estilo por defecto es 'claro' a propósito. La base oscura de CARTO es casi
-// negra: incluso forzándole el brillo, las calles no se distinguen y el mapa
-// queda como una mancha —el mismo problema que se veía con el mapa degradado de
-// Google—. Una base clara y desaturada es además la que mejor hace resaltar los
-// marcadores de estado (verde, ámbar, rojo), que es lo que el líder debe ver.
+// El predeterminado es 'oscuro' y va emparejado con el realce de brillo de
+// `.capa-base--oscuro` en index.css: SIN ese filtro la tesela cruda de Dark
+// Matter es prácticamente negra (su color de fondo es rgb(9,9,9)) y ni las
+// calles ni las etiquetas se distinguen. Con el filtro sí se leen, y encaja con
+// el resto de la interfaz, que es oscura.
+//
+// Los dos van juntos: si algún día se quita el filtro, hay que dejar de usar
+// 'oscuro' como predeterminado, o el mapa vuelve a ser una mancha negra.
+//
+// 'claro' (Positron) sigue disponible y es el que mejor hace resaltar los
+// marcadores verde/ámbar/rojo, pero es casi blanco a propósito y sobre una
+// interfaz oscura parece un rectángulo vacío.
 const BASES_CARTO = {
   claro:   { ruta: 'rastertiles/light_all', etiqueta: 'CARTO Positron' },
   colorido:{ ruta: 'rastertiles/voyager',   etiqueta: 'CARTO Voyager'  },
@@ -25,7 +32,7 @@ type ClaveBase = keyof typeof BASES_CARTO
 function baseCarto(): ClaveBase {
   return (ESTILO_CARTO && ESTILO_CARTO in BASES_CARTO)
     ? ESTILO_CARTO as ClaveBase
-    : 'claro'
+    : 'oscuro'
 }
 
 /**
