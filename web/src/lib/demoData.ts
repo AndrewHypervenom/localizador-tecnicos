@@ -97,12 +97,17 @@ const SPECS: DemoSpec[] = [
   { name: 'MAURICIO ELIÉCER CANTILLO REYES', seenMinAgo: 0.5, speed: 14.1, battery: 91, hbMinAgo: 1, dLat:  0.0231, dLng:  0.0176 },
   { name: 'ÓSCAR IVÁN BETANCUR MONROY',      seenMinAgo: 0.9, speed:  5.4, battery: 47, hbMinAgo: 3, dLat: -0.0088, dLng: -0.0264 },
   // ── Verde · en sitio (posición < 5 min, parado trabajando) ──
-  { name: 'JULIÁN ORLANDO MOSQUERA VALBUENA', seenMinAgo: 1.8, speed: 0, battery: 73, hbMinAgo: 2, dLat:  0.0301, dLng: -0.0092 },
-  { name: 'DIEGO ARMANDO SARMIENTO CUÉLLAR',  seenMinAgo: 2.4, speed: 0, battery: 55, hbMinAgo: 1, dLat: -0.0247, dLng: -0.0155 },
-  { name: 'RICARDO ANTONIO PEÑALOZA TRIANA',  seenMinAgo: 3.1, speed: 0, battery: 38, hbMinAgo: 4, dLat:  0.0064, dLng:  0.0289 },
-  { name: 'FABIÁN STEVEN OTÁLORA BUITRAGO',   seenMinAgo: 3.7, speed: 0, battery: 88, hbMinAgo: 2, dLat: -0.0132, dLng:  0.0243 },
-  { name: 'NÉSTOR JULIO GUEVARA MANRIQUE',    seenMinAgo: 4.2, speed: 0, battery: 26, hbMinAgo: 3, dLat:  0.0178, dLng: -0.0311 },
-  { name: 'HERNÁN DARÍO LOZANO CIFUENTES',    seenMinAgo: 4.6, speed: 0, battery: 69, hbMinAgo: 1, dLat: -0.0056, dLng:  0.0068 },
+  // OJO CON EL MARGEN: la re-siembra va cada 30 s, así que entre una y otra
+  // estas marcas envejecen hasta medio minuto. Con valores pegados al umbral
+  // (4.6 min contra los 5 min de IDLE_S) el técnico se cruzaba a 'no_signal' y
+  // la lista parpadeaba a ámbar sola. Se dejan todos por debajo de 2.6 min:
+  // incluso con la deriva máxima quedan holgadamente dentro del verde.
+  { name: 'JULIÁN ORLANDO MOSQUERA VALBUENA', seenMinAgo: 0.9, speed: 0, battery: 73, hbMinAgo: 2, dLat:  0.0301, dLng: -0.0092 },
+  { name: 'DIEGO ARMANDO SARMIENTO CUÉLLAR',  seenMinAgo: 1.3, speed: 0, battery: 55, hbMinAgo: 1, dLat: -0.0247, dLng: -0.0155 },
+  { name: 'RICARDO ANTONIO PEÑALOZA TRIANA',  seenMinAgo: 1.7, speed: 0, battery: 38, hbMinAgo: 4, dLat:  0.0064, dLng:  0.0289 },
+  { name: 'FABIÁN STEVEN OTÁLORA BUITRAGO',   seenMinAgo: 2.0, speed: 0, battery: 88, hbMinAgo: 2, dLat: -0.0132, dLng:  0.0243 },
+  { name: 'NÉSTOR JULIO GUEVARA MANRIQUE',    seenMinAgo: 2.3, speed: 0, battery: 26, hbMinAgo: 3, dLat:  0.0178, dLng: -0.0311 },
+  { name: 'HERNÁN DARÍO LOZANO CIFUENTES',    seenMinAgo: 2.6, speed: 0, battery: 69, hbMinAgo: 1, dLat: -0.0056, dLng:  0.0068 },
   // ── Ámbar · la app late pero no llegan posiciones, con motivo concreto ──
   // GPS apagado en el teléfono: el ámbar más accionable de todos.
   { name: 'WILSON EDUARDO AGUIRRE SIERRA', seenMinAgo: 46, speed: 0, battery: 51, hbMinAgo: 3, hbGpsOn: false, dLat: 0.0212, dLng: 0.0037 },

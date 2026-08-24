@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:demo": "vite build --config vite.demo.config.ts && node -e \"require('fs').renameSync('dist-demo/demo-panel.html','dist-demo/index.html')\"",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx"
   },

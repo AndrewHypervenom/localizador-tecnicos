@@ -16,3 +16,24 @@ services:
         sync: false
       - key: WEB_URL
         sync: false
+
+  # ── Sitio de demostración de la interfaz ────────────────────────────────────
+  # Estático, sin login y sin base de datos: sirve el panel de técnicos con una
+  # flota SINTÉTICA (`web/src/lib/demoData.ts`) para poder enseñar y capturar la
+  # interfaz desde cualquier equipo.
+  #
+  # Es un servicio APARTE del panel real, y así debe seguir. No comparte dominio
+  # ni sesión con él, y su build (`web/vite.demo.config.ts`) no carga `web/.env`,
+  # así que no lleva dentro ninguna credencial: el sitio es público y comprobado
+  # que no hace una sola petición de red.
+  #
+  # Las personas que aparecen son ficticias, y tienen que seguir siéndolo. El
+  # color de cada fila afirma que ese teléfono está reportando ahora mismo; sobre
+  # un nombre real de un técnico que no está siendo rastreado, eso es un dato
+  # inventado con nombre y apellido.
+  - type: web
+    name: localizador-demo-ui
+    runtime: static
+    rootDir: web
+    buildCommand: npm ci && npm run build:demo
+    staticPublishPath: dist-demo

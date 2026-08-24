@@ -12,11 +12,12 @@ node_modules/
 dist/
 .cache/
 
-# Expo / React Native
-mobile/.expo/
-mobile/android/
-mobile/ios/
-mobile/.env
+# Android (app nativa Kotlin)
+android-app/build/
+android-app/app/build/
+android-app/.gradle/
+android-app/.kotlin/
+android-app/local.properties
 
 # IDE
 .idea/
@@ -27,7 +28,10 @@ Thumbs.db
 
 # Vite
 web/dist/
+web/dist-demo/
 web/.vite/
+# Captura generada por el banco de pruebas visual
+web/panel-demo.png
 
 # Logs
 *.log
@@ -39,10 +43,15 @@ npm-debug.log*
 # Supabase
 supabase/
 
-mobile/
-
 # Documentos de pricing y costos
 *.pdf
 *.docx
 crear_word*.py
 *.txt
+
+# Prueba de carga: el arnés se versiona, los artefactos no.
+# schema.sql/roles.sql son volcados de produccion y no deben acabar en git.
+loadtest/schema.sql
+loadtest/roles.sql
+loadtest/data/
+loadtest/resultados/
