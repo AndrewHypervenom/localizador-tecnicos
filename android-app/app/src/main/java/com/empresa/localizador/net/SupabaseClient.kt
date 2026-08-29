@@ -256,8 +256,25 @@ object SupabaseClient {
             null
         } ?: shorten(body)
 
+        // Un rechazo de credenciales NO es una fila envenenada: la misma fila entra
+        // sin problema en cuanto haya un token válido. Clasificarlo como permanente
+        // era catastrófico —cada punto acababa apartado uno a uno y la cola entera
+        // se vaciaba a la basura mientras el técnico veía la app trabajando— y es el
+        // fallo que se está viviendo en la versión React Native, donde `PGRST301`
+        // (token vencido) no figura entre los códigos transitorios.
+        //
+        // `execute` ya reintenta una vez renovando la sesión; si aun así vuelve 401,
+        // lo correcto es conservar la fila y esperar, nunca descartarla.
+        // Solo la familia PGRST3xx es de autenticación (PGRST301 = token vencido).
+        // Las PGRST1xx/2xx son de análisis y de esquema —una columna que no existe—
+        // y esas SÍ son permanentes: darles reintento infinito atascaría la cola
+        // para siempre, que es justo lo que el apartado de filas evita.
+        val authRejected = status == 401 || status == 403 ||
+            (code != null && code.startsWith("PGRST3"))
+
         // Sin código de Postgres, un 5xx/429 es del servidor o de la red: transitorio.
         val transient = when {
+            authRejected -> true
             code != null -> code in TRANSIENT_PG_CODES
             status >= 500 || status == 429 || status == 408 -> true
             else -> false

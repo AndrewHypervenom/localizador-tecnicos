@@ -15,11 +15,24 @@ export type TechnicianStatus = 'moving' | 'idle' | 'stopped' | 'no_signal' | 'of
 // calcula la vista: lo recalcula aquí (ver `computeStatus`), así que si los dos
 // juegos de números se separan, el sitio contradice a la base y gana el front.
 // Pasó el 2026-08-24: se corrigió la vista y en pantalla no cambió nada.
+// Y no basta con que coincidan los NÚMEROS: tiene que coincidir el ORDEN en que
+// se evalúan. Estuvieron invertidos (la vista miraba `stopped` antes que
+// `no_signal`, aquí al revés) y eso puso a 12 de 49 técnicos con un estado en la
+// base y otro en pantalla. La vista se alineó a este orden en
+// `supabase/migrations/004_status_view_alineada.sql`.
 export const STATUS_THRESHOLDS = {
   MOVING_FRESH_S:    90,    // = '00:01:30' de la vista. Cubre el lote de 30 s + red.
-  IDLE_S:            300,   // = '00:05:00' de la vista. Por debajo estaba en 150 s y
-                            // un técnico entre 2.5 y 5 min salía ÁMBAR en el sitio y
-                            // verde en la base: la misma fila con dos colores.
+  // = '00:10:00' de la vista. Subido de 5 a 10 min el 2026-08-24: con 5 min, un
+  // técnico con la app recién activada o con un hueco normal de captura se
+  // pintaba de ÁMBAR estando perfectamente sano, y el ámbar se lee como "algo
+  // pasa". Se eligió 10 min sobre la cadencia medida: p95 del hueco entre puntos
+  // 45-70 s y p99 72-106 s según versión, así que 10 min deja diez veces el p99
+  // de margen y solo 43 huecos de 27.000 (36 h de flota) caen entre 5 y 10 min.
+  // EL COSTE: una app que muere se ve verde hasta 10 min. Se aceptó a conciencia:
+  // el ámbar no es "hay que llamarlo" —eso es el rojo, y sigue en 8 h—, así que
+  // el precio de un falso verde de 10 min es mucho menor que el de un falso
+  // ámbar permanente que hace que el líder deje de creerse el color.
+  IDLE_S:            600,
   // 8 h = "envió algo hoy" → ÁMBAR, no rojo. Subido desde 15 min el 2026-08-24:
   // la flota está en la APK 1.2.8, cuyo servicio de subida lo duerme el SO
   // durante horas mientras el técnico trabaja con normalidad. Con 15 min, un
@@ -30,6 +43,24 @@ export const STATUS_THRESHOLDS = {
   // lapso → 'no_signal' (app viva sin señal); si no → 'offline' (muerta).
   // 7200 s = 2 h: el latido de la 1.2.8 se duerme junto al resto del proceso.
   HEARTBEAT_FRESH_S: 7200,
+  // Margen que se le concede a un latido por DELANTE del reloj del servidor
+  // (= '00:05:00' de la vista). Más allá, el reloj del teléfono está alterado y
+  // el latido no prueba nada. Sin esta cota, un reloj adelantado mantenía a una
+  // app muerta en ámbar "activa — sin señal" indefinidamente.
+  HEARTBEAT_FUTURE_S: 300,
+  // Ventana en la que un latido todavía PRUEBA que la app está abierta AHORA.
+  //
+  // No es lo mismo que HEARTBEAT_FRESH_S y por eso son dos constantes. Aquella
+  // son 2 h y decide el ESTADO (mantiene en ámbar a una 1.2.8 dormida en vez de
+  // mandarla a rojo). Pero el latido va cada 3-15 min, así que "latió en las
+  // últimas 2 h" no demuestra nada sobre el presente, y con ella se le estaba
+  // diciendo al líder "la app sigue abierta" de teléfonos que llevaban 73 y 107
+  // minutos sin latir — medido sobre la flota el 2026-08-24, 4 de 7 ámbares.
+  //
+  // 30 min = el doble del GuardianWorker (~15 min), que es el latido de respaldo
+  // más espaciado. Por debajo, una 1.2.8 en Doze oscilaría entre las dos frases.
+  // Solo afecta al TEXTO: ningún técnico cambia de color por esto.
+  HEARTBEAT_ALIVE_S: 1800,
 }
 
 export interface TechnicianState {
@@ -184,8 +215,14 @@ function computeStatus(
   // chequeo iba después de 'stopped' y durante 2.5-15 min el técnico se veía
   // "Inactivo"/"Detenido" gris con la app perfectamente sana (queja de líderes:
   // parecía desconectado sin estarlo).
+  // La cota SUPERIOR no es un detalle: `last_heartbeat` lo sella el TELÉFONO, así
+  // que un reloj adelantado dejaba `hbSecs` en negativo y eso pasaba el `<` de
+  // abajo para siempre — una app muerta se veía "activa — sin señal" a
+  // perpetuidad. La vista de la base ya se protegía con `< now() + 5 min`; aquí
+  // faltaba, y como el front recalcula y pisa a la vista, la guarda quedaba
+  // anulada. Mismo margen que la vista para que las dos digan lo mismo.
   const hbSecs = lastHeartbeat ? (now - new Date(lastHeartbeat).getTime()) / 1000 : Infinity
-  if (hbSecs < STATUS_THRESHOLDS.HEARTBEAT_FRESH_S) return 'no_signal'
+  if (hbSecs < STATUS_THRESHOLDS.HEARTBEAT_FRESH_S && hbSecs > -STATUS_THRESHOLDS.HEARTBEAT_FUTURE_S) return 'no_signal'
   // Ni puntos ni latido reciente: visto hace poco → 'stopped'; si no → 'offline'.
   if (locSecs < STATUS_THRESHOLDS.STOPPED_S) return 'stopped'
   return 'offline'
@@ -266,7 +303,19 @@ export const useTrackingStore = create<TrackingStore>()(
         const tech = state.technicians[payload.technician_id]
         if (!tech) return
 
-        let status = computeStatus(payload.ts, payload.speed, Date.now(), tech.lastHeartbeat)
+        // Igual que en la carga inicial: manda el reloj del SERVIDOR. Si no
+        // viniera `received_at` en el payload se cae a `ts`, pero entonces el
+        // hueco se mide contra un reloj distinto, así que se comparan las dos
+        // marcas homólogas y no una de cada tipo.
+        //
+        // OJO: tiene que calcularse ANTES de `computeStatus`. Estuvo declarado
+        // más abajo y solo se usaba para `lastSeen`, mientras el estado se
+        // calculaba con `payload.ts` — el reloj del teléfono. Con eso, un punto
+        // que ACABABA de llegar podía pintar al técnico de ámbar o de rojo si su
+        // teléfono iba atrasado (medido en campo: hasta 892 min de atraso).
+        const contact = payload.received_at ?? payload.ts
+
+        let status = computeStatus(contact, payload.speed, Date.now(), tech.lastHeartbeat)
 
         // Mantener estado de accidente si hay alerta reciente no reconocida
         const recentAccident = state.alerts.find(
@@ -276,12 +325,6 @@ export const useTrackingStore = create<TrackingStore>()(
             && Date.now() - new Date(a.ts).getTime() < 60_000
         )
         if (recentAccident) status = 'accident'
-
-        // Igual que en la carga inicial: manda el reloj del SERVIDOR. Si no
-        // viniera `received_at` en el payload se cae a `ts`, pero entonces el
-        // hueco se mide contra un reloj distinto, así que se comparan las dos
-        // marcas homólogas y no una de cada tipo.
-        const contact = payload.received_at ?? payload.ts
 
         // Limpiar trail si hubo una pausa larga (nueva sesión de rastreo)
         const TRAIL_RESET_GAP_S = 120

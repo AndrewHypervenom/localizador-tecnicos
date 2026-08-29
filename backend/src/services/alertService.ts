@@ -148,8 +148,20 @@ const OFFLINE_CAUSE_TYPES = [
   'gps_off', 'net_off', 'mock_on', 'battery_restricted', 'tracking_stop', 'tracking_killed',
   'perm_revoked',
 ]
-// Ventana hacia atrás para buscar la causa (algo mayor que el umbral de silencio
-// para cubrir el desfase entre el último fix y la detección del cron).
+// Margen hacia atrás DESDE EL ÚLTIMO PUNTO para aceptar una causa como
+// explicación del silencio.
+//
+// Antes esta ventana se medía desde `now()`, y ahí estaba el fallo: la causa se
+// declara UNA vez, en el instante en que el rastreo se detiene, pero el cron
+// vuelve a evaluar el mismo silencio cada 30 min. A la segunda pasada el
+// `tracking_stop` ya había quedado fuera de la ventana y el MISMO silencio, con
+// su causa perfectamente registrada, ascendía a "sin causa declarada" (sev 70) y
+// empezaba a mandar push. Medido el 2026-08-24 sobre un técnico que detuvo el
+// rastreo de forma normal: 1 alerta sev 50 correcta y luego 11 sev 70 seguidas,
+// una cada 30 min, acusándolo de haber cerrado la app a la fuerza.
+//
+// Anclado al último punto, la causa sigue explicando el silencio mientras el
+// silencio dure, que es lo que significa "tener causa".
 const OFFLINE_CAUSE_LOOKBACK_MIN = OFFLINE_THRESHOLD_MIN + 10
 
 /**
@@ -169,11 +181,14 @@ export async function detectOfflineTechnicians(): Promise<void> {
      SELECT t.id, now(), 'offline',
             -- severidad 50 = silencio con causa declarada (GPS/datos off, etc.);
             -- 70 = SIN causa declarada (probable force-stop / app cerrada a mano).
+            -- La ventana se ancla al ÚLTIMO PUNTO (reloj del servidor), no a
+            -- now(): si no, la causa se sale de la ventana al repetirse el cron
+            -- y el mismo silencio explicado acaba clasificado como sabotaje.
             CASE WHEN EXISTS (
               SELECT 1 FROM motion_events mc
                WHERE mc.technician_id = t.id
                  AND mc.event_type = ANY($4::text[])
-                 AND mc.ts > now() - ($5 || ' minutes')::interval
+                 AND mc.ts > COALESCE(s.last_contact, now()) - ($5 || ' minutes')::interval
             ) THEN 50 ELSE 70 END,
             NULL
        FROM technicians t
@@ -181,8 +196,13 @@ export async function detectOfflineTechnicians(): Promise<void> {
        LEFT JOIN companies c ON c.id = t.company_id
        LEFT JOIN technician_heartbeat h ON h.technician_id = t.id
       WHERE t.active = true
-        AND s.last_seen < now() - ($1 || ' minutes')::interval
-        AND s.last_seen > now() - ($2 || ' hours')::interval${WITHIN_COMPANY_HOURS}
+        -- last_contact (reloj del SERVIDOR), no last_seen (reloj del TELÉFONO).
+        -- Con last_seen bastaba un reloj atrasado para que un técnico que estaba
+        -- enviando puntos con normalidad cumpliera "lleva 30 min sin reportar".
+        -- Medido el 2026-08-24: atrasos de 514, 599 y 708 minutos en tres
+        -- teléfonos de la flota, todos ellos activos.
+        AND s.last_contact < now() - ($1 || ' minutes')::interval
+        AND s.last_contact > now() - ($2 || ' hours')::interval${WITHIN_COMPANY_HOURS}
         -- La app dejó de latir (o nunca latió → APK antigua): desconexión real.
         AND (h.last_heartbeat IS NULL OR h.last_heartbeat < now() - ($6 || ' minutes')::interval)
         AND NOT EXISTS (

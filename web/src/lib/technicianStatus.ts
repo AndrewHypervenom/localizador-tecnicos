@@ -23,6 +23,7 @@
 import type { Locale } from 'date-fns'
 import { formatDistanceToNowStrict } from 'date-fns'
 import type { TechnicianStatus } from '@/store/trackingStore'
+import { STATUS_THRESHOLDS } from '@/store/trackingStore'
 import type { TFunc } from '@/lib/i18n/i18n'
 
 /** Qué acción implica el color. Un tono = una acción del líder. */
@@ -77,6 +78,12 @@ export interface StatusSignals {
   hbGpsOn?: boolean | null
   hbNetOn?: boolean | null
   hbPerm?: 'full' | 'partial' | 'none' | null
+  /**
+   * Cuándo latió por última vez (ISO). Hace falta para NO afirmar que la app
+   * sigue abierta basándose en un latido de hace dos horas: ver
+   * `appProbablyOpen` y `STATUS_THRESHOLDS.HEARTBEAT_ALIVE_S`.
+   */
+  lastHeartbeat?: string | null
 }
 
 export interface StatusDescriptor {
@@ -117,6 +124,101 @@ function noSignalReason(t: TFunc, s: StatusSignals): string {
   if (s.hbNetOn === false)                    return t('techStatus.no_signal.netOff')
   if (s.hbPerm && s.hbPerm !== 'full')        return t('techStatus.no_signal.perm')
   return t('techStatus.no_signal.roof')
+}
+
+/**
+ * ¿Se puede AFIRMAR que la app está abierta ahora mismo?
+ *
+ * El estado 'no_signal' se concede con un latido de hasta 2 h (para que una
+ * 1.2.8 dormida no salte a rojo), pero sus textos dicen "la app sigue abierta",
+ * y eso es una afirmación sobre el presente. Con la ventana de 2 h se estaba
+ * afirmando de teléfonos que llevaban 73 y 107 minutos sin latir.
+ *
+ * Sin dato de latido devuelve false: la APK antigua no lo manda, y en ese caso
+ * no hay nada que respalde la afirmación.
+ */
+function appProbablyOpen(s: StatusSignals, now: number): boolean {
+  if (!s.lastHeartbeat) return false
+  const secs = (now - new Date(s.lastHeartbeat).getTime()) / 1000
+  if (Number.isNaN(secs)) return false
+  // Igual que en `computeStatus`: un latido en el futuro es un reloj alterado,
+  // no una prueba de vida.
+  return secs < STATUS_THRESHOLDS.HEARTBEAT_ALIVE_S && secs > -STATUS_THRESHOLDS.HEARTBEAT_FUTURE_S
+}
+
+/**
+ * ¿Este técnico llegó a reportar HOY?
+ *
+ * Separa dos situaciones que el panel pintaba idénticas y que piden acciones
+ * opuestas:
+ *
+ *   · NO reportó hoy  → el teléfono no arrancó el rastreo. Se resuelve hablando
+ *                       con el técnico: que abra la app.
+ *   · SÍ reportó hoy y se calló → la app se cayó a media jornada. Se resuelve
+ *                       arreglando el teléfono; llamar al técnico no sirve de
+ *                       nada porque él cree que la lleva encendida.
+ *
+ * Medido el 2026-08-24 sobre la jornada real: 28 de 49 técnicos activos no
+ * mandaron un solo punto, y varios de los que sí (JONATHAN 08:00-11:22, YEISON
+ * 08:02-12:59) se cortaron a media mañana. Son dos problemas distintos y hasta
+ * ahora se leían los dos como el mismo bloque rojo.
+ *
+ * El corte es la medianoche LOCAL del navegador del líder, que es la misma zona
+ * horaria en la que él piensa la jornada.
+ */
+function reportedToday(iso: string | null | undefined, now: number): boolean {
+  if (!iso) return false
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return false
+  const midnight = new Date(now)
+  midnight.setHours(0, 0, 0, 0)
+  return d.getTime() >= midnight.getTime()
+}
+
+/** "11:22" — la hora exacta en que se calló, más útil que "hace 6 horas". */
+function atClock(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * Textos de los estados en los que NO llegan posiciones ('stopped', 'offline' y
+ * el 'no_signal' cuyo latido ya no prueba nada). Todos comparten la misma
+ * pregunta: ¿el teléfono llegó a rastrear hoy o no arrancó nunca?
+ *
+ * `hardDown` = el estado es rojo ('offline'): al texto se le añade el "hay que
+ * llamarlo", que en ámbar no corresponde.
+ */
+function silentText(
+  t: TFunc, s: StatusSignals, seen: string | null, hardDown: boolean,
+): { label: string; reason: string } {
+  if (!reportedToday(s.lastSeen, Date.now())) {
+    return {
+      label:  t('techStatus.notStartedToday.label'),
+      reason: seen
+        ? t('techStatus.notStartedToday.reason', { ago: seen })
+        : t('techStatus.notStartedToday.never'),
+    }
+  }
+  // Sí rastreó hoy y se calló: la hora exacta del corte es lo accionable — dice
+  // si se cayó al salir del taller, al entrar a un sótano o a mitad de la ruta.
+  const clock = atClock(s.lastSeen)
+  if (hardDown) {
+    return {
+      label:  t('techStatus.offline.label'),
+      reason: clock
+        ? t('techStatus.offline.reasonAt', { clock })
+        : (seen ? t('techStatus.offline.reason', { ago: seen }) : t('techStatus.offline.never')),
+    }
+  }
+  return {
+    label:  t('techStatus.stopped.label'),
+    reason: clock
+      ? t('techStatus.stopped.reasonAt', { clock })
+      : (seen ? t('techStatus.stopped.reason', { ago: seen }) : t('techStatus.stopped.reasonNoTime')),
+  }
 }
 
 /**
@@ -165,14 +267,19 @@ export function describeStatus(t: TFunc, s: StatusSignals, locale: Locale): Stat
         : t('techStatus.idle.reasonNoTime')
       break
     case 'no_signal':
-      label  = t('techStatus.no_signal.label')
-      reason = noSignalReason(t, s)
+      // El COLOR no cambia (sigue ámbar): lo que se ajusta es lo que se afirma.
+      // Si el latido ya no prueba que la app esté abierta, se describe como lo
+      // que de verdad se sabe —dejó de reportar— en vez de tranquilizar al líder
+      // con una app que lleva más de media hora sin dar señales.
+      if (appProbablyOpen(s, Date.now())) {
+        label  = t('techStatus.no_signal.label')
+        reason = noSignalReason(t, s)
+      } else {
+        ({ label, reason } = silentText(t, s, seen, false))
+      }
       break
     case 'stopped':
-      label  = t('techStatus.stopped.label')
-      reason = seen
-        ? t('techStatus.stopped.reason', { ago: seen })
-        : t('techStatus.stopped.reasonNoTime')
+      ({ label, reason } = silentText(t, s, seen, false))
       break
     case 'accident':
       label  = t('techStatus.accident.label')
@@ -180,10 +287,7 @@ export function describeStatus(t: TFunc, s: StatusSignals, locale: Locale): Stat
       break
     case 'offline':
     default:
-      label  = t('techStatus.offline.label')
-      reason = seen
-        ? t('techStatus.offline.reason', { ago: seen })
-        : t('techStatus.offline.never')
+      ({ label, reason } = silentText(t, s, seen, true))
       break
   }
 

@@ -34,7 +34,7 @@ fun haversineM(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
  */
 class DriftAnchor {
 
-    private data class Point(val lat: Double, val lng: Double)
+    private data class Point(val lat: Double, val lng: Double, val altitude: Double?)
 
     private var anchor: Point? = null
     private var driftExitCount = 0
@@ -42,8 +42,16 @@ class DriftAnchor {
 
     val isAnchored: Boolean get() = anchor != null
 
-    fun anchorAt(lat: Double, lng: Double) {
-        anchor = Point(lat, lng)
+    /**
+     * @param altitude altitud del fix que fija el ancla. Se guarda por la misma
+     *   razón que lat/lng: mientras el ancla esté puesta el técnico no se mueve,
+     *   así que su altitud tampoco cambia, y los puntos que emite el tickeo de
+     *   reposo tienen que llevarla. Sin esto salían con altitud nula y el perfil
+     *   de elevación del líder aparecía vacío para cualquier técnico que pasara
+     *   la jornada en instalaciones.
+     */
+    fun anchorAt(lat: Double, lng: Double, altitude: Double? = null) {
+        anchor = Point(lat, lng, altitude)
         driftExitCount = 0
         walkExitCount = 0
     }
@@ -108,4 +116,7 @@ class DriftAnchor {
 
     /** Coordenadas del ancla, para emitir puntos en reposo sin encender el GPS. */
     fun anchorLatLng(): Pair<Double, Double>? = anchor?.let { it.lat to it.lng }
+
+    /** Altitud con la que se fijó el ancla, para los puntos de reposo. */
+    fun anchorAltitude(): Double? = anchor?.altitude
 }

@@ -188,10 +188,17 @@ export const pt: Record<keyof typeof es, string> = {
   'techStatus.stopped.label': 'Rastreamento parado',
   'techStatus.stopped.reason': 'O app parou de reportar · último ponto {ago}',
   'techStatus.stopped.reasonNoTime': 'O app parou de reportar',
+  'techStatus.stopped.reasonAt': 'Rastreou hoje e caiu às {clock} · verificar o telefone',
 
   'techStatus.offline.label': 'Sem conexão',
   'techStatus.offline.reason': 'Sem sinais do app {ago} · é preciso ligar para ele',
+  'techStatus.offline.reasonAt': 'Rastreou hoje até às {clock} e caiu · verificar o telefone',
   'techStatus.offline.never': 'Nunca reportou desde que o app foi instalado',
+
+  // ---- não iniciou o rastreamento hoje (ver a nota em es.ts) ----
+  'techStatus.notStartedToday.label': 'Sem iniciar hoje',
+  'techStatus.notStartedToday.reason': 'Não abriu o app hoje · último rastreamento {ago}',
+  'techStatus.notStartedToday.never': 'Nunca reportou desde que o app foi instalado',
 
   'techStatus.accident.label': 'ACIDENTE',
   'techStatus.accident.reason': 'Impacto detectado · verificar imediatamente',
@@ -201,15 +208,18 @@ export const pt: Record<keyof typeof es, string> = {
 
   // ---- contadores por tom (devem ler-se como o semáforo, não como categorias soltas) ----
   'techStatus.count.ok': 'App funcionando',
-  'techStatus.count.warn': 'Sem sinal',
+  // Ver a nota em es.ts: o balde âmbar mistura 'no_signal' (o app bate) e
+  // 'stopped' (pode estar morto há horas). O contador diz o único que é certo
+  // nos dois casos: não chegam posições.
+  'techStatus.count.warn': 'Sem posições',
   'techStatus.count.down': 'Rastreamento caído',
 
   // ---- legenda de cores ----
   'techStatus.legend.title': 'O que significa cada cor',
   'techStatus.legend.ok': 'Verde · o app está funcionando',
   'techStatus.legend.okDesc': 'As posições chegam em dia. Não importa se está dirigindo ou parado numa instalação: o rastreamento funciona e não há nada a fazer.',
-  'techStatus.legend.warn': 'Âmbar · o app está vivo, mas o rastreamento falha',
-  'techStatus.legend.warnDesc': 'O telefone avisa que o app continua aberto, mas não chegam posições. Ao lado do nome sempre aparece o motivo exato: GPS desligado, sem dados, permissão incompleta ou local fechado.',
+  'techStatus.legend.warn': 'Âmbar · não chegam posições',
+  'techStatus.legend.warnDesc': 'O rastreamento não está em dia, mas ainda não é um "precisa ligar". Ao lado do nome aparece qual dos dois casos é: ou o app continua batendo e se indica o motivo exato (GPS desligado, sem dados, permissão incompleta, local fechado), ou parou de reportar há um tempo, embora hoje tenha enviado algo.',
   'techStatus.legend.down': 'Vermelho · o rastreamento caiu',
   'techStatus.legend.downDesc': 'Nem posições nem sinal de vida do app: é preciso ligar para o técnico. Em vermelho aparece também um acidente detectado.',
   'techStatus.legend.none': 'Cinza · sem telefone vinculado',

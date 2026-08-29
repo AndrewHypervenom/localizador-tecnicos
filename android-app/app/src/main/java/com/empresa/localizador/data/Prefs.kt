@@ -44,6 +44,8 @@ object Prefs {
     private const val K_NEXT_RETRY_AT = "next_retry_at"
     private const val K_BACKOFF_STEP = "backoff_step"
     private const val K_LEGACY_IMPORTED = "legacy_imported"
+    private const val K_LEGACY_ATTEMPTS = "legacy_import_attempts"
+    private const val K_LEGACY_FAILURE = "legacy_import_failure"
     private const val K_TIER = "tracking_tier"
     private const val K_LOG = "diag_log"
     private const val K_SESSION_TOKENS = "session_tokens"
@@ -72,12 +74,33 @@ object Prefs {
      * vinculado para siempre). Deliberadamente NO es el ANDROID_ID, que sobrevive
      * a la reinstalación.
      */
+    // Perder o duplicar este valor equivale a desvincular el teléfono: el servidor
+    // deja de reconocer el `device_id` y el técnico tiene que volver a escanear el
+    // QR. Por eso, contra la costumbre, aquí se escribe con `commit()` y no con
+    // `apply()`:
+    //
+    //  - `@Synchronized` — el getter ACUÑA el identificador si no existe. Dos hilos
+    //    entrando a la vez en un arranque en frío (la interfaz y el servicio, que
+    //    es justo lo que pasa al reanudar el rastreo) generaban DOS UUID distintos
+    //    y ganaba el último en escribir; el registro podía quedar hecho con el que
+    //    se descartó.
+    //  - `commit()` — `apply()` vuelve enseguida y escribe a disco después. Si la
+    //    capa del fabricante mata el proceso en esa ventana (MIUI lo hace, y lo
+    //    hace especialmente en el primer arranque tras actualizar), el identificador
+    //    se pierde y al siguiente arranque nace otro.
     val installId: String
-        get() = prefs.getString(K_INSTALL_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString(K_INSTALL_ID, it).apply()
+        @Synchronized get() {
+            prefs.getString(K_INSTALL_ID, null)?.let { return it }
+            val fresh = UUID.randomUUID().toString()
+            prefs.edit().putString(K_INSTALL_ID, fresh).commit()
+            return fresh
         }
 
-    fun setInstallId(id: String) = prefs.edit().putString(K_INSTALL_ID, id).apply()
+    /** Fija el identificador heredado. Síncrono a propósito: ver [installId]. */
+    @Synchronized
+    fun setInstallId(id: String) {
+        prefs.edit().putString(K_INSTALL_ID, id).commit()
+    }
 
     fun hasInstallId(): Boolean = prefs.getString(K_INSTALL_ID, null) != null
 
@@ -217,9 +240,32 @@ object Prefs {
 
     // ── Herencia desde la app React Native ───────────────────────────────────
 
+    // `commit()`: si el proceso muere justo después de heredar, `apply()` podría no
+    // haber llegado a disco y la herencia se repetiría, duplicando los puntos que
+    // se rescataron de la cola antigua.
     var legacyImported: Boolean
         get() = prefs.getBoolean(K_LEGACY_IMPORTED, false)
-        set(v) = prefs.edit().putBoolean(K_LEGACY_IMPORTED, v).apply()
+        set(v) { prefs.edit().putBoolean(K_LEGACY_IMPORTED, v).commit() }
+
+    /**
+     * Intentos de herencia ya gastados. La base de la versión anterior puede estar
+     * temporalmente ilegible (un cierre a la fuerza deja un diario sin reproducir),
+     * y ese fallo es recuperable en el siguiente arranque. Se cuenta para no
+     * reintentar indefinidamente cuando el fallo es definitivo.
+     */
+    var legacyImportAttempts: Int
+        get() = prefs.getInt(K_LEGACY_ATTEMPTS, 0)
+        set(v) { prefs.edit().putInt(K_LEGACY_ATTEMPTS, v).commit() }
+
+    /**
+     * Motivo por el que no se pudo heredar la identidad del dispositivo, o `null`
+     * si no hubo problema. La pantalla de diagnóstico lo enseña: si un técnico
+     * acaba re-escaneando el QR, aquí queda escrito por qué, en vez de que parezca
+     * que la app lo mandó a escanear sin motivo.
+     */
+    var legacyImportFailure: String?
+        get() = prefs.getString(K_LEGACY_FAILURE, null)
+        set(v) { prefs.edit().apply { if (v == null) remove(K_LEGACY_FAILURE) else putString(K_LEGACY_FAILURE, v) }.commit() }
 
     // ── Bitácora local de diagnóstico ────────────────────────────────────────
     // Anillo corto de sucesos relevantes (arranques, reparaciones, caídas). Es lo

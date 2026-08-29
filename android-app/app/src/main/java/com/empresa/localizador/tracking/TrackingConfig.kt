@@ -34,6 +34,21 @@ object TrackingConfig {
     /** Tiempo sin movimiento antes de bajar de MOVING a STATIONARY. */
     const val STATIONARY_AFTER_MS = 120_000L
 
+    /**
+     * Fixes CONSECUTIVOS con velocidad de marcha para dar el movimiento por bueno.
+     *
+     * Con el teléfono inmóvil el GNSS entrega picos de velocidad falsos: medido
+     * bajo techo el 2026-08-24, hasta 0,76 m/s sobre una mesa, por encima del
+     * umbral de "detenido". Contando cada pico suelto, el reloj de reposo se
+     * reiniciaba una y otra vez y el ancla no llegaba a fijarse NUNCA: el equipo
+     * se quedaba en captura densa gastando batería y el mapa del líder dibujaba
+     * recorridos fantasma alrededor del sitio.
+     *
+     * Dos fixes seguidos es el mismo criterio que ya usaba el ancla para soltarse
+     * ([WALK_EXIT_FIXES]): la deriva no es sostenida, caminar sí.
+     */
+    const val MOVING_CONFIRM_FIXES = 2
+
     /** Radio de error por encima del cual el fix se descarta (causa de los "saltos"). */
     const val ACCURACY_MAX_M = 50.0
 
@@ -61,8 +76,26 @@ object TrackingConfig {
 
     // ── Envío por lotes ──────────────────────────────────────────────────────
 
-    /** Cada cuánto se drena la cola hacia el servidor. */
-    const val BATCH_INTERVAL_MS = 30_000L
+    /**
+     * Cada cuánto se drena la cola hacia el servidor, **según el nivel de captura**.
+     *
+     * Antes era un valor único de 30 s para todo, y ahí estaba casi toda la
+     * latencia que veía el líder: los puntos no tardaban en capturarse, tardaban
+     * en SALIR. Medido en campo el 2026-08-24, un lote llegó con seis puntos y el
+     * más antiguo llevaba 34,4 s esperando en la cola — el mapa iba medio minuto
+     * por detrás del técnico sin que nada estuviera fallando.
+     *
+     * Yendo en movimiento se baja a 10 s, que es donde se nota. Parado se sube,
+     * porque un técnico quieto no gana nada con un mapa más fresco: así el número
+     * total de peticiones al día no sube, solo se reparte mejor. El número de
+     * FILAS insertadas no cambia en absoluto, que es lo que de verdad cuesta en
+     * Realtime.
+     */
+    fun batchIntervalMs(tier: TrackingTier): Long = when (tier) {
+        TrackingTier.MOVING -> 10_000L
+        TrackingTier.STATIONARY -> 30_000L
+        TrackingTier.DEEP_IDLE -> 60_000L
+    }
 
     /** O antes, si se acumulan tantos puntos sin enviar. */
     const val BATCH_MAX_PENDING = 25
@@ -82,12 +115,20 @@ object TrackingConfig {
 
     const val HEARTBEAT_MIN_INTERVAL_MS = 25_000L
 
-    /**
-     * Latido de respaldo por alarma, independiente del GPS y de la interfaz. Es lo
-     * que sostiene el estado "app activa — sin señal" en la vista del líder cuando
-     * no hay fixes que enviar.
-     */
-    const val HEARTBEAT_ALARM_INTERVAL_MS = 5 * 60_000L
+    // El latido de respaldo NO tiene alarma propia: viaja montado en las dos
+    // vigilancias que ya existen, y ambas lo mandan con `force = true`.
+    //
+    //   - `WatchdogReceiver`, cada WATCHDOG_ALARM_INTERVAL_MS (3 min). En Doze el
+    //     sistema espacia las alarmas a ~10 min, que sigue estando holgadamente
+    //     por debajo de la ventana de 20 min con la que el servidor decide
+    //     "app activa — sin señal".
+    //   - `GuardianWorker`, cada ~15 min, que además sobrevive a que el proceso
+    //     muera del todo.
+    //
+    // Hubo aquí una constante `HEARTBEAT_ALARM_INTERVAL_MS = 5 min` que NADIE
+    // leía: documentaba una alarma de latido que no existe. Se retiró en lugar de
+    // implementarla porque habría sido una tercera alarma haciendo el trabajo que
+    // las otras dos ya hacen —más despertares y más batería para nada.
 
     // ── Salud del rastreo ────────────────────────────────────────────────────
 

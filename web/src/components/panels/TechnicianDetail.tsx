@@ -152,6 +152,11 @@ export function TechnicianDetail() {
     })
   }
 
+  // Ventana en la que un viaje todavía cuenta como "la jornada de ahora". Cubre
+  // un turno largo con holgura; más allá de eso es historial y tiene su propia
+  // pantalla.
+  const TRIP_MAX_AGE_MS = 16 * 3600_000
+
   const [tripInfo, setTripInfo]     = useState<{ start: Date; end: Date | null } | null>(null)
   const [activeSecs, setActiveSecs] = useState(0)
   const timerRef        = useRef<number>()
@@ -172,7 +177,15 @@ export function TechnicianDetail() {
 
   const tripAge      = tripInfo ? Date.now() - tripInfo.start.getTime() : Infinity
   const effectiveTrip = !tripInfo ? null
-    : (isActive && (tripInfo.end !== null || tripAge > 16 * 3600_000)) ? null
+    // Un viaje de otra jornada NO es "tiempo activo". El descarte por antigüedad
+    // estaba dentro del `isActive &&`, así que con el técnico parado se colaba el
+    // último viaje que hubiera, sin fecha y junto a las métricas en vivo: el
+    // 2026-08-24 el panel anunciaba "Tiempo activo 3h 34m · Sesión finalizada"
+    // para un técnico cuyo viaje era del 25 de julio, 30 días antes.
+    : tripAge > TRIP_MAX_AGE_MS ? null
+    // Activo y con el viaje ya cerrado: se está moviendo otra vez y el viaje
+    // nuevo aún no existe en la tabla. Mejor no enseñar nada que el anterior.
+    : (isActive && tripInfo.end !== null) ? null
     : tripInfo
 
   function fetchTrip(techId: string, replace: boolean) {

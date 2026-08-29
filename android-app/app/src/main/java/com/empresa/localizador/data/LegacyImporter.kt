@@ -58,6 +58,13 @@ object LegacyImporter {
         val motionsImported: Int,
     )
 
+    /**
+     * Tras agotarlos se da la herencia por imposible y se deja de reintentar. Son
+     * arranques de la app, no minutos: llegar a tres significa que la base antigua
+     * está definitivamente ilegible, no que hubo mala suerte una vez.
+     */
+    private const val MAX_ATTEMPTS = 3
+
     suspend fun runOnce(context: Context): Result {
         if (Prefs.legacyImported) return Result(false, false, false, 0, 0)
 
@@ -68,28 +75,62 @@ object LegacyImporter {
             return Result(false, false, false, 0, 0)
         }
 
-        var db: SQLiteDatabase? = null
+        // Leer la base antigua es lo ÚNICO que puede fallar de forma recuperable, así
+        // que se hace aparte: si sale bien, lo que viene después es trabajo en
+        // memoria y sobre las preferencias, y ya no puede dejar la herencia a medias.
+        val attempt = Prefs.legacyImportAttempts + 1
+        Prefs.legacyImportAttempts = attempt
+
+        val values = try {
+            readLegacyValues(file)
+        } catch (e: Exception) {
+            // ANTES este fallo marcaba la herencia como hecha y el técnico perdía el
+            // vínculo para siempre. Un cierre a la fuerza —justo lo que hacen las
+            // capas de Xiaomi y Samsung— deja la base con un diario sin reproducir y
+            // la primera lectura falla, aunque al siguiente arranque funcione.
+            val reason = e.message ?: e::class.java.simpleName
+            return giveUpOrRetry(attempt, reason)
+        }
+
         var result = Result(false, false, false, 0, 0)
         try {
-            db = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            val values = readAll(db)
             if (values.isEmpty()) {
+                // La base existe pero está vacía: no hay nada que rescatar y
+                // reintentar no cambiaría el resultado.
                 Prefs.legacyImported = true
+                Prefs.log(TAG, "La versión anterior no tenía datos que heredar")
                 return result
             }
 
+            // Si el teléfono YA tiene identidad propia y un técnico vinculado, no se
+            // pisa. El caso que esto evita lo abre el reintento: falla el primer
+            // intento, el técnico ve "No registrado" y escanea el QR (con lo que se
+            // acuña una identidad nueva y queda vinculado), y al siguiente arranque
+            // el segundo intento sale bien y le devolvería la identidad vieja,
+            // desvinculándolo otra vez. En la migración normal ninguna de las dos
+            // condiciones se cumple, así que la herencia se aplica entera.
+            val yaVinculado = Prefs.hasInstallId() && Prefs.technicianId != null
+
             var gotInstall = false
             values[K_INSTALL_ID]?.takeIf { it.isNotBlank() }?.let {
-                Prefs.setInstallId(it)
+                if (yaVinculado) {
+                    Prefs.log(TAG, "Se conserva el vínculo actual del teléfono; no se sobrescribe con el de la versión anterior")
+                } else {
+                    Prefs.setInstallId(it)
+                }
                 gotInstall = true
             }
 
+            // Mismo criterio que con la identidad: la sesión de rastreo en curso
+            // manda sobre la heredada.
             var gotTech = false
             values[K_TECH_ID]?.takeIf { it.isNotBlank() }?.let {
-                Prefs.technicianId = it
+                if (!yaVinculado) Prefs.technicianId = it
                 gotTech = true
             }
-            values[K_TECH_NAME]?.takeIf { it.isNotBlank() }?.let { Prefs.technicianName = it }
+            values[K_TECH_NAME]?.takeIf { it.isNotBlank() }?.let {
+                if (!yaVinculado) Prefs.technicianName = it
+            }
             if (values[K_TERMS] == "true") Prefs.termsAccepted = true
 
             if (values[K_BATTOPT_DISMISSED] == "1") Prefs.battOptDismissed = true
@@ -110,6 +151,19 @@ object LegacyImporter {
             if (motions.isNotEmpty()) dao.insertMotions(motions)
 
             result = Result(true, gotInstall, gotTech, locs.size, motions.size)
+
+            // La identidad del dispositivo es lo único cuya ausencia obliga a volver
+            // a escanear el QR. Si la base antigua se leyó pero no la traía, hay que
+            // decirlo: es la diferencia entre "la app te mandó a escanear sin motivo"
+            // y un dato concreto que el líder puede consultar.
+            if (gotInstall) {
+                Prefs.legacyImportFailure = null
+            } else {
+                Prefs.legacyImportFailure =
+                    "La versión anterior no tenía guardado el identificador del dispositivo"
+                Prefs.log(TAG, "Herencia sin identificador de dispositivo: hará falta escanear el QR")
+            }
+
             Prefs.log(
                 TAG,
                 "Datos heredados de la versión anterior: " +
@@ -118,15 +172,64 @@ object LegacyImporter {
                     "${locs.size} puntos y ${motions.size} eventos rescatados de la cola",
             )
         } catch (e: Exception) {
-            // Nunca bloquear el arranque por la herencia: en el peor caso el
-            // técnico vuelve a escanear el QR, que es el comportamiento anterior.
-            Log.w(TAG, "No se pudo heredar el estado anterior: ${e.message}")
-            Prefs.log(TAG, "No se pudo leer el estado de la versión anterior: ${e.message}")
+            // Los valores ya están leídos; lo que falle aquí es al guardarlos. No se
+            // reintenta —se habrían aplicado a medias— pero sí queda constancia.
+            Log.w(TAG, "No se pudo aplicar el estado anterior: ${e.message}")
+            Prefs.legacyImportFailure = "No se pudo aplicar el estado anterior: ${e.message}"
+            Prefs.log(TAG, "No se pudo aplicar el estado de la versión anterior: ${e.message}")
         } finally {
-            runCatching { db?.close() }
             Prefs.legacyImported = true
         }
         return result
+    }
+
+    /**
+     * Marca el fallo como definitivo o lo deja abierto a otro intento.
+     *
+     * Mientras queden intentos NO se toca [Prefs.legacyImported]: el siguiente
+     * arranque volverá a probar, que es lo que rescata el caso habitual de una base
+     * que quedó sucia por un cierre a la fuerza.
+     */
+    private fun giveUpOrRetry(attempt: Int, reason: String): Result {
+        if (attempt >= MAX_ATTEMPTS) {
+            Prefs.legacyImported = true
+            Prefs.legacyImportFailure =
+                "No se pudo leer la instalación anterior tras $MAX_ATTEMPTS intentos: $reason"
+            Log.w(TAG, "Herencia abandonada tras $attempt intentos: $reason")
+            Prefs.log(TAG, "Herencia abandonada tras $attempt intentos ($reason); hará falta escanear el QR")
+        } else {
+            Prefs.legacyImportFailure =
+                "No se pudo leer la instalación anterior (intento $attempt de $MAX_ATTEMPTS): $reason"
+            Log.w(TAG, "Herencia fallida (intento $attempt), se reintentará: $reason")
+            Prefs.log(TAG, "No se pudo leer la instalación anterior (intento $attempt); se reintentará al abrir de nuevo")
+        }
+        return Result(false, false, false, 0, 0)
+    }
+
+    /**
+     * Abre la base de AsyncStorage y vuelca sus claves.
+     *
+     * Se intenta primero en LECTURA-ESCRITURA aunque solo se vaya a leer, y no es un
+     * descuido: cuando el proceso anterior murió a mitad de una escritura, SQLite
+     * deja un diario pendiente y **la recuperación exige permiso de escritura**.
+     * Abriendo en solo-lectura esa base falla con "attempt to write a readonly
+     * database" — precisamente en los teléfonos que más cierres a la fuerza sufren,
+     * que son los que motivaron todo esto. La apertura en solo-lectura queda como
+     * respaldo por si el archivo no admite escritura.
+     */
+    private fun readLegacyValues(file: java.io.File): Map<String, String> {
+        var db: SQLiteDatabase? = null
+        try {
+            db = try {
+                SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+            } catch (e: Exception) {
+                Log.w(TAG, "Apertura en escritura rechazada (${e.message}); se intenta en solo lectura")
+                SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+            }
+            return readAll(db)
+        } finally {
+            runCatching { db?.close() }
+        }
     }
 
     private fun readAll(db: SQLiteDatabase): Map<String, String> {

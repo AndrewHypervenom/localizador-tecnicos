@@ -187,10 +187,23 @@ export const es = {
   'techStatus.stopped.label': 'Rastreo detenido',
   'techStatus.stopped.reason': 'La app dejó de reportar · último punto {ago}',
   'techStatus.stopped.reasonNoTime': 'La app dejó de reportar',
+  // La HORA del corte es más accionable que "hace 6 horas": dice si se cayó al
+  // salir del taller, al entrar a un sótano o a mitad de la ruta.
+  'techStatus.stopped.reasonAt': 'Rastreó hoy y se cayó a las {clock} · revisar el teléfono',
 
   'techStatus.offline.label': 'Sin conexión',
   'techStatus.offline.reason': 'Sin señales de la app {ago} · hay que llamarlo',
+  'techStatus.offline.reasonAt': 'Rastreó hoy hasta las {clock} y se cayó · revisar el teléfono',
   'techStatus.offline.never': 'Nunca ha reportado desde que se instaló la app',
+
+  // ---- no arrancó el rastreo hoy ----
+  // Es un problema DISTINTO al de la app que se cae a media jornada, y pide otra
+  // acción: aquí se habla con el técnico para que abra la app; allá hay que
+  // arreglar el teléfono, porque él cree que la lleva encendida. El panel los
+  // pintaba iguales y el líder no podía saber a quién llamar.
+  'techStatus.notStartedToday.label': 'Sin iniciar hoy',
+  'techStatus.notStartedToday.reason': 'No ha abierto la app hoy · último rastreo {ago}',
+  'techStatus.notStartedToday.never': 'Nunca ha reportado desde que se instaló la app',
 
   'techStatus.accident.label': 'ACCIDENTE',
   'techStatus.accident.reason': 'Impacto detectado · revisar de inmediato',
@@ -200,15 +213,23 @@ export const es = {
 
   // ---- contadores por tono (deben leerse como el semáforo, no como categorías sueltas) ----
   'techStatus.count.ok': 'App sirviendo',
-  'techStatus.count.warn': 'Sin señal',
+  // El cubo ámbar mezcla 'no_signal' (la app late) y 'stopped' (puede llevar
+  // horas muerta). Se llamaba "Sin señal", que es la etiqueta de UNO de los dos:
+  // el 2026-08-24 el panel contaba bajo "Sin señal" a un técnico cuyo latido
+  // llevaba 6 h parado y que había emitido `tracking_stop`. El contador debe
+  // decir lo único cierto en los dos casos: no llegan posiciones.
+  'techStatus.count.warn': 'Sin posiciones',
   'techStatus.count.down': 'Rastreo caído',
 
   // ---- leyenda de colores ----
   'techStatus.legend.title': 'Qué significa cada color',
   'techStatus.legend.ok': 'Verde · la app está sirviendo',
   'techStatus.legend.okDesc': 'Llegan posiciones al día. Da igual si va manejando o está parado en una instalación: el rastreo funciona y no hay nada que hacer.',
-  'techStatus.legend.warn': 'Ámbar · la app vive, pero el rastreo falla',
-  'techStatus.legend.warnDesc': 'El teléfono avisa que la app sigue abierta, pero no llegan posiciones. Al lado del nombre siempre dice el motivo exacto: GPS apagado, sin datos, permiso incompleto o bajo techo.',
+  // Esta leyenda afirmaba "el teléfono avisa que la app sigue abierta", y eso
+  // solo vale para 'no_signal'. 'stopped' también es ámbar y NO exige latido
+  // ninguno: describía como app viva a teléfonos muertos desde por la mañana.
+  'techStatus.legend.warn': 'Ámbar · no llegan posiciones',
+  'techStatus.legend.warnDesc': 'El rastreo no está al día, pero todavía no es un "hay que llamarlo". Al lado del nombre dice cuál de los dos casos es: o la app sigue latiendo y se indica el motivo exacto (GPS apagado, sin datos, permiso incompleto, bajo techo), o dejó de reportar hace rato aunque hoy sí envió algo.',
   'techStatus.legend.down': 'Rojo · el rastreo se cayó',
   'techStatus.legend.downDesc': 'Ni posiciones ni señal de vida de la app: hay que llamar al técnico. En rojo aparece también un accidente detectado.',
   'techStatus.legend.none': 'Gris · sin teléfono vinculado',

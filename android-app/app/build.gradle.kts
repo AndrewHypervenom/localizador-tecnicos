@@ -28,8 +28,12 @@ android {
         applicationId = "com.empresa.localizador"
         minSdk = 24
         targetSdk = 35
-        versionCode = 20
-        versionName = "2.0.0"
+        // 21 / 2.1.0 — latencia de envío y reposo (2026-08-24).
+        // SUBIRLO en cada reparto: quien ya tenga la 2.0.0 (versionCode 20) no
+        // recibiría nada si se le vuelve a empujar un 20, y el MDM daría la
+        // actualización por aplicada sin haber instalado el código nuevo.
+        versionCode = 21
+        versionName = "2.1.0"
 
         buildConfigField("String", "SUPABASE_URL", "\"${secret("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${secret("SUPABASE_ANON_KEY")}\"")

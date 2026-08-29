@@ -81,7 +81,7 @@ export function LeaderStats() {
             .in('id', techIds),
           supabase
             .from('technician_heartbeat')
-            .select('technician_id, gps_on, net_on, perm')
+            .select('technician_id, gps_on, net_on, perm, last_heartbeat')
             .in('technician_id', techIds),
         ])
         statusMap = new Map(statusRes.data?.map(s => [s.id, s]) ?? [])
@@ -112,6 +112,7 @@ export function LeaderStats() {
             hbGpsOn:   hb?.gps_on ?? null,
             hbNetOn:   hb?.net_on ?? null,
             hbPerm:    hb?.perm ?? null,
+            lastHeartbeat: hb?.last_heartbeat ?? null,
           },
         }
       }))

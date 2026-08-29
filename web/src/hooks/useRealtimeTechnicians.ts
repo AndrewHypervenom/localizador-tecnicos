@@ -229,7 +229,28 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       useTrackingStore.getState().refreshStatuses()
     }, 10_000)
 
-    // Suscripción a nuevos puntos GPS en tiempo real
+    // Suscripción a nuevos puntos GPS en tiempo real.
+    //
+    // ⚠️ MEDIDO EL 2026-08-24: ESTE CANAL NO ENTREGA NADA. `location_events` es
+    // una tabla PARTICIONADA y Supabase Realtime no publica sus cambios, aunque
+    // la publicación `supabase_realtime` la incluya y tenga `pubviaroot = true`.
+    // Comprobado con dos sesiones distintas —anon de líder y service_role, que
+    // salta RLS— escuchando 90 s y 75 s mientras entraban 48 puntos: 0 eventos.
+    // En la misma prueba, `technician_heartbeat` (tabla normal) entregó 9 y 7.
+    //
+    // Consecuencias, para que nadie las descubra otra vez desde cero:
+    //   · El mapa NO es tiempo real: vive del sondeo de 30 s de aquí arriba.
+    //   · `markRealtimeEvent()` no se llama nunca por posiciones, así que
+    //     `lastRealtimeEvent` se queda en null.
+    //   · El indicador "En vivo" se pone en verde igualmente, porque solo mira
+    //     si el canal quedó SUBSCRIBED — y sí queda. Dice "En vivo" sobre un
+    //     mapa que se refresca cada 30 s.
+    //   · Se está pagando la decodificación del WAL de la tabla más pesada del
+    //     sistema para un flujo que nadie recibe.
+    //
+    // Se deja suscrito a propósito: el día que la tabla deje de estar
+    // particionada —o que Supabase soporte particiones— esto vuelve a funcionar
+    // solo. El handler de abajo ya está corregido para ese día.
     const locationChannel = supabase
       .channel('location_events_realtime')
       .on(
@@ -247,6 +268,12 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
           updateTechnicianPosition({
             technician_id: row.technician_id,
             ts:            row.ts,
+            // Sin esto el estado se recalculaba con el reloj del TELÉFONO y un
+            // punto recién llegado sacaba al técnico de verde: medido sobre la
+            // flota, 15 técnicos y 66 puntos en 24 h degradados (9 hasta rojo),
+            // con atrasos de hasta 892 min. El sondeo de 30 s lo devolvía a
+            // verde después, así que el líder veía parpadear el semáforo.
+            received_at:   row.received_at,
             lat,
             lng,
             speed:         row.speed,

@@ -128,6 +128,12 @@ fun DiagnosticsScreen(
             InfoRow("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             InfoRow("Versión de la app", BuildConfig.VERSION_NAME)
             InfoRow("ID de instalación", deviceId.take(8) + "…")
+            // Si la actualización no pudo heredar la identidad de la versión
+            // anterior, el técnico acabará escaneando el QR. Que aquí quede el
+            // motivo evita la conversación de "la app me desvinculó sola".
+            Prefs.legacyImportFailure?.let {
+                InfoRow("Herencia de la versión anterior", it, warn = true)
+            }
         }
 
         Card {

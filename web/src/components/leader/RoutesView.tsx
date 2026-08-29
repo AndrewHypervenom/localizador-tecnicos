@@ -125,7 +125,7 @@ export function RoutesView() {
           supabase.from('technician_current_status')
             .select('id, status, last_seen, last_speed, device_id').in('id', techIds),
           supabase.from('technician_heartbeat')
-            .select('technician_id, gps_on, net_on, perm').in('technician_id', techIds),
+            .select('technician_id, gps_on, net_on, perm, last_heartbeat').in('technician_id', techIds),
         ])
         statusMap = new Map(statusRes.data?.map((s: any) => [s.id, s]) ?? [])
         hbMap     = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
@@ -154,6 +154,7 @@ export function RoutesView() {
             hbGpsOn:   hb?.gps_on ?? null,
             hbNetOn:   hb?.net_on ?? null,
             hbPerm:    hb?.perm ?? null,
+            lastHeartbeat: hb?.last_heartbeat ?? null,
           },
         }
       }))

@@ -1,6 +1,7 @@
 # Localizador PositivoS+ — app Android nativa (Kotlin)
 
-Reescritura en Kotlin de `mobile/` (React Native + Expo). Mismo backend, mismas
+Reescritura en Kotlin de la app anterior (React Native + Expo), ya retirada del
+repositorio. Mismo backend, mismas
 tablas, mismo comportamiento visible para el líder; cambia por completo cómo se
 sostiene el rastreo.
 
@@ -8,7 +9,7 @@ sostiene el rastreo.
 
 ## 1. Por qué se caía el rastreo
 
-Diagnóstico sobre el código de `mobile/`, no sobre síntomas:
+Diagnóstico sobre el código de la versión React Native, no sobre síntomas:
 
 | # | Causa | Efecto |
 |---|---|---|
@@ -21,20 +22,33 @@ Diagnóstico sobre el código de `mobile/`, no sobre síntomas:
 
 ---
 
-## 2. ⚠️ Hallazgo en el servidor — REQUIERE ACCIÓN
+## 2. ⚠️ Hallazgos en el servidor
 
-Durante la verificación se probó el backend real:
+### 2.1 El alta anónima ya está arreglada (11-08-2026)
 
+Cuando se escribió este documento, `POST /auth/v1/signup` devolvía HTTP 500
+("Database error creating anonymous user"). **Se volvió a probar el 11-08-2026 y
+ahora responde 200.** El apartado se conserva porque explica por qué la app nueva
+no depende de que eso funcione.
+
+### 2.2 Todo usuario anónimo nace con rol `supervisor` — REQUIERE ACCIÓN
+
+El token que devuelve ese mismo `signup` trae:
+
+```json
+"app_metadata": { "role": "supervisor" }
 ```
-POST /auth/v1/signup   →   HTTP 500
-{"error_code":"unexpected_failure","msg":"Database error creating anonymous user"}
-```
 
-**El alta de usuarios anónimos está rota en el proyecto de Supabase.** Suele ser
-un trigger sobre `auth.users` que falla (una función tipo `handle_new_user` que
-inserta en una tabla pública y viola una restricción, o le falta permiso).
+Como la clave pública va dentro del APK, **cualquiera que la extraiga puede darse
+de alta y obtener rol de supervisor.** Casi seguro es un trigger sobre
+`auth.users` que asigna el rol por defecto.
 
-Por qué importa tanto: en `mobile/src/services/locationTask.ts` el vaciado de la
+### 2.3 `GET /technicians` con la sola clave pública devuelve la plantilla entera
+
+Nombres y `device_id` de los 79 técnicos, sin sesión. Conviene acotar la política
+de lectura a lo que la app necesita: su propia fila, buscada por `device_id`.
+
+Por qué importa tanto: en la versión React Native (`src/services/locationTask.ts`) el vaciado de la
 cola es
 
 ```js
@@ -121,7 +135,7 @@ dispositivo completa, anti Fake GPS, SOS y las guías por fabricante.
 
 - **Mismo `applicationId`** (`com.empresa.localizador`) y **misma firma** (SHA-1
   `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`, la llave de
-  `mobile/android/app/debug.keystore`, copiada a `keystore/`). El APK entra como
+  la app React Native, copiada a `keystore/`). El APK entra como
   **actualización en sitio**, sin desinstalar.
 - `versionCode` 20 (el anterior era 6).
 - **`LegacyImporter`** lee el SQLite de AsyncStorage (`databases/RKStorage`) y
@@ -147,7 +161,7 @@ cp secrets.properties.example secrets.properties   # y rellenar
 # -> app/build/outputs/apk/release/app-release.apk  (11,7 MB)
 ```
 
-`secrets.properties` toma las mismas credenciales que `mobile/.env`
+`secrets.properties` toma las mismas credenciales que usaba la app anterior
 (`EXPO_PUBLIC_SUPABASE_URL` → `SUPABASE_URL`, etc.). No se versiona.
 
 La variante `debug` usa el sufijo `.dev`, así que se puede instalar **junto a** la
@@ -167,13 +181,17 @@ Verificado:
 - ✅ El formato de las filas coincide con el esquema (`POINT(lng lat)`, ISO-8601,
   la partición `location_events_2026_07` existe).
 
-**No verificado — hace falta un teléfono:**
+**Actualización 11-08-2026:** ya hay **3 teléfonos reportando con `app_version`
+2.0.0** en `technician_heartbeat`, así que la app sí se ha ejecutado en campo. Lo
+que sigue sin validarse es la variedad de marcas y, sobre todo, la migración.
 
-- ❌ **Nunca se ha ejecutado.** No había ningún dispositivo conectado por ADB.
+**No verificado:**
+
 - ❌ La herencia desde AsyncStorage no se ha probado contra una instalación real
-  de la app RN.
-- ❌ Comportamiento en campo: consumo real de batería, supervivencia en MIUI,
-  precisión del reconocimiento de actividad, lectura del QR.
+  de la app RN. **Es el mayor riesgo del corte:** si falla, los técnicos que
+  actualicen tienen que volver a escanear el QR. Ver la prueba 2 de abajo.
+- ❌ Comportamiento en campo por marca: consumo real de batería, supervivencia en
+  MIUI/One UI, precisión del reconocimiento de actividad, lectura del QR.
 
 ### Prueba mínima recomendada antes de repartir
 
@@ -209,10 +227,16 @@ revisarlas:**
 
 ## 8. Pendiente
 
-- [ ] **Arreglar el alta anónima en Supabase** (sección 2) o desactivarla adrede.
-- [ ] Probar en teléfono real (sección 6).
-- [ ] Decidir qué hacer con `mobile/`: conviene **conservarla** hasta que la
-      versión Kotlin esté validada en campo.
-- [ ] `MDM_PROVISIONING.md` de `mobile/` sigue vigente palabra por palabra; solo
-      cambian los nombres de clase internos.
+- [ ] **Quitar el rol `supervisor` de los usuarios anónimos** (sección 2.2). Es lo
+      más urgente: hoy cualquiera con el APK puede obtenerlo.
+- [ ] **Acotar la lectura de `technicians`** a la fila del propio dispositivo
+      (sección 2.3).
+- [ ] Validar la migración desde React Native en varias marcas (sección 6).
+- [ ] **Respaldar `keystore/localizador-release.keystore` fuera de esta máquina.**
+      No está en git y sin ella ningún APK futuro puede actualizar a los técnicos:
+      habría que desinstalar y re-escanear los 79 QR.
 - [ ] Valorar una llave de firma propia con un plan de reinstalación (sección 4).
+
+> La app React Native se retiró del repositorio el 11-08-2026. Sigue recuperable
+> en el historial de git (último commit con ella: `659d98a`). `MDM_PROVISIONING.md`
+> se conservó y vive ahora junto a este README.

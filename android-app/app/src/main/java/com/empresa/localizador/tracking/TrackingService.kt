@@ -114,6 +114,17 @@ class TrackingService : Service() {
         fun clearMockFlag() {
             mockDetected = false
         }
+
+        /**
+         * Última vez que se dejó constancia de un rechazo del sistema. Vive en el
+         * companion a propósito: cada reintento construye un objeto Service nuevo,
+         * así que un campo de instancia no recordaría nada y la bitácora se
+         * llenaría igual.
+         */
+        @Volatile
+        private var lastRejectLogElapsed = 0L
+
+        private const val REJECT_LOG_INTERVAL_MS = 30 * 60_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -130,6 +141,16 @@ class TrackingService : Service() {
     private var lastMovingElapsed = SystemClock.elapsedRealtime()
     private var lastFlushElapsed = 0L
     private var anchoredSinceElapsed = 0L
+
+    /** Fixes seguidos con velocidad de marcha; ver [TrackingConfig.MOVING_CONFIRM_FIXES]. */
+    private var movingFixCount = 0
+
+    /**
+     * El sistema rechazó pasar a primer plano. Distingue "me han matado y debo
+     * revivir" de "no me dejan arrancar", que son cosas opuestas: la primera pide
+     * reintento inmediato y la segunda, esperar.
+     */
+    private var foregroundRejected = false
 
     @Volatile
     private var activityStill = false
@@ -165,9 +186,18 @@ class TrackingService : Service() {
         // Lo primero, SIEMPRE: Android exige la notificación en los primeros
         // segundos o mata el proceso con una excepción.
         if (!promoteToForeground()) {
+            // Que el sistema RECHACE el servicio (permiso de ubicación retirado)
+            // no se arregla reintentando: hay que esperar a que el técnico lo
+            // vuelva a conceder. Se marca para que onDestroy NO programe la
+            // resurrección inmediata, o se entraría en un bucle de reinicio cada
+            // 2 segundos que vacía la batería y, peor, inunda la bitácora de
+            // diagnóstico hasta borrar el historial que sirve para saber qué pasó.
+            // El watchdog periódico (3 min) ya reintenta al ritmo correcto.
+            foregroundRejected = true
             stopSelf()
             return START_NOT_STICKY
         }
+        foregroundRejected = false
 
         when (intent?.action) {
             ACTION_STOP -> {
@@ -212,7 +242,9 @@ class TrackingService : Service() {
         runCatching { engine.stop() }
         runCatching { motionDetector.release() }
         // Si la sesión seguía activa, esto fue una muerte no deseada: re-armar.
-        if (Prefs.technicianId != null) {
+        // Salvo que el sistema nos haya RECHAZADO el arranque, en cuyo caso
+        // reintentar a los 2 s solo produce un bucle (ver onStartCommand).
+        if (Prefs.technicianId != null && !foregroundRejected) {
             Watchdogs.scheduleImmediateRestart(this)
         }
         scope.cancel()
@@ -236,7 +268,15 @@ class TrackingService : Service() {
         // Ocurre si el permiso de ubicación fue retirado: Android 14+ rechaza un
         // servicio de tipo "location" sin permiso.
         Log.e(TAG, "No se pudo pasar a primer plano: ${e.message}")
-        Prefs.log("servicio", "El sistema rechazó el servicio de ubicación: ${e.message}")
+        // Una sola entrada cada media hora: el watchdog reintenta cada 3 minutos y
+        // sin este freno un permiso retirado durante una jornada barría el anillo
+        // de la bitácora, que es justo la prueba que hace falta para explicar por
+        // qué el técnico dejó de verse.
+        val nowElapsed = SystemClock.elapsedRealtime()
+        if (nowElapsed - lastRejectLogElapsed >= REJECT_LOG_INTERVAL_MS || lastRejectLogElapsed == 0L) {
+            lastRejectLogElapsed = nowElapsed
+            Prefs.log("servicio", "El sistema rechazó el servicio de ubicación: ${e.message}")
+        }
         false
     }
 
@@ -354,6 +394,10 @@ class TrackingService : Service() {
             lastMovingElapsed = nowElapsed
             anchoredSinceElapsed = 0L
             stopIdleTicker()
+            // El ancla ya exigió su propia confirmación para soltarse, así que
+            // exigirla otra vez en updateTier solo retrasaría la captura densa
+            // justo cuando arranca el recorrido: se da por confirmada.
+            movingFixCount = TrackingConfig.MOVING_CONFIRM_FIXES
         }
 
         motionDetector.onGpsSample(snap.effectiveSpeedMs, bearing, nowElapsed)
@@ -424,6 +468,13 @@ class TrackingService : Service() {
 
     private fun updateTier(effectiveSpeedMs: Double, nowElapsed: Long, location: Location) {
         if (effectiveSpeedMs > TrackingConfig.STATIONARY_SPEED_MS) {
+            movingFixCount++
+            // Un pico suelto de velocidad con el teléfono quieto es deriva del
+            // GNSS, no movimiento. Si contara, reiniciaría el reloj de reposo sin
+            // parar y el ancla no se fijaría nunca (ver MOVING_CONFIRM_FIXES).
+            // Sin confirmar tampoco se baja de nivel: se deja el tier como está.
+            if (movingFixCount < TrackingConfig.MOVING_CONFIRM_FIXES) return
+
             lastMovingElapsed = nowElapsed
             anchoredSinceElapsed = 0L
             stopIdleTicker()
@@ -431,15 +482,21 @@ class TrackingService : Service() {
             return
         }
 
+        movingFixCount = 0
+
         if (nowElapsed - lastMovingElapsed < TrackingConfig.STATIONARY_AFTER_MS) return
 
         // Confirmado detenido: fijar el ancla en la última posición SUBIDA —esa ya
         // pasó el filtro de precisión; el fix actual puede venir degradado si el
         // técnico está bajo techo.
         if (!anchor.isAnchored) {
+            // La altitud sí se toma del fix actual aunque las coordenadas vengan
+            // de `lastUploaded`: el técnico está detenido, así que es la misma
+            // altura, y `lastUploaded` no la guarda.
+            val anchorAltitude = if (location.hasAltitude()) location.altitude else null
             val last = Prefs.lastUploaded()
-            if (last != null) anchor.anchorAt(last.first, last.second)
-            else anchor.anchorAt(location.latitude, location.longitude)
+            if (last != null) anchor.anchorAt(last.first, last.second, anchorAltitude)
+            else anchor.anchorAt(location.latitude, location.longitude, anchorAltitude)
             anchoredSinceElapsed = nowElapsed
             startIdleTicker()
             Prefs.log("gps", "Técnico detenido: se fija el ancla y se espacia la captura")
@@ -485,6 +542,9 @@ class TrackingService : Service() {
             anchoredSinceElapsed = 0L
             stopIdleTicker()
             lastMovingElapsed = SystemClock.elapsedRealtime()
+            // El reconocimiento de actividad del sistema ya es evidencia de
+            // movimiento real: no hace falta esperar a confirmarlo con el GPS.
+            movingFixCount = TrackingConfig.MOVING_CONFIRM_FIXES
             applyTier(TrackingTier.MOVING)
             Prefs.log("gps", "Movimiento detectado: se reanuda la captura densa")
         }
@@ -523,7 +583,15 @@ class TrackingService : Service() {
                     lat = lat,
                     lng = lng,
                     speed = 0.0,
-                    altitude = null,
+                    // Iba fijo a null, y como el técnico pasa la mayor parte de
+                    // la jornada anclado, casi TODOS sus puntos salían sin
+                    // altitud: medido el 2026-08-24, la 1.2.8 (React Native, sin
+                    // este tickeo) mandaba altitud en el 100 % de sus puntos y la
+                    // 2.1.0 en el 12 %. Por eso el perfil de elevación del panel
+                    // salía vacío.
+                    altitude = anchor.anchorAltitude(),
+                    // El rumbo sí se queda en null a propósito: parado no hay
+                    // dirección de marcha que reportar.
                     bearing = null,
                     accuracy = null,
                 )
@@ -541,7 +609,7 @@ class TrackingService : Service() {
 
     private suspend fun maybeFlush() {
         val nowElapsed = SystemClock.elapsedRealtime()
-        val timeToFlush = nowElapsed - lastFlushElapsed >= TrackingConfig.BATCH_INTERVAL_MS
+        val timeToFlush = nowElapsed - lastFlushElapsed >= TrackingConfig.batchIntervalMs(engine.currentTier)
         val tooMany = !timeToFlush &&
             AppDatabase.get(this).queueDao().countLocations() >= TrackingConfig.BATCH_MAX_PENDING
         if (!timeToFlush && !tooMany) return

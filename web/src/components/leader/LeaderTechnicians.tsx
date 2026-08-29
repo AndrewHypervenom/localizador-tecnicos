@@ -22,6 +22,7 @@ type Tech = TechnicianEditable & {
   hb_gps_on?: boolean | null
   hb_net_on?: boolean | null
   hb_perm?: 'full' | 'partial' | 'none' | null
+  hb_last?: string | null
 }
 
 function initials(name: string) {
@@ -65,7 +66,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
           supabase.from('technician_current_status')
             .select('id, status, last_seen, last_speed').in('id', ids),
           supabase.from('technician_heartbeat')
-            .select('technician_id, gps_on, net_on, perm').in('technician_id', ids),
+            .select('technician_id, gps_on, net_on, perm, last_heartbeat').in('technician_id', ids),
         ])
         statusMap = new Map(statusRes.data?.map((s: any) => [s.id, s]) ?? [])
         hbMap     = new Map(hbRes.data?.map((h: any) => [h.technician_id, h]) ?? [])
@@ -82,6 +83,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
           hb_gps_on:  hb?.gps_on ?? null,
           hb_net_on:  hb?.net_on ?? null,
           hb_perm:    hb?.perm ?? null,
+          hb_last:    hb?.last_heartbeat ?? null,
         }
       }))
     } catch (err: any) {
@@ -204,6 +206,7 @@ export function LeaderTechnicians({ onViewOnMap }: { onViewOnMap?: (techId: stri
                     hbGpsOn:   t.hb_gps_on,
                     hbNetOn:   t.hb_net_on,
                     hbPerm:    t.hb_perm,
+                    lastHeartbeat: t.hb_last,
                   }, getDateLocale(lang))
                   const isToggling = toggling === t.id
                   return (
