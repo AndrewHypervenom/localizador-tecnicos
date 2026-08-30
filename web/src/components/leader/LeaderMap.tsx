@@ -111,7 +111,7 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
   useZones(selectedDate)
   useZoneEvents(scopeIds)
 
-  const { selectedTechnicianId, realtimeStatus, selectTechnician } = useTrackingStore()
+  const { selectedTechnicianId, realtimeStatus, lastDataRefresh, selectTechnician } = useTrackingStore()
   const { zones, showZones, toggleShowZones, selectedZoneId, selectZone } = useZonesStore()
   const [weekStart, setWeekStart]       = useState(getWeekStart(today))
   const [markedDates, setMarkedDates]   = useState<string[]>([])
@@ -253,12 +253,31 @@ export function LeaderMap({ onOpenPanel, unreadAlertsCount = 0 }: LeaderMapProps
     }
   }
 
+  // El indicador mide la FRESCURA DE LOS DATOS, no si el canal quedó suscrito.
+  //
+  // Antes se calculaba solo con `realtimeStatus`, que se pone en 'connected' en
+  // cuanto el canal recibe SUBSCRIBED — y ese canal queda suscrito siempre,
+  // aunque no entregue un solo evento (`location_events` es una tabla
+  // particionada y Supabase Realtime no publica sus cambios). Resultado: el
+  // punto verde con "En vivo" encima de un técnico cuyo último rastreo era de
+  // hacía cinco días. Lo que sostiene el mapa es el sondeo de 30 s, así que es
+  // ese sondeo el que se refleja aquí.
+  const msDesdeSondeo = lastDataRefresh
+    ? Date.now() - new Date(lastDataRefresh).getTime()
+    : null
+  const estadoDatos: typeof realtimeStatus =
+    msDesdeSondeo === null ? 'connecting'
+    // Dos ciclos de sondeo (30 s) más un margen: por debajo, al día.
+    : msDesdeSondeo < 75_000 ? 'connected'
+    : realtimeStatus === 'error' ? 'error'
+    : 'disconnected'
+
   const realtimeCfg = {
     connecting:   { dot: 'bg-warning animate-pulse', text: 'text-warning',    label: t('realtime.connecting') },
     connected:    { dot: 'bg-success animate-pulse',  text: 'text-success',    label: t('realtime.connected') },
     error:        { dot: 'bg-danger',                 text: 'text-danger',     label: t('realtime.error') },
     disconnected: { dot: 'bg-text-muted',             text: 'text-text-muted', label: t('realtime.disconnected') },
-  }[realtimeStatus]
+  }[estadoDatos]
 
   const onField = routes.filter(r => r.techStatus !== 'offline').length
 

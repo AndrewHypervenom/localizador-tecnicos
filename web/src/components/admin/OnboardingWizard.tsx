@@ -594,7 +594,9 @@ function StepDone({ clientName, projectName, assignedCount, newTechName, qrToken
         <div className="bg-surface border border-border-soft rounded-xl p-4 flex flex-col items-center gap-3">
           <p className="text-sm font-semibold text-text-primary">{t('wizard.qrTitle', { name: newTechName })}</p>
           <div className="bg-white p-3 rounded-xl shadow-inner">
-            <QRCodeSVG value={qrValue} size={160} level="M" bgColor="#ffffff" fgColor="#0f172a" />
+            {/* marginSize=4: zona de silencio del estándar QR; sin ella un código
+                recortado o reenviado deja de leerse. */}
+            <QRCodeSVG value={qrValue} size={160} level="M" marginSize={4} bgColor="#ffffff" fgColor="#0f172a" />
           </div>
           <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-xl px-3 py-2 text-xs text-success">
             <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />

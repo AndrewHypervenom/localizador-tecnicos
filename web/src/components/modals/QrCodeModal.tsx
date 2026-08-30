@@ -84,7 +84,12 @@ export function QrCodeModal({ tech, onClose }: Props) {
           ) : (
             <>
               <div className="bg-white p-4 rounded-2xl shadow-inner">
-                <QRCodeSVG value={qrValue} size={188} level="M" bgColor="#ffffff" fgColor="#0f172a" />
+                {/* marginSize=4: la "zona de silencio" que exige el estándar QR.
+                    Sin ella el SVG son los módulos pelados, y aunque en pantalla
+                    lo salve el recuadro blanco de alrededor, un QR recortado o
+                    reenviado por WhatsApp queda sin margen y muchos lectores lo
+                    rechazan. */}
+                <QRCodeSVG value={qrValue} size={188} level="M" marginSize={4} bgColor="#ffffff" fgColor="#0f172a" />
               </div>
               <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-xl px-3 py-2 text-xs text-success">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />

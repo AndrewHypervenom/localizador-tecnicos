@@ -112,14 +112,25 @@ function ScopeSidebar({ scopeIds }: { scopeIds: string[] | undefined }) {
   useZones(today)
   useZoneEvents(scopeIds)
 
-  const { selectedTechnicianId, selectTechnician, realtimeStatus } = useTrackingStore()
+  const { selectedTechnicianId, selectTechnician, realtimeStatus, lastDataRefresh } = useTrackingStore()
+
+  // Mide la frescura de los datos, no si el canal quedó suscrito; ver el mismo
+  // cálculo comentado a fondo en LeaderMap.
+  const msDesdeSondeo = lastDataRefresh
+    ? Date.now() - new Date(lastDataRefresh).getTime()
+    : null
+  const estadoDatos: typeof realtimeStatus =
+    msDesdeSondeo === null ? 'connecting'
+    : msDesdeSondeo < 75_000 ? 'connected'
+    : realtimeStatus === 'error' ? 'error'
+    : 'disconnected'
 
   const realtimeCfg = {
     connecting:   { dot: 'bg-warning animate-pulse', text: 'text-warning',    label: t('realtime.connecting') },
     connected:    { dot: 'bg-success animate-pulse',  text: 'text-success',    label: t('realtime.connected') },
     error:        { dot: 'bg-danger',                 text: 'text-danger',     label: t('realtime.error') },
     disconnected: { dot: 'bg-text-muted',             text: 'text-text-muted', label: t('realtime.disconnected') },
-  }[realtimeStatus]
+  }[estadoDatos]
 
   return (
     <>

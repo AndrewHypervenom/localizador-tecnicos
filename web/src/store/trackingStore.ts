@@ -139,6 +139,15 @@ interface TrackingStore {
   showHeatmap: boolean
   realtimeStatus: 'connecting' | 'connected' | 'error' | 'disconnected'
   lastRealtimeEvent: string | null   // ISO timestamp del último evento recibido
+  /**
+   * ISO del último SONDEO correcto de la vista de estado.
+   *
+   * Es lo que de verdad mantiene el mapa al día: el canal de `location_events`
+   * no entrega nada por ser tabla particionada, así que `lastRealtimeEvent` se
+   * queda en null para siempre. El indicador de la cabecera se calcula con ESTE
+   * campo; con `realtimeStatus` decía "En vivo" en verde sobre datos de días.
+   */
+  lastDataRefresh: string | null
   // Actions
   setTechnicians: (techs: TechnicianState[]) => void
   replaceTechnicians: (techs: TechnicianState[]) => void
@@ -154,6 +163,8 @@ interface TrackingStore {
   toggleHeatmap: () => void
   setRealtimeStatus: (status: TrackingStore['realtimeStatus']) => void
   markRealtimeEvent: () => void
+  /** Marca un sondeo correcto de la vista de estado. */
+  markDataRefresh: () => void
   refreshStatuses: () => void
   /** Limpia todos los datos (al cerrar sesión / cambiar de líder). */
   reset: () => void
@@ -241,6 +252,7 @@ export const useTrackingStore = create<TrackingStore>()(
     showHeatmap: false,
     realtimeStatus: 'connecting',
     lastRealtimeEvent: null,
+    lastDataRefresh: null,
 
     reset: () =>
       set((state) => {
@@ -249,6 +261,7 @@ export const useTrackingStore = create<TrackingStore>()(
         state.zoneAlerts = []
         state.selectedTechnicianId = null
         state.lastRealtimeEvent = null
+        state.lastDataRefresh = null
       }),
 
     setTechnicians: (techs) =>
@@ -411,6 +424,9 @@ export const useTrackingStore = create<TrackingStore>()(
 
     markRealtimeEvent: () =>
       set((state) => { state.lastRealtimeEvent = new Date().toISOString() }),
+
+    markDataRefresh: () =>
+      set((state) => { state.lastDataRefresh = new Date().toISOString() }),
 
     updateTechnicianHeartbeat: (hb) =>
       set((state) => {

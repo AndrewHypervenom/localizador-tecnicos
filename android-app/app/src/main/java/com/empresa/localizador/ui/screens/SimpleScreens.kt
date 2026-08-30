@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.empresa.localizador.BuildConfig
 import com.empresa.localizador.ui.WideButton
 import com.empresa.localizador.ui.theme.Brand
 
@@ -181,7 +182,10 @@ fun TermsScreen(onAccept: () -> Unit) {
         ) {
             WideButton("Acepto los Términos", Brand.Green, onAccept)
             Text(
-                "Versión 2.0 · Localizador de Técnicos",
+                // Del build, no a mano: escrito a mano se quedó en "2.0" mientras
+                // se repartía la 2.1.0, y es la única versión que ve el técnico
+                // antes de vincularse.
+                "Versión ${BuildConfig.VERSION_NAME} · Localizador de Técnicos",
                 color = Brand.TextDim,
                 fontSize = 11.sp,
             )

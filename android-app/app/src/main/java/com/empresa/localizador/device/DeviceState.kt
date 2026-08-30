@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.UserManager
 import androidx.core.content.ContextCompat
 
 /** Nivel funcional del permiso de ubicación. */
@@ -126,6 +127,21 @@ object DeviceState {
     fun isBatteryOptimized(context: Context): Boolean = try {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         pm?.isIgnoringBatteryOptimizations(context.packageName)?.not() ?: true
+    } catch (_: Exception) {
+        true
+    }
+
+    /**
+     * ¿Está ya desbloqueado el usuario, y por tanto montado el almacenamiento
+     * cifrado con credencial?
+     *
+     * Los componentes `directBootAware` (el receptor de arranque) se ejecutan antes
+     * del primer desbloqueo, cuando las preferencias, la cola de posiciones y las
+     * credenciales de sesión todavía NO existen. Tocarlas ahí lanza
+     * IllegalStateException.
+     */
+    fun isUserUnlocked(context: Context): Boolean = try {
+        context.getSystemService(UserManager::class.java)?.isUserUnlocked ?: true
     } catch (_: Exception) {
         true
     }

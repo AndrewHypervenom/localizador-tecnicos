@@ -83,21 +83,27 @@ object OemGuides {
 
     /**
      * En Android estándar se lee la lista blanca del sistema y el aviso desaparece
-     * solo al quedar exenta. En Xiaomi **no hay forma de leer** la capa MIUI, así
-     * que el aviso se mantiene hasta que el técnico confirme —y vuelve a aparecer
-     * si se detecta que el rastreo se cayó igualmente, porque entonces está claro
-     * que no se configuró.
+     * solo al quedar exenta. En Xiaomi la capa MIUI añade ajustes propios que **no
+     * se pueden leer**, así que ahí el aviso admite descarte manual.
+     *
+     * Pero la exención ESTÁNDAR sí se lee también en Xiaomi, y "Sin restricciones"
+     * de MIUI la concede. Cuando el sistema la confirma no se sigue pidiendo: antes
+     * se ignoraba esa lectura y el aviso seguía en pantalla después de configurarlo,
+     * contradiciendo a la propia pantalla de Diagnóstico —que en el mismo momento
+     * decía "Optimización de batería: Desactivada"—. El técnico que hacía caso veía
+     * que no servía de nada y acababa ignorando todos los avisos.
      */
     fun batteryGuard(context: Context): BatteryGuard {
+        val optimizada = DeviceState.isBatteryOptimized(context)
         if (isXiaomi) {
             return BatteryGuard(
-                needsAttention = !Prefs.battOptDismissed,
+                needsAttention = optimizada && !Prefs.battOptDismissed,
                 canDismiss = true,
                 xiaomi = true,
             )
         }
         return BatteryGuard(
-            needsAttention = DeviceState.isBatteryOptimized(context),
+            needsAttention = optimizada,
             canDismiss = false,
             xiaomi = false,
         )

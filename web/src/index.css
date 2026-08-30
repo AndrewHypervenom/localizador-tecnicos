@@ -138,27 +138,35 @@
      huecos entre teselas y este color es el que se ve en ellos. Tiene que ser
      el de la base EN PANTALLA, o sea el de la tesela YA FILTRADA: el filtro se
      aplica a la capa de teselas, no al contenedor.
-     Dark Matter tiene el fondo en rgb(9,9,9); pasado por el brightness(1.9) de
-     `.capa-base--oscuro` queda en #1c1c1c, que es este valor. */
-  background: #1c1c1c !important;
+     La base predeterminada es Esri Dark Gray, con el fondo en rgb(77,77,79);
+     pasado por el brightness(0.7) de `.capa-base--esri` queda en #363637.
+     (Con CARTO Dark Matter el valor equivalente era #1c1c1c: rgb(9,9,9) por
+     brightness(1.9). Si se vuelve a esa base con clave, hay que volver aquí.) */
+  background: #363637 !important;
   font-family: 'Inter', sans-serif !important;
 }
 
 /* Ajustes por base. Solo afectan a la capa base: marcadores, rutas y zonas van en
    otras capas y conservan su color exacto.
 
-   La base oscura es la PREDETERMINADA y su filtro no es cosmético: la tesela
-   cruda de Dark Matter es casi negra (fondo rgb(9,9,9)) y sin este realce no se
-   distinguen ni las calles ni las etiquetas. Comprobado sobre la tesela real de
-   Bogotá: con brightness(1.9) los nombres de vía se leen sin esfuerzo. Si se
-   toca este filtro, hay que volver a mirar el mapa, no solo el número.
+   La base PREDETERMINADA es ahora Esri Dark Gray, y su filtro va en sentido
+   CONTRARIO al de CARTO: Esri ya nace oscuro (fondo rgb(77,77,79) medido sobre la
+   tesela real de Bogotá), así que hay que BAJAR el brillo hasta el tono de la
+   interfaz, no subirlo. Comprobado mirando la tesela filtrada, no solo el número:
+   con brightness(0.7) las calles y los nombres siguen leyéndose y el mapa deja de
+   destacar sobre el fondo #1c1c1c del contenedor.
+
+   El filtro de CARTO Dark Matter se conserva para cuando haya clave: su tesela es
+   casi negra (fondo rgb(9,9,9)) y sin el realce no se distingue nada. Los dos van
+   emparejados con su base; no se pueden intercambiar.
 
    En la base clara se baja un punto el contraste y la saturación para que el mapa
    quede en segundo plano y los marcadores de estado sean lo más llamativo de la
    pantalla. */
-.capa-base--claro    { filter: contrast(0.94) saturate(0.85); }
-.capa-base--colorido { filter: saturate(0.9); }
-.capa-base--oscuro   { filter: brightness(1.9) contrast(0.9) saturate(1.1); }
+.capa-base--claro       { filter: contrast(0.94) saturate(0.85); }
+.capa-base--colorido    { filter: saturate(0.9); }
+.capa-base--esri        { filter: brightness(0.7) saturate(0.9); }
+.capa-base--cartoOscuro { filter: brightness(1.9) contrast(0.9) saturate(1.1); }
 
 /* Usar CARTO/OpenStreetMap obliga a mostrar la atribución, así que ya no se
    oculta; se deja discreta. */

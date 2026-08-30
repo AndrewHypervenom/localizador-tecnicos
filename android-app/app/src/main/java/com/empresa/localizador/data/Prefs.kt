@@ -281,6 +281,24 @@ object Prefs {
         } catch (_: Exception) {
             JSONArray()
         }
+
+        // Red de seguridad contra el ahogamiento del historial: si el suceso es
+        // IDÉNTICO al anterior, no se añade una entrada nueva — se cuenta.
+        //
+        // El anillo solo tiene LOG_CAP entradas, así que cualquier mensaje que se
+        // repita a ritmo constante lo vacía de todo lo demás. Ya pasó con el aviso
+        // de disponibilidad del GPS (87 % del historial, agotándolo en menos de dos
+        // horas) y dejó sin motivo a los teléfonos que llevaban días mudos, que es
+        // justo cuando hace falta. Colapsar repeticiones conserva la señal —cuántas
+        // veces y hasta cuándo— sin gastar espacio del anillo.
+        val ultimo = if (arr.length() > 0) arr.optJSONObject(arr.length() - 1) else null
+        if (ultimo != null && ultimo.optString("tag") == tag && ultimo.optString("msg") == message) {
+            ultimo.put("ts", System.currentTimeMillis())
+            ultimo.put("n", ultimo.optInt("n", 1) + 1)
+            prefs.edit().putString(K_LOG, arr.toString()).apply()
+            return
+        }
+
         arr.put(
             JSONObject()
                 .put("ts", System.currentTimeMillis())
@@ -293,13 +311,14 @@ object Prefs {
         prefs.edit().putString(K_LOG, trimmed.toString()).apply()
     }
 
-    data class LogEntry(val ts: Long, val tag: String, val msg: String)
+    /** [veces] > 1 indica un suceso repetido consecutivamente; [ts] es el último. */
+    data class LogEntry(val ts: Long, val tag: String, val msg: String, val veces: Int = 1)
 
     fun readLog(): List<LogEntry> = try {
         val arr = JSONArray(prefs.getString(K_LOG, "[]"))
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
-            LogEntry(o.optLong("ts"), o.optString("tag"), o.optString("msg"))
+            LogEntry(o.optLong("ts"), o.optString("tag"), o.optString("msg"), o.optInt("n", 1))
         }.reversed()
     } catch (_: Exception) {
         emptyList()

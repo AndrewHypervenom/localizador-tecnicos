@@ -143,7 +143,8 @@ fun DiagnosticsScreen(
             } else {
                 log.take(40).forEach { entry ->
                     Text(
-                        text = "${timeFmt.format(Date(entry.ts))}  ${entry.tag}: ${entry.msg}",
+                        text = "${timeFmt.format(Date(entry.ts))}  ${entry.tag}: ${entry.msg}" +
+                            if (entry.veces > 1) "  (x${entry.veces})" else "",
                         color = Brand.TextMuted,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
@@ -237,5 +238,8 @@ private fun buildReport(
     appendLine("Alarmas exactas: ${if (state.exactAlarmOk) "permitidas" else "BLOQUEADAS"}")
     appendLine()
     appendLine("--- HISTORIAL ---")
-    log.take(60).forEach { appendLine("${timeFmt.format(Date(it.ts))}  ${it.tag}: ${it.msg}") }
+    log.take(60).forEach {
+        val veces = if (it.veces > 1) "  (x${it.veces})" else ""
+        appendLine("${timeFmt.format(Date(it.ts))}  ${it.tag}: ${it.msg}$veces")
+    }
 }

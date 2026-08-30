@@ -40,11 +40,14 @@ export const pt: Record<keyof typeof es, string> = {
   'changePassword.tooShort': 'A senha deve ter pelo menos 8 caracteres',
   'changePassword.error': 'Erro ao alterar a senha',
 
-  // ---- indicador realtime ----
+  // ---- indicador de atualidade dos dados ----
+  // NÃO diz "Ao vivo": o mapa é atualizado por SONDAGEM a cada 30 s, não em
+  // tempo real — o canal de `location_events` não entrega nada por ser tabela
+  // particionada.
   'realtime.connecting': 'Conectando…',
-  'realtime.connected': 'Ao vivo',
+  'realtime.connected': 'Atualizado',
   'realtime.error': 'Sem conexão',
-  'realtime.disconnected': 'Desconectado',
+  'realtime.disconnected': 'Desatualizado',
   'update.available': 'Nova versão disponível — será atualizada automaticamente',
   'realtime.noEvents': 'sem eventos',
   'realtime.agoSeconds': 'há {n}s',

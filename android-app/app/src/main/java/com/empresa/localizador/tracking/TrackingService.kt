@@ -125,6 +125,13 @@ class TrackingService : Service() {
         private var lastRejectLogElapsed = 0L
 
         private const val REJECT_LOG_INTERVAL_MS = 30 * 60_000L
+
+        /**
+         * Cuánto tiene que durar un corte de cobertura para merecer una línea en la
+         * bitácora. Por debajo es el parpadeo normal de `isLocationAvailable` en
+         * interiores, que no impide que sigan llegando posiciones.
+         */
+        private const val CORTE_COBERTURA_MIN_MS = 5 * 60_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -155,6 +162,18 @@ class TrackingService : Service() {
     @Volatile
     private var activityStill = false
 
+    /**
+     * Desde cuándo el sistema dice que no puede entregar ubicaciones (reloj
+     * monótono), o 0 si ahora mismo sí puede. Junto con
+     * [cortePorCoberturaRegistrado] convierte el parpadeo del callback de Google
+     * en, como mucho, una línea por corte real. Ver [CORTE_COBERTURA_MIN_MS].
+     */
+    @Volatile
+    private var sinCoberturaDesde = 0L
+
+    @Volatile
+    private var cortePorCoberturaRegistrado = false
+
     private var notificationStatus = "Iniciando…"
 
     // ── Ciclo de vida ────────────────────────────────────────────────────────
@@ -165,12 +184,43 @@ class TrackingService : Service() {
         super.onCreate()
         Notifications.createChannels(this)
 
+        // `lastAvailability` es estática y sobrevive a la recreación del servicio.
+        lastAvailability = true
+        sinCoberturaDesde = 0L
+        cortePorCoberturaRegistrado = false
+
         engine = LocationEngine(
             context = this,
             onLocations = { locations -> scope.launch { onLocations(locations) } },
             onAvailability = { available ->
+                // AQUÍ NO SE REGISTRA NADA. Solo se anota desde cuándo dura el
+                // corte; quien decide si merece una línea es `ensureHealthy`.
+                //
+                // `isLocationAvailable` de Google no "se pone en false": PARPADEA.
+                // Medido sobre este mismo servicio en interior, alterna false/true
+                // cada ~20 s de forma indefinida mientras el proveedor fusionado
+                // sigue entregando posiciones con normalidad (fix_age = 0).
+                //
+                // Registrar cada callback llenaba la bitácora: 113 de 120 entradas
+                // (94 %) eran esa sola línea, y con LOG_CAP = 120 el historial no
+                // llegaba a cubrir dos horas. En un teléfono mudo desde hace días
+                // —que es justo cuando se abre el diagnóstico— el motivo real ya
+                // había sido desalojado por el ruido.
+                //
+                // Registrar solo las TRANSICIONES tampoco vale, y se comprobó
+                // midiendo: como la señal oscila, salen DOS líneas por ciclo y el
+                // ritmo subió de 1,13 a 5 por minuto. Lo único que informa es un
+                // corte que PERSISTE, así que es lo único que se escribe.
                 lastAvailability = available
-                if (!available) Prefs.log("gps", "El sistema informa que no puede entregar ubicaciones")
+                if (available) {
+                    if (cortePorCoberturaRegistrado) {
+                        Prefs.log("gps", "El sistema vuelve a entregar ubicaciones")
+                    }
+                    sinCoberturaDesde = 0L
+                    cortePorCoberturaRegistrado = false
+                } else if (sinCoberturaDesde == 0L) {
+                    sinCoberturaDesde = SystemClock.elapsedRealtime()
+                }
             },
         )
 
@@ -659,9 +709,29 @@ class TrackingService : Service() {
         // transición a "encendido" dispara el re-enganche.
         if (!gpsOn) return
 
+        // Un corte de cobertura que ya dura lo suficiente SÍ es información: se
+        // escribe una vez y no se repite hasta que se recupere. Los parpadeos de
+        // segundos, que son la inmensa mayoría, no dejan rastro.
+        if (!lastAvailability && sinCoberturaDesde != 0L && !cortePorCoberturaRegistrado &&
+            SystemClock.elapsedRealtime() - sinCoberturaDesde >= CORTE_COBERTURA_MIN_MS
+        ) {
+            cortePorCoberturaRegistrado = true
+            Prefs.log("gps", "El sistema lleva sin entregar ubicaciones más de 5 min")
+        }
+
+        val umbral = TrackingConfig.staleFixThresholdMs(engine.currentTier)
+
+        // Margen tras suscribirse: recién enganchado todavía NO puede haber un fix,
+        // así que `lastFix == 0L` no significa "motor muerto" sino "acaba de
+        // empezar". Sin esto el watchdog se reiniciaba a sí mismo en el mismo
+        // segundo del arranque, y volvía a hacerlo al reanudar tras un reinicio.
+        // OJO: solo se salta la comprobación, nunca el latido de abajo — es lo que
+        // sostiene el semáforo del panel.
+        val enPeriodoDeGracia = SystemClock.elapsedRealtime() - engine.subscribedAtElapsed < umbral
+
         val lastFix = Prefs.lastFixTs
-        val stale = lastFix == 0L ||
-            System.currentTimeMillis() - lastFix >= TrackingConfig.staleFixThresholdMs(engine.currentTier)
+        val stale = !enPeriodoDeGracia &&
+            (lastFix == 0L || System.currentTimeMillis() - lastFix >= umbral)
 
         if (stale) {
             Prefs.log("watchdog", "Sin posiciones recientes: se vuelve a suscribir el motor")

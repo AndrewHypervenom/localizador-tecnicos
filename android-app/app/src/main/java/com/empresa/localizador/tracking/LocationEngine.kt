@@ -10,6 +10,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
@@ -75,6 +76,17 @@ class LocationEngine(
 
     @Volatile
     var isRunning: Boolean = false
+        private set
+
+    /**
+     * Cuándo se suscribió el motor por última vez (reloj monótono). El watchdog lo
+     * usa para NO declarar "sin posiciones recientes" en los primeros segundos: al
+     * suscribirse todavía no puede haber ningún fix, y sin este margen el watchdog
+     * se reiniciaba a sí mismo nada más arrancar (medido: dos re-suscripciones en
+     * el mismo segundo, tanto al iniciar como al reanudar tras un reinicio).
+     */
+    @Volatile
+    var subscribedAtElapsed: Long = 0L
         private set
 
     /** Satélites usados en el último fix: distingue "sin cielo" de "motor muerto". */
@@ -179,6 +191,7 @@ class LocationEngine(
             registerGnss()
             currentTier = tier
             isRunning = true
+            subscribedAtElapsed = SystemClock.elapsedRealtime()
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "Permiso retirado en caliente: ${e.message}")

@@ -162,6 +162,11 @@ export function useRealtimeTechnicians(filterByIds?: string[] | null) {
       } else {
         setTechnicians(techs)
       }
+
+      // Solo aquí, tras un sondeo CORRECTO: es lo que mantiene el mapa al día, y
+      // lo que mide el indicador de la cabecera. Si esta consulta empieza a
+      // fallar, el indicador se apaga aunque el canal siga suscrito.
+      useTrackingStore.getState().markDataRefresh()
     }
 
     // Carga inicial de alertas históricas (últimos 30 días)

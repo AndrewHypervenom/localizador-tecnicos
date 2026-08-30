@@ -39,11 +39,15 @@ export const es = {
   'changePassword.tooShort': 'La contraseña debe tener al menos 8 caracteres',
   'changePassword.error': 'Error al cambiar la contraseña',
 
-  // ---- indicador realtime ----
+  // ---- indicador de frescura de los datos ----
+  // NO dice "En vivo": el mapa se refresca por SONDEO cada 30 s, no en tiempo
+  // real — el canal de `location_events` no entrega nada por ser una tabla
+  // particionada. Antes se pintaba verde con solo estar suscrito el canal, y
+  // llegó a decir "En vivo" sobre datos de cinco días.
   'realtime.connecting': 'Conectando…',
-  'realtime.connected': 'En vivo',
+  'realtime.connected': 'Al día',
   'realtime.error': 'Sin conexión',
-  'realtime.disconnected': 'Desconectado',
+  'realtime.disconnected': 'Desactualizado',
   'update.available': 'Nueva versión disponible — se actualizará automáticamente',
   'realtime.noEvents': 'sin eventos',
   'realtime.agoSeconds': 'hace {n}s',

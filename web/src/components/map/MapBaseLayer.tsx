@@ -6,39 +6,60 @@ import { googleDarkStyle } from './googleDarkStyle'
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
 const PROVEEDOR_FORZADO   = import.meta.env.VITE_MAP_PROVIDER as string | undefined
 const ESTILO_CARTO        = import.meta.env.VITE_MAP_STYLE as string | undefined
+const CARTO_API_KEY       = import.meta.env.VITE_CARTO_API_KEY as string | undefined
 
-// Bases de CARTO. No necesitan clave ni facturación y nunca estampan nada encima.
+// ⚠️ MEDIDO EL 2026-08-29 EN PRODUCCIÓN: CARTO YA NO ES GRATIS SIN CLAVE.
 //
-// El predeterminado es 'oscuro' y va emparejado con el realce de brillo de
-// `.capa-base--oscuro` en index.css: SIN ese filtro la tesela cruda de Dark
-// Matter es prácticamente negra (su color de fondo es rgb(9,9,9)) y ni las
-// calles ni las etiquetas se distinguen. Con el filtro sí se leen, y encaja con
-// el resto de la interfaz, que es oscura.
+// Cambió su política y ahora estampa "API KEY REQUIRED / carto.com/basemaps/apikey"
+// en diagonal sobre CADA tesela, incluidas las que tienen contenido. Comprobado
+// descargando la tesela suelta, no solo en el navegador:
 //
-// Los dos van juntos: si algún día se quita el filtro, hay que dejar de usar
-// 'oscuro' como predeterminado, o el mapa vuelve a ser una mancha negra.
+//   https://a.basemaps.cartocdn.com/dark_all/12/1205/1995.png  ->  HTTP 200
 //
-// 'claro' (Positron) sigue disponible y es el que mejor hace resaltar los
-// marcadores verde/ámbar/rojo, pero es casi blanco a propósito y sobre una
-// interfaz oscura parece un rectángulo vacío.
-const BASES_CARTO = {
-  claro:   { ruta: 'rastertiles/light_all', etiqueta: 'CARTO Positron' },
-  colorido:{ ruta: 'rastertiles/voyager',   etiqueta: 'CARTO Voyager'  },
-  oscuro:  { ruta: 'dark_all',              etiqueta: 'CARTO Dark'     },
+// Devuelve **200 OK** con la marca ya dibujada dentro, así que no hay ningún
+// error que capturar: es el mismo fallo deshonesto que ya documentamos para
+// Google ("sin facturación no falla, que sería lo honesto"), repetido con el
+// proveedor al que se había huido. El panel del líder llevaba así desde el
+// despliegue, con el mapa empapelado.
+//
+// Por eso el predeterminado pasa a ser **Esri Dark Gray Canvas**: no pide clave,
+// no estampa nada y ya nace oscuro. Su fondo es rgb(77,77,79) —frente al
+// rgb(9,9,9) de Dark Matter—, así que NO lleva el realce de brillo: lleva su
+// propio filtro, que lo oscurece hasta el tono de la interfaz.
+//
+// CARTO sigue disponible, pero solo con clave: sin ella se ignora y se cae a
+// Esri, porque servir el mapa marcado es peor que no servirlo.
+const BASES = {
+  oscuro:  { proveedor: 'esri',  ruta: '',                        etiqueta: 'Esri Dark Gray' },
+  claro:   { proveedor: 'carto', ruta: 'rastertiles/light_all',   etiqueta: 'CARTO Positron' },
+  colorido:{ proveedor: 'carto', ruta: 'rastertiles/voyager',     etiqueta: 'CARTO Voyager'  },
+  cartoOscuro: { proveedor: 'carto', ruta: 'dark_all',            etiqueta: 'CARTO Dark'     },
 } as const
 
-type ClaveBase = keyof typeof BASES_CARTO
+type ClaveBase = keyof typeof BASES
 
-function baseCarto(): ClaveBase {
-  return (ESTILO_CARTO && ESTILO_CARTO in BASES_CARTO)
+function baseElegida(): ClaveBase {
+  const pedida = (ESTILO_CARTO && ESTILO_CARTO in BASES)
     ? ESTILO_CARTO as ClaveBase
     : 'oscuro'
+
+  // Pedir una base de CARTO sin clave devolvería teselas con la marca de agua.
+  // Se avisa y se cae a la base libre en vez de servirlas.
+  if (BASES[pedida].proveedor === 'carto' && !CARTO_API_KEY) {
+    console.warn(
+      `[Mapa] VITE_MAP_STYLE="${pedida}" usa CARTO, que ahora exige clave: sin ` +
+      'VITE_CARTO_API_KEY las teselas llegan con "API KEY REQUIRED" encima. ' +
+      'Se usa la base de Esri.'
+    )
+    return 'oscuro'
+  }
+  return pedida
 }
 
 /**
  * Capa base de todos los mapas del sitio.
  *
- * Hay dos proveedores, y la razón importa:
+ * Hay tres proveedores, y la razón importa:
  *
  * **Google** se ve muy bien, pero exige una cuenta de FACTURACIÓN activa. Sin
  * ella no falla —que sería lo honesto—: sirve el mapa en modo degradado, que es
@@ -47,11 +68,15 @@ function baseCarto(): ClaveBase {
  * personalizado** (por eso se veían los puntos de interés que el estilo apaga).
  * Eso no tiene arreglo desde el código: se activa en Google Cloud Console.
  *
- * **CARTO** no necesita clave ni facturación, se ve limpio y no estampa nada.
+ * **CARTO** hacía justo esto mismo desde 2026: sin clave estampa "API KEY
+ * REQUIRED" en cada tesela, también con HTTP 200. Ya solo se usa con clave.
  *
- * Por eso CARTO es lo predeterminado y Google se pide a propósito con
- * `VITE_MAP_PROVIDER=google`. Además, si Google llega a rechazar la clave, se
- * vuelve solo a CARTO en caliente.
+ * **Esri Dark Gray Canvas** no pide clave, no estampa nada y ya nace oscuro. Es
+ * el predeterminado, y la única de las tres que no depende de una factura.
+ *
+ * Google y CARTO se piden a propósito (`VITE_MAP_PROVIDER=google`,
+ * `VITE_CARTO_API_KEY`). Si Google llega a rechazar la clave, se cae solo a la
+ * base libre en caliente.
  */
 export function MapBaseLayer() {
   const [googleRechazado, setGoogleRechazado] = useState(false)
@@ -95,13 +120,34 @@ export function MapBaseLayer() {
     )
   }
 
-  const base = baseCarto()
+  const base = baseElegida()
+
+  if (BASES[base].proveedor === 'esri') {
+    return (
+      <TileLayer
+        // Ojo al orden: Esri sirve /{z}/{y}/{x}, al revés que CARTO y OSM.
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+        attribution="&copy; Esri &copy; OpenStreetMap"
+        // Esta base solo tiene teselas hasta z16: de z17 en adelante devuelve una
+        // tesela vacía con HTTP 200 (2521 bytes, idéntica en 17, 18 y 19). Con
+        // `maxNativeZoom` Leaflet reescala la de z16 en vez de pedir el vacío, así
+        // que el mapa sigue acercándose hasta 20 —borroso, pero con contenido— y
+        // el seguimiento de un técnico no se queda en negro al hacer zoom.
+        maxNativeZoom={16}
+        maxZoom={20}
+        className="capa-base capa-base--esri"
+      />
+    )
+  }
 
   return (
     <TileLayer
       // `{r}` pide las teselas al doble de resolución en pantallas densas; sin
       // eso el texto del mapa se ve borroso.
-      url={`https://{s}.basemaps.cartocdn.com/${BASES_CARTO[base].ruta}/{z}/{x}/{y}{r}.png`}
+      url={
+        `https://{s}.basemaps.cartocdn.com/${BASES[base].ruta}/{z}/{x}/{y}{r}.png` +
+        `?api_key=${CARTO_API_KEY}`
+      }
       attribution="&copy; OpenStreetMap &copy; CARTO"
       subdomains="abcd"
       maxZoom={20}
