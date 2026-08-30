@@ -94,9 +94,27 @@ object Uploader {
 
     private suspend fun drainLocations(context: Context, dao: QueueDao): Pair<Int, String?> {
         var sent = 0
+        var idPrimeroAnterior: Long? = null
         while (true) {
             val batch = dao.oldestLocations(TrackingConfig.FLUSH_BATCH)
             if (batch.isEmpty()) return sent to null
+
+            // Guarda de progreso. La única salida de este bucle por la rama de
+            // ÉXITO es que la cola se vacíe; si un envío se da por bueno pero la
+            // cola no mengua, se repite el MISMO lote sin pausa ni backoff.
+            //
+            // Pasó en producción: medido sobre un punto del 2026-08-07, el mismo
+            // `ts` se reenvió 3.315 veces en 5,5 minutos —unas 10 por segundo—.
+            // El servidor ya guarda de forma idempotente (disparador
+            // `trg_omitir_posicion_duplicada`), así que eso ya no ensucia la base,
+            // pero sin esta guarda el teléfono seguiría girando en vano y
+            // gastando datos y batería del técnico.
+            if (idPrimeroAnterior != null && batch.first().id == idPrimeroAnterior) {
+                Prefs.log("envío", "La cola no avanza: se corta el drenado para no girar en vano")
+                Prefs.setLastError("La cola no avanzó tras un envío correcto")
+                return sent to "La cola no avanzó tras un envío correcto"
+            }
+            idPrimeroAnterior = batch.first().id
 
             when (val r = SupabaseClient.insertLocations(batch.map { it.toPayload() })) {
                 is ApiResult.Ok -> {
@@ -158,9 +176,19 @@ object Uploader {
 
     private suspend fun drainMotions(context: Context, dao: QueueDao): Pair<Int, String?> {
         var sent = 0
+        var idPrimeroAnterior: Long? = null
         while (true) {
             val batch = dao.oldestMotions(TrackingConfig.FLUSH_BATCH)
             if (batch.isEmpty()) return sent to null
+
+            // Misma guarda de progreso que en la cola de ubicación; ver allí el
+            // detalle de por qué. Aquí el volumen es mucho menor, pero el bucle
+            // tiene exactamente la misma forma y por tanto el mismo fallo.
+            if (idPrimeroAnterior != null && batch.first().id == idPrimeroAnterior) {
+                Prefs.log("envío", "La cola de eventos no avanza: se corta el drenado")
+                return sent to "La cola de eventos no avanzó tras un envío correcto"
+            }
+            idPrimeroAnterior = batch.first().id
 
             when (val r = SupabaseClient.insertMotions(batch.map { it.toPayload() })) {
                 is ApiResult.Ok -> {
