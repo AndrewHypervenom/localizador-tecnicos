@@ -23,12 +23,21 @@ const CARTO_API_KEY       = import.meta.env.VITE_CARTO_API_KEY as string | undef
 // despliegue, con el mapa empapelado.
 //
 // Por eso el predeterminado pasa a ser **Esri Dark Gray Canvas**: no pide clave,
-// no estampa nada y ya nace oscuro. Su fondo es rgb(77,77,79) —frente al
-// rgb(9,9,9) de Dark Matter—, así que NO lleva el realce de brillo: lleva su
-// propio filtro, que lo oscurece hasta el tono de la interfaz.
+// no estampa nada y ya nace oscuro.
 //
 // CARTO sigue disponible, pero solo con clave: sin ella se ignora y se cae a
-// Esri, porque servir el mapa marcado es peor que no servirlo.
+// Esri, porque servir el mapa marcado es peor que no servirlo. Recomprobado el
+// 2026-08-31 descargando la tesela suelta: la marca sigue ahí.
+//
+// ⚠️ Esri se sirve en DOS capas, y hace falta pedir las dos:
+// `World_Dark_Gray_Base` trae el dibujo (calles, manzanas, agua) y
+// `World_Dark_Gray_Reference` trae los topónimos. Pidiendo solo la base, el
+// mapa se queda sin nombres de ciudad ni de localidad en zoom medio y lejano
+// —que es justo donde el líder mira la flota entera—. Medido sobre la tesela
+// z12 de Bogotá: la base solo lleva un "BOGOTÁ, D.C." desvaído y la Reference
+// aporta Chapinero, Bogotá y Santa Fé. De z15 en adelante la Reference llega
+// vacía y los rótulos de calle ya vienen dentro de la base, así que no se
+// duplica nada.
 const BASES = {
   oscuro:  { proveedor: 'esri',  ruta: '',                        etiqueta: 'Esri Dark Gray' },
   claro:   { proveedor: 'carto', ruta: 'rastertiles/light_all',   etiqueta: 'CARTO Positron' },
@@ -123,20 +132,36 @@ export function MapBaseLayer() {
   const base = baseElegida()
 
   if (BASES[base].proveedor === 'esri') {
+    // Las dos capas comparten el tope de zoom. El metadato del servicio anuncia
+    // niveles hasta z23, pero MIENTE: de z17 en adelante las dos devuelven una
+    // tesela vacía con HTTP 200 (2521 bytes la base, 875 la Reference, idénticas
+    // en 17 y 18). Comprobado también en 16 vecinas a la vez, para no confundir
+    // "no hay cobertura aquí" con "no hay nivel". Con `maxNativeZoom` Leaflet
+    // reescala la de z16 en vez de pedir el vacío, así que el mapa sigue
+    // acercándose hasta 20 —borroso, pero con contenido— y el seguimiento de un
+    // técnico no se queda en negro al hacer zoom.
+    const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas'
+    const topes = { maxNativeZoom: 16, maxZoom: 20 } as const
+
     return (
-      <TileLayer
-        // Ojo al orden: Esri sirve /{z}/{y}/{x}, al revés que CARTO y OSM.
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-        attribution="&copy; Esri &copy; OpenStreetMap"
-        // Esta base solo tiene teselas hasta z16: de z17 en adelante devuelve una
-        // tesela vacía con HTTP 200 (2521 bytes, idéntica en 17, 18 y 19). Con
-        // `maxNativeZoom` Leaflet reescala la de z16 en vez de pedir el vacío, así
-        // que el mapa sigue acercándose hasta 20 —borroso, pero con contenido— y
-        // el seguimiento de un técnico no se queda en negro al hacer zoom.
-        maxNativeZoom={16}
-        maxZoom={20}
-        className="capa-base capa-base--esri"
-      />
+      <>
+        <TileLayer
+          // Ojo al orden: Esri sirve /{z}/{y}/{x}, al revés que CARTO y OSM.
+          url={`${ESRI}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`}
+          attribution="&copy; Esri &copy; OpenStreetMap"
+          {...topes}
+          className="capa-base capa-base--esri"
+        />
+        {/* Los topónimos van SIN filtrar y en su propia capa a propósito: Esri
+            ya los dibuja en rgb(200,201,203), el tono correcto para leerse
+            sobre un fondo oscuro. Si cayeran dentro del filtro de la base se
+            irían con ella y volverían a perderse. */}
+        <TileLayer
+          url={`${ESRI}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`}
+          {...topes}
+          className="capa-etiquetas"
+        />
+      </>
     )
   }
 

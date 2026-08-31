@@ -139,22 +139,33 @@
      el de la base EN PANTALLA, o sea el de la tesela YA FILTRADA: el filtro se
      aplica a la capa de teselas, no al contenedor.
      La base predeterminada es Esri Dark Gray, con el fondo en rgb(77,77,79);
-     pasado por el brightness(0.7) de `.capa-base--esri` queda en #363637.
+     pasado por el filtro de `.capa-base--esri` queda en rgb(27,27,32) = #1b1b20.
      (Con CARTO Dark Matter el valor equivalente era #1c1c1c: rgb(9,9,9) por
      brightness(1.9). Si se vuelve a esa base con clave, hay que volver aquí.) */
-  background: #363637 !important;
+  background: #1b1b20 !important;
   font-family: 'Inter', sans-serif !important;
 }
 
 /* Ajustes por base. Solo afectan a la capa base: marcadores, rutas y zonas van en
    otras capas y conservan su color exacto.
 
-   La base PREDETERMINADA es ahora Esri Dark Gray, y su filtro va en sentido
-   CONTRARIO al de CARTO: Esri ya nace oscuro (fondo rgb(77,77,79) medido sobre la
-   tesela real de Bogotá), así que hay que BAJAR el brillo hasta el tono de la
-   interfaz, no subirlo. Comprobado mirando la tesela filtrada, no solo el número:
-   con brightness(0.7) las calles y los nombres siguen leyéndose y el mapa deja de
-   destacar sobre el fondo #1c1c1c del contenedor.
+   La base PREDETERMINADA es Esri Dark Gray, y el problema con ella NO es el
+   brillo: es el CONTRASTE. Medido sobre la tesela real de Bogotá (z15), la
+   tesela entera vive en una banda de gris estrechísima —el fondo en rgb(77,77,79)
+   y el 80% de los píxeles entre 68 y 79—, con las calles apenas 30 niveles por
+   encima. Por eso se veía como una lámina gris plana y fea.
+
+   El `brightness(0.7)` que había aquí antes MULTIPLICA, así que estrechaba la
+   banda todavía más (de 54..160 a 38..112) y borraba lo poco que se distinguía:
+   oscurecía el mapa sin llegar a dibujarlo. La corrección no es bajar el brillo
+   sino ESTIRAR la banda: subir el brillo para llevarla hasta el pivote de
+   contrast() —que en CSS está fijo en el 50%— y abrir ahí el contraste. Con
+   brightness(1.15) contrast(2.2) el fondo cae a rgb(27,27,32), el tono de la
+   interfaz, y las calles suben a un gris claro legible.
+
+   Los valores están elegidos mirando la tesela filtrada, no el número: con
+   contrast(3.0) o más el fondo se va a negro puro y las manzanas se recortan,
+   que es pasarse al otro lado.
 
    El filtro de CARTO Dark Matter se conserva para cuando haya clave: su tesela es
    casi negra (fondo rgb(9,9,9)) y sin el realce no se distingue nada. Los dos van
@@ -165,7 +176,13 @@
    pantalla. */
 .capa-base--claro       { filter: contrast(0.94) saturate(0.85); }
 .capa-base--colorido    { filter: saturate(0.9); }
-.capa-base--esri        { filter: brightness(0.7) saturate(0.9); }
+.capa-base--esri        { filter: brightness(1.15) contrast(2.2) saturate(0.9); }
+
+/* Los topónimos de Esri van en su propia capa y SIN filtro: nacen ya en
+   rgb(200,201,203), que es el tono correcto sobre fondo oscuro. Esta regla
+   existe para dejarlo dicho, porque la tentación es agruparla con `.capa-base`
+   y entonces el realce de arriba se los llevaría por delante. */
+.capa-etiquetas         { filter: none; }
 .capa-base--cartoOscuro { filter: brightness(1.9) contrast(0.9) saturate(1.1); }
 
 /* Usar CARTO/OpenStreetMap obliga a mostrar la atribución, así que ya no se
