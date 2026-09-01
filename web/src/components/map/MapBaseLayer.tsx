@@ -47,10 +47,22 @@ const BASES = {
 
 type ClaveBase = keyof typeof BASES
 
+// El predeterminado depende de si HAY clave de CARTO, y la razón es el zoom.
+//
+// Medido el 2026-08-31 pidiendo la tesela suelta de Bogotá, nivel por nivel:
+// Esri devuelve la MISMA tesela vacía de 2521 bytes en z17, z18, z19 y z20, así
+// que de z16 en adelante lo que se ve es la de z16 estirada —hasta 16 veces su
+// área cuando se sigue a un técnico por un barrio—. Eso es el pixelado que se
+// reporta desde el panel, y no tiene arreglo en el renderizado: no hay detalle
+// que recuperar de una imagen ampliada. CARTO sí sirve teselas reales hasta z20.
+//
+// Por eso, si hay clave se usa CARTO sin necesidad de pedirlo también con
+// VITE_MAP_STYLE. Antes había que definir las DOS variables, y quien pegara solo
+// la clave no veía ningún cambio y creía que no funcionaba.
 function baseElegida(): ClaveBase {
   const pedida = (ESTILO_CARTO && ESTILO_CARTO in BASES)
     ? ESTILO_CARTO as ClaveBase
-    : 'oscuro'
+    : (CARTO_API_KEY ? 'cartoOscuro' : 'oscuro')
 
   // Pedir una base de CARTO sin clave devolvería teselas con la marca de agua.
   // Se avisa y se cae a la base libre en vez de servirlas.

@@ -29,6 +29,29 @@ const MIN_SPIKE_JUMP_M  = 150  // ignora micro-ruido; solo evalúa saltos grande
 const DRIFT_COLLAPSE_M    = 25
 const DRIFT_MAX_SPEED_KMH = 1
 
+// ── Suavizado del trazado a paso de peatón ────────────────────────────────────
+// Medido sobre una caminata real (2026-08-31, 272 fixes): la precisión media del
+// GPS es de 15,6 m y el avance medio entre puntos consecutivos, de 8,0 m. Es
+// decir, **el error de cada punto casi duplica el trayecto que separa a dos**, así
+// que la recta que los une la dibuja el ruido, no el movimiento. De ahí las
+// "líneas chuecas": no son un fallo del mapa, es que a 14 s de cadencia y 1,4 m/s
+// no hay señal suficiente por encima del ruido.
+//
+// En vehículo no pasa: a 40 km/h se avanzan ~220 m entre puntos y esos 15 m no se
+// notan. Por eso el suavizado se aplica SOLO por debajo de una velocidad de
+// peatón; tocar el trazado rápido redondearía curvas reales.
+//
+// Los puntos NO se eliminan, se reposicionan —misma decisión que en `snapDrift` y
+// por la misma razón: el reproductor, el perfil de elevación y la gráfica de
+// velocidad se alimentan de este mismo array y necesitan conservar la cadencia.
+const SMOOTH_MAX_SPEED_KMH = 12
+const SMOOTH_WINDOW        = 2     // vecinos a cada lado
+// No se promedia a través de un hueco: tras una parada larga o un corte de red
+// (la cola offline puede traer una hora de golpe) los vecinos ya no describen el
+// mismo tramo, y promediarlos arrastraría la línea por encima del hueco.
+const SMOOTH_MAX_GAP_S     = 60
+const SMOOTH_MAX_NEIGHBOR_M = 120
+
 export function distM(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6_371_000
   const dLat = ((bLat - aLat) * Math.PI) / 180
@@ -72,7 +95,51 @@ export function snapDrift<T extends RouteFilterPoint>(pts: T[]): T[] {
   return out
 }
 
-/** Limpieza estándar de una ruta: descarta saltos imposibles y pega la deriva. */
+/**
+ * Suaviza el trazado lento con una media ponderada de los vecinos en el tiempo.
+ *
+ * El peso es triangular (el propio punto pesa más que sus vecinos), que basta
+ * para hundir el temblor del GPS sin comerse las esquinas reales: una vuelta de
+ * esquina sostiene su forma porque la mantienen varios puntos seguidos, mientras
+ * que un pico de un solo fix —que es lo que produce el ruido— queda promediado
+ * contra sus vecinos y se aplana.
+ */
+export function smoothSlowTrack<T extends RouteFilterPoint>(pts: T[]): T[] {
+  if (pts.length < 3) return pts
+
+  const t = pts.map(p => new Date(p.ts).getTime())
+
+  return pts.map((p, i) => {
+    if (p.speed_kmh > SMOOTH_MAX_SPEED_KMH) return p
+
+    let sumaLat = 0, sumaLng = 0, sumaPeso = 0
+    for (let j = i - SMOOTH_WINDOW; j <= i + SMOOTH_WINDOW; j++) {
+      if (j < 0 || j >= pts.length) continue
+      const v = pts[j]
+      // Un vecino solo cuenta si describe el mismo tramo: cerca en tiempo y en
+      // espacio. Si no, se ignora y el punto se promedia con los que queden.
+      if (Math.abs(t[j] - t[i]) / 1000 > SMOOTH_MAX_GAP_S) continue
+      if (distM(p.lat, p.lng, v.lat, v.lng) > SMOOTH_MAX_NEIGHBOR_M) continue
+
+      const peso = SMOOTH_WINDOW + 1 - Math.abs(j - i)   // triangular
+      sumaLat += v.lat * peso
+      sumaLng += v.lng * peso
+      sumaPeso += peso
+    }
+
+    if (sumaPeso === 0) return p
+    return { ...p, lat: sumaLat / sumaPeso, lng: sumaLng / sumaPeso }
+  })
+}
+
+/**
+ * Limpieza estándar de una ruta.
+ *
+ * El orden importa: primero fuera los puntos imposibles (si no, un pico
+ * entraría en la media y contaminaría a sus vecinos en vez de desaparecer),
+ * después el suavizado del tramo lento, y al final el pegado de la deriva en
+ * parado, que ya trabaja sobre coordenadas limpias.
+ */
 export function cleanRoute<T extends RouteFilterPoint>(pts: T[]): T[] {
-  return snapDrift(dropSpikes(pts))
+  return snapDrift(smoothSlowTrack(dropSpikes(pts)))
 }
